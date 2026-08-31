@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eldorado Pesca</title>
+
+  <!-- Mobile Web App e PWA Capabilities -->
+  <meta name="theme-color" content="#060a13">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Eldorado Pesca">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/x-icon" href="app_icon.ico">
+  <link rel="apple-touch-icon" href="logo.webp">
+
+  <!-- Modern Typography (Plus Jakarta Sans & Poppins) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800;900&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <!-- Top App Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-wrapper" id="brandHeaderBtn">
+        <img src="logo.webp" alt="Eldorado Pesca" class="brand-logo-img" id="mainBrandLogo">
+        <div class="brand-text-block">
+          <div class="brand-title">
+            ELDORADO PESCA
+            <span class="brand-gold-tag">PRO</span>
+          </div>
+          <span class="brand-subtitle">Gestão de Rifas • Vales e Prêmios • Agenda de Pesca • Ponto</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab-btn active" data-tab="tab-rifas" id="tabBtnRifas">
+          Rifas WhatsApp
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-vales" id="tabBtnVales">
+          Vales e Prêmios
+          <span class="tab-counter" id="badgePendingVales">2</span>
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-agenda" id="tabBtnAgenda">
+          Agenda de Pesca
+          <span class="tab-counter" id="badgePendingFishing">1</span>
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-rancho" id="tabBtnRancho">
+          Rancho
+          <span class="tab-counter" id="badgePendingRancho">0</span>
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-eduardo" id="tabBtnEduardo">
+          Ponto do Eduardo
+        </button>
+      </nav>
+
+      <!-- Header Actions -->
+      <div class="header-status-indicator">
+        <div id="dbStatusBadge" class="db-status-badge online" title="Status de persistência no Banco de Dados">
+          <span class="status-dot"></span>
+          <span id="dbStatusText">SQLite Conectado</span>
+        </div>
+        <button class="btn btn-gold btn-sm" id="btnQuickBackup" title="Baixar Backup Completo em Arquivo JSON">
+          Salvar Backup
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+
+    <!-- ====================================================================
+         TAB 1: GESTÃO DE RIFAS / AÇÕES WHATSAPP & HISTÓRICO
+         ==================================================================== -->
+    <section class="tab-pane active" id="tab-rifas">
+
+      <!-- Stats Bar (Exclusivo desta página de Rifas) -->
+      <div class="stats-summary-grid" id="globalStatsBar" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+          <div class="stat-box-label">Arrecadado na Ação Selecionada</div>
+          <div class="stat-box-value gold" id="statRaffleRevenue">R$ 0,00</div>
+          <div class="stat-box-sub" id="statRafflePaidCount">0 números pagos</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Reservas / Pendentes Pix</div>
+          <div class="stat-box-value" id="statRaffleReservedCount">0 cotas</div>
+          <div class="stat-box-sub" id="statRaffleAvailableCount">0 números livres</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Progresso do Fechamento</div>
+          <div class="stat-box-value gold" id="statRafflePercent">0%</div>
+          <div class="stat-box-sub" id="statRaffleStatusText">Ação Ativa</div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">
+          <h2>Gestão de Rifas e Ações Rápidas</h2>
+          <p>Selecione uma ação ativa ou consulte o histórico completo de ações anteriores</p>
+        </div>
+        <div class="section-actions" style="gap: 0.75rem;">
+          <!-- Dropdown Seletor de Rifas (Histórico) -->
+          <select id="selectActiveRaffle" class="form-select" onchange="onSelectActiveRaffle(this.value)"
+            style="width: auto; min-width: 240px; font-weight: 700; color: var(--primary-gold); background: var(--bg-input); border-color: var(--border-gold);">
+            <!-- Rendered by JS -->
+          </select>
+          <button class="btn btn-whatsapp" id="btnExportWhatsApp">
+            Copiar p/ WhatsApp
+          </button>
+          <button class="btn btn-secondary" id="btnImportWhatsApp">
+            Colar do WhatsApp
+          </button>
+          <!-- Botão Nova Ação Maior e em Super Destaque -->
+          <button class="btn-new-raffle-cta" id="btnNewRaffle" title="Criar Nova Ação / Rifa">
+            <span class="btn-icon-plus">+</span> Nova Ação
+          </button>
+        </div>
+      </div>
+
+      <!-- Raffle Main View Layout -->
+      <div class="raffle-layout">
+
+        <!-- Left: Interactive Number Grid -->
+        <div class="raffle-main-card">
+          <div class="raffle-header-banner">
+            <div>
+              <span class="raffle-title-tag" id="raffleBadge">AÇÃO RÁPIDA</span>
+              <h3 class="raffle-title-main" id="raffleDisplayTitle">107° AÇÃO ELDORADO PESCA</h3>
+              <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.25rem;" id="raffleRulesSummary">
+                Frete a parte - Envio para todo o Brasil.
+              </div>
+            </div>
+            <div class="raffle-price-tag">
+              <div class="price-number" id="rafflePriceDisplay">R$ 25,00</div>
+              <div class="price-sub">cada número</div>
+            </div>
+          </div>
+
+          <!-- Grid Controls & Legend -->
+          <div class="grid-controls-bar">
+            <div class="legend-items">
+              <div class="legend-item">
+                <span class="legend-dot available"></span>
+                <span>Livre</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot reserved"></span>
+                <span>Reservado</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot paid"></span>
+                <span>Pago Pix (✅)</span>
+              </div>
+            </div>
+
+            <div>
+              <input type="text" id="inputSearchRaffle" class="search-input" placeholder="Buscar número ou nome...">
+            </div>
+          </div>
+
+          <!-- Numbers Grid Container -->
+          <div class="raffle-numbers-grid" id="raffleNumbersGrid">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Bottom helper hint -->
+          <div
+            style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-dim); padding-top: 0.75rem; border-top: 1px solid var(--border-light);">
+            <span>Clique na cota para marcar como Pago, Reservar ou Definir como Ganhador.</span>
+            <span id="gridNumbersSummary">Total: 60 números</span>
+          </div>
+        </div>
+
+        <!-- Right: Raffle Info & Prizes Sidebar -->
+        <aside class="raffle-sidebar">
+
+          <!-- Prizes List Card -->
+          <div class="side-card">
+            <h4 class="side-card-title">
+              <span>Premiação Oficial</span>
+            </h4>
+            <div class="prizes-list" id="rafflePrizesList">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Fast Action Buttons Card (Hidden if completed) -->
+          <div class="side-card" id="raffleActionsCard">
+            <h4 class="side-card-title">Ações Rápidas</h4>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <button class="btn btn-secondary btn-sm" style="width: 100%; justify-content: flex-start;"
+                id="btnMarkAllPaid">
+                Marcar Todos Reservados como Pagos
+              </button>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; justify-content: flex-start;"
+                id="btnEditRaffleDetails">
+                Editar Título / Prêmios / Preço
+              </button>
+            </div>
+          </div>
+
+        </aside>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         TAB 2: VALES-COMPRAS E PRÊMIOS PENDENTES (COM SUMMARY PRÓPRIO)
+         ==================================================================== -->
+    <section class="tab-pane" id="tab-vales">
+      <div class="section-header">
+        <div class="section-title">
+          <h2>Carteira de Vales-Compras e Prêmios Pendentes</h2>
+          <p>Controle de saldo de haver, baixas parciais de produtos, prêmios pendentes de retirada e trocas</p>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-gold" id="btnNewVale">
+            Novo Vale ou Prêmio
+          </button>
+        </div>
+      </div>
+
+      <!-- Specific Vales Summary Bar -->
+      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+          <div class="stat-box-label">Saldo em Vales de Haver</div>
+          <div class="stat-box-value gold" id="statValesBalance">R$ 0,00</div>
+          <div class="stat-box-sub" id="statActiveValesCount">0 vales com crédito ativo</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">A Decidir (Diária de Pesca ou Vale)</div>
+          <div class="stat-box-value" id="statPendingChoiceCount" style="color: #38bdf8;">0 a decidir</div>
+          <div class="stat-box-sub">Ganhadores pendentes de escolha</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Prêmios Aguardando Retirada / Agendamento</div>
+          <div class="stat-box-value" id="statPendingPrizesCount">0 prêmios</div>
+          <div class="stat-box-sub">Ganhadores que precisam retirar ou agendar</div>
+        </div>
+      </div>
+
+      <!-- Filters & Search for Vales -->
+      <div class="grid-controls-bar" style="margin-bottom: 1.5rem;">
+        <div class="legend-items">
+          <button class="btn btn-secondary btn-sm active" id="filterValesAll"
+            onclick="setValesFilter('all')">Todos</button>
+          <button class="btn btn-secondary btn-sm" id="filterValesChoice" onclick="setValesFilter('pending_choice')">A
+            Decidir (Diária ou Vale)</button>
+          <button class="btn btn-secondary btn-sm" id="filterValesActive" onclick="setValesFilter('active_vales')">Vales
+            com Saldo (Haver)</button>
+          <button class="btn btn-secondary btn-sm" id="filterValesPrizes"
+            onclick="setValesFilter('pending_prizes')">Prêmios Físicos</button>
+          <button class="btn btn-secondary btn-sm" id="filterValesDone" onclick="setValesFilter('delivered')">Entregues
+            / Zerados</button>
+        </div>
+
+        <div>
+          <input type="text" id="inputSearchVales" class="search-input"
+            placeholder="Buscar cliente, telefone ou produto...">
+        </div>
+      </div>
+
+      <!-- Cards Grid for Vales & Prizes -->
+      <div class="vales-grid" id="valesCardsContainer">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- TAB 3: AGENDA & CALENDÁRIO DE PESCA (ELDORADO LAKE) -->
+    <section id="tab-agenda" class="tab-pane">
+
+      <div class="section-header">
+        <div class="section-title">
+          <h2>Agenda & Calendário de Pesca (Eldorado Lake)</h2>
+          <p>Lago Foz do Areia (Pinhão/PR) • Guia Thiago Witeck • Rancho com Starlink e Barcos</p>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-gold" id="btnNewFishingBooking">
+            + Agendar Nova Pescaria
+          </button>
+        </div>
+      </div>
+
+      <!-- Specific Fishing Stats Summary Bar -->
+      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+          <div class="stat-box-label">Diárias no Mês Selecionado</div>
+          <div class="stat-box-value gold" id="statFishTotalDays">0 diárias</div>
+          <div class="stat-box-sub" id="statFishMonthName">Agosto de 2026</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Saldo a Receber no Rancho (Restante)</div>
+          <div class="stat-box-value gold" id="statFishRemainingAmount">R$ 0,00</div>
+          <div class="stat-box-sub" id="statFishPendingCount">0 reservas com saldo pendente</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Faturamento & Sinais Recebidos</div>
+          <div class="stat-box-value gold" id="statFishTotalAmount">R$ 0,00</div>
+          <div class="stat-box-sub" id="statFishDepositTotal">R$ 0,00 já pagos em sinais</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Prêmios de Rifas Agendados</div>
+          <div class="stat-box-value" id="statFishRaffleCount" style="color: #38bdf8;">0 diárias</div>
+          <div class="stat-box-sub">Diárias de pesca ganhas em ações</div>
+        </div>
+      </div>
+
+      <!-- Main Fishing Layout: Calendar on Left, Upcoming on Right -->
+      <div class="eduardo-layout" style="margin-bottom: 1.5rem;">
+
+        <!-- Left: Interactive Visual Fishing Calendar -->
+        <div class="calendar-card">
+          <div class="month-picker-bar">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <button class="btn btn-secondary btn-sm" id="btnFishCalPrevMonth">◀ Mês Anterior</button>
+              <h3 class="month-label" id="fishCalMonthLabel">Agosto de 2026</h3>
+              <button class="btn btn-secondary btn-sm" id="btnFishCalNextMonth">Próximo Mês ▶</button>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-secondary btn-sm" id="btnFishCalToday">Ir para Hoje</button>
+            </div>
+          </div>
+
+          <!-- Calendar Grid -->
+          <div class="calendar-grid" id="fishingCalendarGrid">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Calendar Legend & Help -->
+          <div
+            style="display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-muted); border-top: 1px solid var(--border-light); padding-top: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(16, 185, 129, 0.9);"></span>
+              <span><strong>Totalmente Pago</strong> (100% Quitado)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: #f59e0b;"></span>
+              <span><strong>Sinal Pago</strong> (Saldo a Pagar no Rancho)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: #38bdf8;"></span>
+              <span><strong>Prêmio de Rifa</strong></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: #94a3b8;"></span>
+              <span><strong>Pendente</strong></span>
+            </div>
+          </div>
+          <div style="text-align: center; font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem;">
+            Dica: Clique em qualquer dia livre do calendário para agendar uma diária diretamente naquela data.
+          </div>
+        </div>
+
+        <!-- Right: Sidebar with Upcoming Bookings -->
+        <aside class="eduardo-sidebar">
+
+          <div class="side-card" style="margin-bottom: 1.25rem;">
+            <h4 class="side-card-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Próximas Pescarias</span>
+              <span style="font-size: 0.72rem; color: var(--primary-gold);" id="sideUpcomingCount">0 agendadas</span>
+            </h4>
+            <div id="sideUpcomingBookingsList"
+              style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 480px; overflow-y: auto;">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+        </aside>
+
+      </div>
+
+      <!-- Bookings List Section with Filters -->
+      <div class="section-header" style="margin-top: 1rem;">
+        <div class="section-title">
+          <h3>Todas as Reservas e Diárias de Pesca</h3>
+          <p>Histórico completo de clientes, controle de sinal/restante e prêmios de rifas</p>
+        </div>
+      </div>
+
+      <div class="grid-controls-bar" style="margin-bottom: 1.5rem;">
+        <div class="legend-items">
+          <button class="btn btn-secondary btn-sm active" id="filterFishAll" onclick="setFishingFilter('all')">Todas as
+            Reservas</button>
+          <button class="btn btn-secondary btn-sm" id="filterFishUpcoming"
+            onclick="setFishingFilter('upcoming')">Próximas Pescarias</button>
+          <button class="btn btn-secondary btn-sm" id="filterFishWithBalance"
+            onclick="setFishingFilter('with_balance')">Com Saldo a Receber (Sinal)</button>
+          <button class="btn btn-secondary btn-sm" id="filterFishRaffle" onclick="setFishingFilter('raffle')">Prêmios de
+            Rifas</button>
+          <button class="btn btn-secondary btn-sm" id="filterFishCompleted"
+            onclick="setFishingFilter('completed')">Concluídas</button>
+        </div>
+
+        <div>
+          <input type="text" id="inputSearchFishing" class="search-input"
+            placeholder="Buscar pescador, telefone, pacote ou rifa...">
+        </div>
+      </div>
+
+      <!-- Interactive Bookings Grid -->
+      <div class="cards-grid-2" id="fishingBookingsContainer">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         TAB 4: CONTROLE DE PONTO DO EDUARDO (DIÁRIAS)
+         ==================================================================== -->
+    <section class="tab-pane" id="tab-eduardo">
+      <div class="section-header">
+        <div class="section-title">
+          <h2>Controle de Diárias e Ponto do Eduardo</h2>
+          <p>Controle de dias trabalhados, cálculo de Dia Inteiro vs. Meio Período e valor a pagar</p>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-whatsapp" id="btnExportEduardoReport">
+            Gerar Recibo / Relatório
+          </button>
+          <button class="btn btn-gold" id="btnMarkTodayEduardo">
+            Lançar Dia de Hoje
+          </button>
+        </div>
+      </div>
+
+      <div class="eduardo-layout">
+
+        <!-- Left: Interactive Calendar View -->
+        <div class="calendar-card">
+          <div class="month-picker-bar">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <button class="btn btn-secondary btn-sm" id="btnCalPrevMonth">◀ Mês Anterior</button>
+              <h3 class="month-label" id="calMonthLabel">Agosto de 2026</h3>
+              <button class="btn btn-secondary btn-sm" id="btnCalNextMonth">Próximo Mês ▶</button>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btnCalToday">Ir para Hoje</button>
+          </div>
+
+          <!-- Calendar Grid -->
+          <div class="calendar-grid" id="eduardoCalendarGrid">
+            <!-- Rendered by JS -->
+          </div>
+
+          <div
+            style="display: flex; gap: 1.5rem; justify-content: center; font-size: 0.8rem; color: var(--text-muted); border-top: 1px solid var(--border-light); padding-top: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(16, 185, 129, 0.8);"></span>
+              <span><strong>Dia Inteiro</strong> (1.0 diária)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: var(--primary-gold);"></span>
+              <span><strong>Meio Período</strong> (0.5 diária)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: #1e293b;"></span>
+              <span><strong>Folga / Não trabalhou</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Rates & Calculation Summary -->
+        <aside class="eduardo-sidebar">
+
+          <!-- Summary Box -->
+          <div class="eduardo-summary-card">
+            <h4 class="side-card-title">Fechamento do Mês</h4>
+
+            <!-- Rate Configuration with auto-save -->
+            <div class="rate-config-box">
+              <div style="font-weight: 700; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.65rem;">
+                Valor da Diária do Eduardo:
+              </div>
+              <div class="rate-input-row">
+                <span>Dia Inteiro:</span>
+                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                  <span>R$</span>
+                  <input type="number" id="inputEduardoDailyRate" class="rate-input-small" value="62.00" step="1.00">
+                </div>
+              </div>
+              <div class="rate-input-row">
+                <span>Meio Período:</span>
+                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                  <span>R$</span>
+                  <input type="number" id="inputEduardoHalfRate" class="rate-input-small" value="31.00" step="1.00">
+                </div>
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.4rem;">
+                Ao alterar o valor, ele é salvo automaticamente no banco de dados.
+              </div>
+            </div>
+
+            <!-- Big Calculation Display -->
+            <div class="eduardo-calc-box">
+              <div class="calc-title">Total a Pagar ao Eduardo</div>
+              <div class="calc-total-val" id="eduardoTotalAmountDisplay">R$ 0,00</div>
+
+              <div class="calc-details-list">
+                <div class="calc-detail-row">
+                  <span>Dias Inteiros (1.0):</span>
+                  <strong id="eduardoCountFull">0 dias (R$ 0,00)</strong>
+                </div>
+                <div class="calc-detail-row">
+                  <span>Meio Períodos (0.5):</span>
+                  <strong id="eduardoCountHalf">0 dias (R$ 0,00)</strong>
+                </div>
+                <div class="calc-detail-row"
+                  style="border-top: 1px solid var(--border-gold); padding-top: 0.35rem; color: var(--text-light);">
+                  <span>Total Diárias Equivalentes:</span>
+                  <strong id="eduardoTotalDaysEq">0.0 diárias</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Fast Log Button -->
+            <button class="btn btn-gold" style="width: 100%;" id="btnQuickLogEduardo">
+              Registrar Dia Específico
+            </button>
+
+          </div>
+
+        </aside>
+
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         TAB 4: LOCAÇÃO & HOSPEDAGEM DO RANCHO (ELDORADO LAKE)
+         ==================================================================== -->
+    <section class="tab-pane" id="tab-rancho">
+
+      <div class="section-header">
+        <div class="section-title">
+          <h2>Locação & Hospedagem do Rancho (Eldorado Lake)</h2>
+          <p>Lago Foz do Areia (Pinhão/PR) • Aluguel independente para grupos e famílias • Rancho completo com Starlink
+          </p>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-gold" onclick="openNewRanchoBookingModal()">
+            + Nova Locação do Rancho
+          </button>
+        </div>
+      </div>
+
+      <!-- Rancho Stats Summary Bar -->
+      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+          <div class="stat-box-label">Diárias Alugadas no Mês</div>
+          <div class="stat-box-value gold" id="statRanchoTotalDays">0 diárias</div>
+          <div class="stat-box-sub" id="statRanchoMonthName">Agosto de 2026</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Faturamento Total do Rancho</div>
+          <div class="stat-box-value gold" id="statRanchoTotalAmount">R$ 0,00</div>
+          <div class="stat-box-sub" id="statRanchoDepositTotal">R$ 0,00 em sinais recebidos</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Saldo a Receber no Rancho</div>
+          <div class="stat-box-value gold" id="statRanchoRemainingAmount">R$ 0,00</div>
+          <div class="stat-box-sub" id="statRanchoPendingCount">0 locações com saldo pendente</div>
+        </div>
+      </div>
+
+      <!-- Rancho Main Calendar & Upcoming Sidebar -->
+      <div class="fishing-main-grid">
+
+        <!-- Left: Interactive Rancho Monthly Calendar -->
+        <div class="calendar-card">
+          <div class="month-picker-bar">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <button class="btn btn-secondary btn-sm" id="btnRanchoPrevMonth" onclick="changeRanchoCalendarMonth(-1)">◀
+                Mês Anterior</button>
+              <h3 class="month-label" id="ranchoCalMonthLabel">Agosto de 2026</h3>
+              <button class="btn btn-secondary btn-sm" id="btnRanchoNextMonth"
+                onclick="changeRanchoCalendarMonth(1)">Próximo Mês ▶</button>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btnRanchoToday" onclick="goToRanchoToday()">Ir para
+              Hoje</button>
+          </div>
+
+          <!-- Calendar Grid -->
+          <div class="calendar-grid" id="ranchoCalendarGrid">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Calendar Legend -->
+          <div class="cal-legend-bar">
+            <div class="legend-item">
+              <span class="legend-dot" style="background: rgba(16, 185, 129, 0.8);"></span>
+              <span>Total Pago</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: rgba(229, 193, 88, 0.9);"></span>
+              <span>Sinal Pago</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: #94a3b8;"></span>
+              <span>Pendente</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: rgba(255, 255, 255, 0.1);"></span>
+              <span>Livre p/ Locação</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Upcoming Rancho Rentals Sidebar -->
+        <aside class="eduardo-sidebar">
+          <div class="side-card" style="margin-bottom: 1.25rem;">
+            <h4 class="side-card-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Próximas Locações</span>
+              <span class="rancho-counter-badge" id="sideUpcomingRanchoCount">0 agendadas</span>
+            </h4>
+            <div id="sideUpcomingRanchoList"
+              style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 480px; overflow-y: auto;">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </aside>
+
+      </div>
+
+      <!-- Rancho Rentals List Section with Filters -->
+      <div class="section-header" style="margin-top: 1.5rem;">
+        <div class="section-title">
+          <h3>Todas as Locações do Rancho</h3>
+          <p>Histórico completo de hóspedes, datas de entrada/saída e saldos de diárias</p>
+        </div>
+      </div>
+
+      <div class="grid-controls-bar" style="margin-bottom: 1.5rem;">
+        <div class="legend-items">
+          <button class="btn btn-secondary btn-sm active" id="filterRanchoAll" onclick="setRanchoFilter('all')">Todas as
+            Locações</button>
+          <button class="btn btn-secondary btn-sm" id="filterRanchoUpcoming"
+            onclick="setRanchoFilter('upcoming')">Próximas Entradas</button>
+          <button class="btn btn-secondary btn-sm" id="filterRanchoWithBalance"
+            onclick="setRanchoFilter('with_balance')">Com Saldo a Receber</button>
+          <button class="btn btn-secondary btn-sm" id="filterRanchoCompleted"
+            onclick="setRanchoFilter('completed')">Concluídas</button>
+        </div>
+
+        <div>
+          <input type="text" id="inputSearchRancho" class="search-input"
+            placeholder="Buscar hóspede, telefone ou observações..." oninput="renderRanchoBookingsList()">
+        </div>
+      </div>
+
+      <!-- Rancho Bookings Grid -->
+      <div class="cards-grid-2" id="ranchoBookingsContainer">
+        <!-- Rendered by JS -->
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ====================================================================
+       MODALS
+       ==================================================================== -->
+
+  <!-- 1. Modal: Editar Número Individual da Rifa (Com Opção de Definir Ganhador) -->
+  <div class="modal-backdrop" id="modalEditNumber">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Cota <span id="modalNumTitle">#1</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalEditNumber')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editNumIndex">
+
+        <div class="form-group">
+          <label class="form-label">Nome do Participante / Comprador</label>
+          <input type="text" id="editNumName" class="form-input" placeholder="Ex: VINICIUS F, JÚNIOR JJ...">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Status do Pagamento</label>
+          <div class="status-toggle-group">
+            <button type="button" class="status-toggle-btn" id="btnStatusAvailable"
+              onclick="selectEditStatus('available')">
+              Livre
+            </button>
+            <button type="button" class="status-toggle-btn" id="btnStatusReserved"
+              onclick="selectEditStatus('reserved')">
+              Reservado
+            </button>
+            <button type="button" class="status-toggle-btn" id="btnStatusPaid" onclick="selectEditStatus('paid')">
+              Pago Pix (✅)
+            </button>
+          </div>
+        </div>
+
+        <!-- Seção Especial: Marcar como Ganhador da Rifa -->
+        <div
+          style="background: rgba(229, 193, 88, 0.08); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 1rem; margin-top: 1.25rem;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.5rem;">
+            Sorteio Físico na Loja (Definir Ganhador)
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Se este número foi sorteado, escolha qual prêmio ele ganhou para enviar automaticamente para a aba de Vales
+            e Prêmios (Aguardando Retirada):
+          </p>
+
+          <div class="form-group" style="margin-bottom: 0.75rem;">
+            <select id="selectAssignPrize" class="form-select" style="font-size: 0.85rem;">
+              <!-- Populated dynamically by JS -->
+            </select>
+          </div>
+
+          <button type="button" class="btn btn-gold btn-sm" id="btnConfirmWinner" style="width: 100%;">
+            Confirmar Ganhador deste Prêmio
+          </button>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalEditNumber')">Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveNumberModal">Salvar Dados da Cota</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Modal: Importar do WhatsApp -->
+  <div class="modal-backdrop" id="modalImportWhatsApp">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Importar Lista do WhatsApp
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalImportWhatsApp')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Cole abaixo a mensagem enviada no grupo do WhatsApp. O sistema reconhece automaticamente os números, os nomes
+          e quem já pagou pelo símbolo <strong>✅</strong>.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Mensagem do WhatsApp:</label>
+          <textarea id="textareaWhatsAppImport" class="form-textarea"
+            style="min-height: 240px; font-family: monospace; font-size: 0.82rem;"
+            placeholder="Exemplo:&#10;1-&#10;7-VINICIUS F&#10;8-JÚNIOR JJ✅&#10;..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalImportWhatsApp')">Cancelar</button>
+        <button class="btn btn-gold" id="btnProcessImportWhatsApp">Processar e Atualizar Grade</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Modal: Copiar para WhatsApp -->
+  <div class="modal-backdrop" id="modalExportWhatsApp">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Texto Formatado para WhatsApp
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalExportWhatsApp')">✕</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="textareaWhatsAppExport" class="form-textarea"
+          style="min-height: 300px; font-family: monospace; font-size: 0.82rem;" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalExportWhatsApp')">Fechar</button>
+        <button class="btn btn-whatsapp" id="btnDoCopyExportWhatsApp">
+          Copiar Texto Completo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Modal: Nova Ação / Rifa (Campos Limpos e Prêmios Dinâmicos) -->
+  <div class="modal-backdrop" id="modalRaffleForm">
+    <div class="modal-dialog" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <span id="modalRaffleFormTitle">Nova Ação / Rifa</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalRaffleForm')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Título da Ação</label>
+          <input type="text" id="rfTitle" class="form-input" placeholder="Ex: 108° AÇÃO ELDORADO PESCA">
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Valor por Número (R$)</label>
+            <input type="number" id="rfPrice" class="form-input" placeholder="Ex: 25.00" step="1.00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Quantidade de Números</label>
+            <input type="number" id="rfTotalNumbers" class="form-input" placeholder="Ex: 60" min="1" max="5000">
+          </div>
+        </div>
+
+        <!-- Dynamic Prizes List -->
+        <div
+          style="margin-top: 1rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <label class="form-label" style="margin-bottom: 0;">Prêmios da Ação (1, 2, 3 ou quantos quiser):</label>
+          <div style="display: flex; gap: 0.4rem;">
+            <button type="button" class="btn btn-gold btn-sm" id="btnAddFishingPrizeRow"
+              style="padding: 0.25rem 0.75rem; font-size: 0.78rem; font-weight: 700;">
+              + Diária de Pesca
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnAddDynamicPrize"
+              style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
+              + Outro Prêmio
+            </button>
+          </div>
+        </div>
+
+        <div id="dynamicPrizesList" style="display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1rem;">
+          <!-- Populated by JS -->
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalRaffleForm')">Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveRaffleForm">Criar e Iniciar Ação</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Modal: Novo Vale-Compras ou Prêmio Físico -->
+  <div class="modal-backdrop" id="modalNewVale">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Cadastrar Vale ou Prêmio
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalNewVale')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Tipo de Cadastro</label>
+          <select id="nvType" class="form-select" onchange="toggleValeTypeFields()">
+            <option value="vale_compras">Vale-Compras (Crédito / Saldo de Haver)</option>
+            <option value="premio_fisico">Prêmio Físico (Carretilha, Vara, Boné aguardando retirada)</option>
+          </select>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Nome do Cliente / Ganhador</label>
+            <input type="text" id="nvCustomerName" class="form-input" placeholder="Ex: João Carlos">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Telefone / WhatsApp</label>
+            <input type="text" id="nvCustomerPhone" class="form-input" placeholder="Ex: 42 9 9999-9999">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Rifa / Ação de Origem</label>
+          <input type="text" id="nvRaffleRef" class="form-input" placeholder="Ex: 107° Ação Eldorado">
+        </div>
+
+        <div class="form-group" id="nvGroupAmount">
+          <label class="form-label">Valor Total do Vale-Compras (R$)</label>
+          <input type="number" id="nvInitialAmount" class="form-input" placeholder="Ex: 1000.00" step="10.00">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Descrição do Prêmio / Observações</label>
+          <input type="text" id="nvDescription" class="form-input"
+            placeholder="Ex: 1º Lugar - Vale Compras R$ 1.000 ou Carretilha Shimano Curado">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalNewVale')">Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveNewVale">Cadastrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Modal: Abater Produto do Vale-Compras / Diminuir Saldo (PRODUTO OPCIONAL) -->
+  <div class="modal-backdrop" id="modalAbaterProduto">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Abater Produto / Diminuir Saldo
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalAbaterProduto')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="abaterValeId">
+
+        <div
+          style="background: rgba(6, 10, 19, 0.6); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; border: 1px solid var(--border-gold);">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Cliente:</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;" id="abaterClientName">João Silva</div>
+          <div style="font-size: 0.85rem; color: var(--primary-gold); margin-top: 0.25rem;">
+            Saldo Atual de Haver: <strong id="abaterCurrentBalance">R$ 1.000,00</strong>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Valor a Diminuir / Abater do Saldo (R$) *</label>
+          <input type="number" id="abaterAmount" class="form-input" placeholder="Ex: 150.00" step="5.00"
+            oninput="calculateNewRemainingBalance()" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Produto(s) Retirado(s) ou Observação <small
+              style="color: var(--text-dim);">(Opcional - só preencha se quiser)</small></label>
+          <input type="text" id="abaterItemName" class="form-input"
+            placeholder="Opcional. Ex: Iscas, linha, carretilha...">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Data da Retirada</label>
+          <input type="date" id="abaterDate" class="form-input">
+        </div>
+
+        <div
+          style="font-size: 0.85rem; color: var(--text-muted); background: var(--bg-input); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-gold);">
+          Novo Saldo Restante após esta baixa: <strong style="color: var(--primary-gold);"
+            id="abaterNewBalanceDisplay">R$ 0,00</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalAbaterProduto')">Cancelar</button>
+        <button class="btn btn-gold" id="btnConfirmAbater">Confirmar Baixa de Saldo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Modal: REGISTRAR TROCA DE PRÊMIO POR OUTRO PRODUTO -->
+  <div class="modal-backdrop" id="modalExchangePrize">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Registrar Troca de Produto Ganho
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalExchangePrize')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="exchangePrizeId">
+
+        <div
+          style="background: rgba(6, 10, 19, 0.6); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; border: 1px solid var(--border-gold);">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Ganhador / Cliente:</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;" id="exchangeClientName">Cliente</div>
+          <div style="font-size: 0.85rem; color: var(--primary-gold); margin-top: 0.25rem;">
+            Prêmio Original Ganho: <strong id="exchangeOriginalItem">Vara Pro Chompers</strong>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Novo Produto Escolhido na Troca</label>
+          <input type="text" id="exchangeNewItemName" class="form-input"
+            placeholder="Ex: Vara Lumis Infinity 17lb (outra marca/modelo)">
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Diferença Paga pelo Cliente (R$)</label>
+            <input type="number" id="exchangeDifferencePaid" class="form-input" placeholder="0.00" step="5.00"
+              value="0.00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data da Troca</label>
+            <input type="date" id="exchangeDate" class="form-input">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações da Troca</label>
+          <input type="text" id="exchangeNotes" class="form-input"
+            placeholder="Ex: Preferiu modelo de maior libragem e pagou a diferença via Pix.">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalExchangePrize')">Cancelar</button>
+        <button class="btn btn-gold" id="btnConfirmExchangePrize">Confirmar Troca e Entrega</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. Modal: Lançar Ponto do Dia (Eduardo) -->
+  <div class="modal-backdrop" id="modalEduardoDay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Registrar Ponto do Eduardo
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalEduardoDay')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Data do Trabalho</label>
+          <input type="date" id="eduardoInputDate" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Trabalho Realizado</label>
+          <div class="status-toggle-group">
+            <button type="button" class="status-toggle-btn" id="btnEduardoTypeFull" onclick="selectEduardoType('full')">
+              Dia Inteiro<br><small style="font-size: 0.7rem;">(1.0 diária)</small>
+            </button>
+            <button type="button" class="status-toggle-btn" id="btnEduardoTypeHalf" onclick="selectEduardoType('half')">
+              Meio Período<br><small style="font-size: 0.7rem;">(0.5 diária)</small>
+            </button>
+            <button type="button" class="status-toggle-btn" id="btnEduardoTypeOff" onclick="selectEduardoType('off')">
+              Folga<br><small style="font-size: 0.7rem;">(Não trabalhou)</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações / Tarefas Realizadas no Dia</label>
+          <input type="text" id="eduardoInputNotes" class="form-input" placeholder="Ex: Atendimento balcão, estoque...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger btn-sm" id="btnDeleteEduardoDay"
+          style="margin-right: auto; display: none;">Excluir</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalEduardoDay')">Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveEduardoDay">Salvar Registro</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. Modal: Recibo do Eduardo -->
+  <div class="modal-backdrop" id="modalEduardoReceipt">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Recibo de Pagamento - Eduardo
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalEduardoReceipt')">✕</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="textareaEduardoReceipt" class="form-textarea"
+          style="min-height: 280px; font-family: monospace; font-size: 0.82rem;" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalEduardoReceipt')">Fechar</button>
+        <button class="btn btn-whatsapp" id="btnCopyEduardoReceipt">
+          Copiar Comprovante p/ WhatsApp
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. Modal: Agendar Diária / Reserva de Pesca (Eldorado Lake) -->
+  <div class="modal-backdrop" id="modalFishingBooking">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <span id="modalFishingBookingTitle">Agendar Diária de Pesca</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalFishingBooking')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="fishBookingId">
+        <input type="hidden" id="fishBookingType" value="direct">
+        <input type="hidden" id="fishPrizeId" value="">
+        <input type="hidden" id="fishRaffleRef" value="">
+        <input type="hidden" id="fishRaffleCoveredDays" value="1">
+        <input type="hidden" id="fishRaffleExtraDays" value="0">
+
+        <!-- Banner Exclusivo exibido quando for Prêmio de Rifa / Ação -->
+        <div id="groupFishRaffleBanner"
+          style="display: none; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.45); border-radius: var(--radius-sm); padding: 0.85rem 1rem; margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Prêmio de
+                Ação / Rifa Vinculado:</div>
+              <div style="font-size: 0.92rem; font-weight: 800; color: #ffffff;" id="fishRaffleBannerTitle">105° AÇÃO
+                ELDORADO PESCA</div>
+            </div>
+            <span class="badge-fish-raffle" id="fishRaffleBannerDaysBadge">1 Diária Coberta</span>
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Nome do Cliente / Pescador *</label>
+            <input type="text" id="fishClientName" class="form-input" placeholder="Ex: João da Silva">
+          </div>
+          <div class="form-group">
+            <label class="form-label">WhatsApp / Telefone</label>
+            <input type="text" id="fishClientPhone" class="form-input" placeholder="Ex: 42 9 9999-8888">
+          </div>
+        </div>
+
+        <!-- Quantidade de Diárias de Pesca -->
+        <div class="form-group">
+          <label class="form-label">Quantidade de Diárias de Pesca *</label>
+          <input type="number" id="fishTotalDaysCount" class="form-input" min="1" value="1" placeholder="Ex: 1, 2, 3..."
+            oninput="renderFishingDaysInputs()">
+        </div>
+
+        <!-- Seletor Dinâmico de Datas Individuais para cada Diária (Suporte a Intervalos) -->
+        <div id="fishDaysDatesContainer"
+          style="background: rgba(6, 10, 19, 0.7); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 0.85rem 1rem; margin-bottom: 1rem;">
+          <div
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.4rem;">
+            <span
+              style="font-size: 0.78rem; font-weight: 700; color: var(--primary-gold); text-transform: uppercase;">Data
+              de Cada Diária (Permite Intervalos):</span>
+            <span style="font-size: 0.72rem; color: var(--text-dim);" id="fishDaysSummaryText">1 data definida</span>
+          </div>
+          <div id="fishDaysInputsList"
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem;">
+            <!-- Populated dynamically by JS -->
+          </div>
+        </div>
+
+        <!-- Pacote / Estrutura da Pescaria (Dupla, Trio ou Personalizado) -->
+        <div class="form-group">
+          <label class="form-label">Pacote / Estrutura da Pescaria</label>
+          <select id="fishStructureType" class="form-select" onchange="toggleFishingStructureFields()">
+            <option value="dupla" selected>Dupla (2 Pescadores • Guia Thiago Witeck Titular)</option>
+            <option value="trio">Trio (3 Pescadores • Guia Thiago Witeck Titular)</option>
+            <option value="custom">Personalizado (Mais Barcos, Caiaques, Outros Guias)</option>
+          </select>
+        </div>
+
+        <!-- Painel Exclusivo para Estrutura Personalizada -->
+        <div id="groupFishCustomStructure"
+          style="display: none; background: rgba(229, 193, 88, 0.06); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.6rem;">
+            Configuração da Estrutura Personalizada
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Guia da Operação</label>
+              <select id="fishCustomGuide" class="form-select">
+                <option value="Thiago Witeck (Titular)" selected>Thiago Witeck (Titular)</option>
+                <option value="Guia Parceiro">Guia Parceiro / Convidado</option>
+                <option value="Thiago Witeck + Guia Adicional">Thiago Witeck + Guia Adicional</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">N° Total de Pescadores no Grupo</label>
+              <input type="number" id="fishCustomFishermenCount" class="form-input" value="2" min="1"
+                placeholder="Ex: 2, 4, 8...">
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Quantidade de Barcos</label>
+              <input type="number" id="fishBoatsCount" class="form-input" min="1" value="1" placeholder="Ex: 1, 2, 3..."
+                oninput="renderBoatsDistributionInputs()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quantidade de Caiaques</label>
+              <input type="number" id="fishKayaksCount" class="form-input" min="0" value="0"
+                placeholder="Ex: 0, 1, 2..." oninput="updateCustomTotalFishermen()">
+            </div>
+          </div>
+
+          <!-- Distribuição de Pessoas em Cada Barco -->
+          <div id="fishBoatsDistributionContainer"
+            style="background: rgba(0, 0, 0, 0.35); border: 1px dashed var(--border-gold); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 0.85rem;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.5rem;">
+              Capacidade e Quantidade de Pessoas em Cada Barco:
+            </div>
+            <div id="fishBoatsRowsList"
+              style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem;">
+              <!-- Populated by JS -->
+            </div>
+            <div id="fishBoatsSummaryText"
+              style="font-size: 0.75rem; color: var(--primary-gold); margin-top: 0.4rem; font-weight: 600;"></div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Detalhes da Operação Personalizada</label>
+            <input type="text" id="fishCustomDetails" class="form-input"
+              placeholder="Ex: 2 barcos para 4 pescadores + hospedagem no rancho">
+          </div>
+        </div>
+
+        <!-- Seção Financeira (Valores e Sinal) -->
+        <div id="groupFishFinancial"
+          style="background: rgba(6, 10, 19, 0.7); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 1rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.75rem;"
+            id="labelFishFinancialTitle">
+            Controle de Pagamento (Sinal / Entrada e Restante)
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label" id="labelFishTotalAmount">Valor Total do Pacote (R$)</label>
+              <input type="number" id="fishTotalAmount" class="form-input" placeholder="Ex: 2500.00" step="50.00"
+                oninput="recalculateFishingRemaining()">
+            </div>
+            <div class="form-group">
+              <label class="form-label" id="labelFishDepositAmount">Sinal / Entrada Já Pago (R$)</label>
+              <input type="number" id="fishDepositAmount" class="form-input" placeholder="Ex: 1000.00" step="50.00"
+                oninput="recalculateFishingRemaining()">
+            </div>
+          </div>
+
+          <div
+            style="background: var(--bg-input); border: 1px solid var(--border-gold); border-radius: 6px; padding: 0.75rem 1rem; text-align: center;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;"
+              id="labelFishRemainingTitle">Saldo Restante a Pagar no Rancho:</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary-gold);" id="fishRemainingDisplay">R$
+              0,00</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações / Detalhes (Hospedagem, iscas, horário de chegada, etc.)</label>
+          <textarea id="fishNotes" class="form-textarea" style="min-height: 60px;"
+            placeholder="Ex: Chegada na sexta-feira à noite no rancho..."></textarea>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger btn-sm" id="btnDeleteFishingBooking" style="margin-right: auto; display: none;"
+          onclick="deleteActiveFishingBooking()">Excluir Reserva</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalFishingBooking')">Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveFishingBooking">Salvar Agendamento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11. Modal: Quitar Saldo Restante / Pagamento da Pescaria -->
+  <div class="modal-backdrop" id="modalFishingPayment">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Quitar / Atualizar Pagamento
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalFishingPayment')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="payFishBookingId">
+
+        <div
+          style="background: rgba(6, 10, 19, 0.6); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; border: 1px solid var(--border-gold);">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Pescador / Cliente:</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;" id="payFishClientName">Cliente</div>
+          <div style="font-size: 0.82rem; color: var(--text-light); margin-top: 0.25rem;" id="payFishDates">29/08/2026
+            (1 Diária)</div>
+
+          <div
+            style="display: flex; justify-content: space-between; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed rgba(229, 193, 88, 0.3); font-size: 0.85rem;">
+            <span>Valor Total: <strong id="payFishTotal">R$ 2.500,00</strong></span>
+            <span>Já Pago (Sinal): <strong id="payFishDeposit" style="color: var(--status-paid-text);">R$
+                1.000,00</strong></span>
+          </div>
+          <div style="margin-top: 0.5rem; font-size: 0.95rem; font-weight: 800; color: var(--primary-gold);">
+            Saldo Pendente Restante: <span id="payFishRemaining">R$ 1.500,00</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Valor Pago Agora (R$) *</label>
+          <input type="number" id="payFishAmount" class="form-input" placeholder="Ex: 1500.00" step="50.00">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Forma de Pagamento</label>
+          <select id="payFishMethod" class="form-select">
+            <option value="Pix">Pix</option>
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Cartão">Cartão</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <input type="text" id="payFishNotes" class="form-input" placeholder="Ex: Quitado no rancho após a pescaria.">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalFishingPayment')">Cancelar</button>
+        <button class="btn btn-gold" id="btnConfirmFishingPayment">Confirmar Quitação</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. Modal: Confirmação de Pescaria para WhatsApp -->
+  <div class="modal-backdrop" id="modalFishingWhatsApp">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Confirmação de Pescaria p/ WhatsApp
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalFishingWhatsApp')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Copie o texto abaixo para enviar ao pescador com todas as instruções, localização no Lago Foz do Areia e
+          resumo financeiro:
+        </p>
+        <textarea id="textareaFishingWhatsApp" class="form-textarea"
+          style="min-height: 320px; font-family: monospace; font-size: 0.82rem;" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalFishingWhatsApp')">Fechar</button>
+        <button class="btn btn-whatsapp" id="btnCopyFishingWhatsApp">
+          Copiar Mensagem Formatada
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. Modal: Agendar Nova Locação do Rancho ou Editar -->
+  <div class="modal-backdrop" id="modalRanchoBooking">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalRanchoBookingTitle">
+          Locação do Rancho (Eldorado Lake)
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalRanchoBooking')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ranchoBookingId">
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Nome do Responsável / Hóspede *</label>
+            <input type="text" id="ranchoClientName" class="form-input"
+              placeholder="Ex: CARLOS ALBERTO, FAMÍLIA SILVA...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Telefone / WhatsApp</label>
+            <input type="text" id="ranchoClientPhone" class="form-input" placeholder="Ex: 42 9 9988-7766">
+          </div>
+        </div>
+
+        <div class="form-row-3">
+          <div class="form-group">
+            <label class="form-label">Data de Entrada (Check-in) *</label>
+            <input type="date" id="ranchoCheckInDate" class="form-input" onchange="calculateRanchoDates()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data de Saída (Check-out) *</label>
+            <input type="date" id="ranchoCheckOutDate" class="form-input" onchange="calculateRanchoDates()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Total de Diárias</label>
+            <input type="number" id="ranchoTotalDays" class="form-input" min="1" value="1"
+              oninput="recalculateRanchoAmounts()">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Quantidade de Hóspedes / Pessoas no Rancho</label>
+          <input type="number" id="ranchoGuestsCount" class="form-input" min="1" value="4"
+            placeholder="Ex: 4, 8, 12...">
+        </div>
+
+        <!-- Seção Financeira do Rancho -->
+        <div
+          style="background: rgba(6, 10, 19, 0.7); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 1rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.75rem;">
+            Controle de Pagamento da Hospedagem
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Valor Total da Hospedagem (R$)</label>
+              <input type="number" id="ranchoTotalAmount" class="form-input" placeholder="Ex: 1200.00" step="50.00"
+                oninput="recalculateRanchoAmounts()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sinal / Reserva Já Pago (R$)</label>
+              <input type="number" id="ranchoDepositAmount" class="form-input" placeholder="Ex: 500.00" step="50.00"
+                oninput="recalculateRanchoAmounts()">
+            </div>
+          </div>
+
+          <div
+            style="background: var(--bg-input); border: 1px solid var(--border-gold); border-radius: 6px; padding: 0.75rem 1rem; text-align: center;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+              Saldo Restante a Pagar na Entrada no Rancho:</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary-gold);" id="ranchoRemainingDisplay">
+              R$ 0,00</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações da Hospedagem (Starlink, uso de churrasqueira, etc.)</label>
+          <textarea id="ranchoNotes" class="form-textarea" style="min-height: 60px;"
+            placeholder="Ex: Trazer roupa de cama, senha da Starlink liberada..."></textarea>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger btn-sm" id="btnDeleteRanchoBooking" style="margin-right: auto; display: none;"
+          onclick="deleteActiveRanchoBooking()">Excluir Locação</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalRanchoBooking')">Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveRanchoBooking" onclick="saveRanchoBooking()">Salvar Locação</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 14. Modal: Quitar Saldo da Locação do Rancho -->
+  <div class="modal-backdrop" id="modalRanchoPayment">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          Quitar / Receber Saldo do Rancho
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalRanchoPayment')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="payRanchoBookingId">
+
+        <div
+          style="background: rgba(6, 10, 19, 0.6); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; border: 1px solid var(--border-gold);">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Responsável / Hóspede:</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;" id="payRanchoClientName">Cliente</div>
+          <div style="font-size: 0.82rem; color: var(--text-light); margin-top: 0.25rem;" id="payRanchoDates">Data</div>
+
+          <div
+            style="display: flex; justify-content: space-between; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed rgba(229, 193, 88, 0.3); font-size: 0.85rem;">
+            <span>Valor Total: <strong id="payRanchoTotal">R$ 0,00</strong></span>
+            <span>Já Pago (Sinal): <strong id="payRanchoDeposit" style="color: var(--status-paid-text);">R$
+                0,00</strong></span>
+          </div>
+          <div style="margin-top: 0.5rem; font-size: 0.95rem; font-weight: 800; color: var(--primary-gold);">
+            Saldo Restante a Receber: <span id="payRanchoRemaining">R$ 0,00</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Valor Pago Agora (R$) *</label>
+          <input type="number" id="payRanchoAmount" class="form-input" placeholder="Ex: 700.00" step="50.00">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações da Quitação</label>
+          <input type="text" id="payRanchoNotes" class="form-input"
+            placeholder="Ex: Quitado via Pix na entrada no rancho">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalRanchoPayment')">Cancelar</button>
+        <button class="btn btn-gold" onclick="submitRanchoPayment()">Confirmar Pagamento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 15. Modal: Editar Prêmio / Trocar Escolha (Diária ou Vale) -->
+  <div class="modal-backdrop" id="modalEditValePrize">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalEditValeTitle">
+          Editar Registro de Prêmio / Vale
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalEditValePrize')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editValeId">
+
+        <div class="form-group">
+          <label class="form-label">Nome do Ganhador / Cliente *</label>
+          <input type="text" id="editValeCustomerName" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Telefone / WhatsApp</label>
+          <input type="text" id="editValeCustomerPhone" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Opção / Status Escolhido pelo Ganhador</label>
+          <select id="editValeChoiceSelect" class="form-select">
+            <option value="pending_choice">A Decidir (Diária de Pesca ou Vale)</option>
+            <option value="diaria">Diária de Pesca (Escolhendo o Dia / Não Agendada)</option>
+            <option value="scheduled">Diária de Pesca Agendada (No Calendário)</option>
+            <option value="vale">Vale-Compras de R$ 450,00 (Haver na Loja)</option>
+            <option value="delivered">Entregue / Concluído</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Descrição do Prêmio</label>
+          <input type="text" id="editValeDescription" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações</label>
+          <textarea id="editValeNotes" class="form-textarea" style="min-height: 60px;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalEditValePrize')">Cancelar</button>
+        <button class="btn btn-gold" onclick="saveEditedValePrize()">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>

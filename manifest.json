@@ -1,0 +1,23 @@
+{
+  "name": "Eldorado Pesca & Lake",
+  "short_name": "Eldorado Pesca",
+  "description": "Sistema de Gestão de Rifas, Vales, Prêmios e Ponto",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060a13",
+  "theme_color": "#060a13",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "logo.webp",
+      "sizes": "192x192 512x512",
+      "type": "image/webp",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "app_icon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

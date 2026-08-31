@@ -1,0 +1,21 @@
+{
+  "name": "eldorado-pesca-manager",
+  "version": "2.0.0",
+  "description": "Sistema de Gestao Eldorado Pesca e Eldorado Lake",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js"
+  },
+  "keywords": [
+    "eldorado",
+    "pesca",
+    "gestao"
+  ],
+  "author": "Eldorado Pesca",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^40.8.0"
+  }
+}
