@@ -475,6 +475,36 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // POST /api/vales/undo-exchange - Desfazer troca de prêmio e restaurar para aguardando retirada
+  if (req.method === 'POST' && pathname === '/api/vales/undo-exchange') {
+    readJsonBody(req, (err, body) => {
+      if (err || !body.valeId) {
+        sendJson(res, 400, { error: 'ID do vale/prêmio é obrigatório' });
+        return;
+      }
+
+      try {
+        const stmt = db.prepare(`
+          UPDATE vales_prizes 
+          SET status = 'pending_pickup', 
+              delivered_at = null,
+              exchanged_item = null, 
+              difference_paid = 0, 
+              exchange_notes = null, 
+              exchanged_at = null
+          WHERE id = ?
+        `);
+        stmt.run(body.valeId);
+        createAutoBackupSnapshot();
+        sendJson(res, 200, { success: true });
+      } catch (err) {
+        console.error('Error undoing exchange:', err);
+        sendJson(res, 500, { error: err.message });
+      }
+    });
+    return;
+  }
+
   // POST /api/vales/deliver - Marcar prêmio físico como entregue
   if (req.method === 'POST' && pathname === '/api/vales/deliver') {
     readJsonBody(req, (err, body) => {
@@ -516,7 +546,7 @@ const server = http.createServer((req, res) => {
                 notes = ?
             WHERE id = ?
           `);
-          stmt.run(amount, amount, 'Ganhador optou pelo Vale-Compras', body.valeId);
+          stmt.run(amount, amount, `Ganhador optou pelo Vale-Compras (R$ ${amount.toFixed(2).replace('.', ',')})`, body.valeId);
           // Remove qualquer agendamento vinculado da Agenda de Pesca
           db.prepare("DELETE FROM fishing_bookings WHERE prize_id = ?").run(body.valeId);
         } else if (body.choice === 'diaria') {
@@ -572,7 +602,11 @@ const server = http.createServer((req, res) => {
               status = ?,
               initial_amount = ?,
               current_balance = ?,
-              delivered_at = ?
+              delivered_at = ?,
+              exchanged_item = ?,
+              difference_paid = ?,
+              exchange_notes = ?,
+              exchanged_at = ?
           WHERE id = ?
         `);
 
@@ -586,6 +620,10 @@ const server = http.createServer((req, res) => {
           parseFloat(body.initialAmount) || 0,
           parseFloat(body.currentBalance) || 0,
           body.deliveredAt || null,
+          body.exchangedItem !== undefined ? body.exchangedItem : null,
+          parseFloat(body.differencePaid) || 0,
+          body.exchangeNotes !== undefined ? body.exchangeNotes : null,
+          body.exchangedAt !== undefined ? body.exchangedAt : null,
           body.id
         );
 

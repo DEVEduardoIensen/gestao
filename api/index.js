@@ -227,6 +227,21 @@ module.exports = async (req, res) => {
     return res.status(200).json({ success: true });
   }
 
+  // POST /api/vales/undo-exchange
+  if (req.method === 'POST' && pathname === '/api/vales/undo-exchange') {
+    const body = req.body || {};
+    const item = cloudStore.valesAndPrizes.find(v => v.id === body.valeId);
+    if (item) {
+      item.status = 'pending_pickup';
+      item.deliveredAt = null;
+      item.exchangedItem = null;
+      item.differencePaid = 0;
+      item.exchangeNotes = null;
+      item.exchangedAt = null;
+    }
+    return res.status(200).json({ success: true });
+  }
+
   // POST /api/vales/choose-option
   if (req.method === 'POST' && pathname === '/api/vales/choose-option') {
     const body = req.body || {};
@@ -238,7 +253,7 @@ module.exports = async (req, res) => {
         item.status = 'active';
         item.initialAmount = amt;
         item.currentBalance = amt;
-        item.notes = 'Ganhador optou pelo Vale-Compras de R$ 450,00';
+        item.notes = `Ganhador optou pelo Vale-Compras (R$ ${amt.toFixed(2).replace('.', ',')})`;
       } else if (body.choice === 'diaria') {
         item.type = 'dual_choice';
         item.status = 'pending_schedule';
@@ -265,6 +280,11 @@ module.exports = async (req, res) => {
       if (body.status) item.status = body.status;
       if (body.currentBalance !== undefined) item.currentBalance = parseFloat(body.currentBalance) || 0;
       if (body.initialAmount !== undefined) item.initialAmount = parseFloat(body.initialAmount) || 0;
+      if (body.deliveredAt !== undefined) item.deliveredAt = body.deliveredAt;
+      if (body.exchangedItem !== undefined) item.exchangedItem = body.exchangedItem;
+      if (body.differencePaid !== undefined) item.differencePaid = parseFloat(body.differencePaid) || 0;
+      if (body.exchangeNotes !== undefined) item.exchangeNotes = body.exchangeNotes;
+      if (body.exchangedAt !== undefined) item.exchangedAt = body.exchangedAt;
     }
     return res.status(200).json({ success: true });
   }

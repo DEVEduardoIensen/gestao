@@ -994,12 +994,12 @@
     </div>
   </div>
 
-  <!-- 7. Modal: REGISTRAR TROCA DE PRÊMIO POR OUTRO PRODUTO -->
+  <!-- 7. Modal: REGISTRAR / EDITAR TROCA DE PRÊMIO POR OUTRO PRODUTO -->
   <div class="modal-backdrop" id="modalExchangePrize">
     <div class="modal-dialog">
       <div class="modal-header">
         <h3 class="modal-title">
-          Registrar Troca de Produto Ganho
+          <span id="modalExchangePrizeTitle">Registrar Troca de Produto Ganho</span>
         </h3>
         <button class="modal-close-btn" onclick="closeModal('modalExchangePrize')">✕</button>
       </div>
@@ -1040,8 +1040,12 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-danger btn-sm" id="btnUndoExchange"
+          style="margin-right: auto; display: none;" onclick="undoCurrentExchangePrize()">
+          ↩️ Desfazer Troca (Cancelar Troca)
+        </button>
         <button class="btn btn-secondary" onclick="closeModal('modalExchangePrize')">Cancelar</button>
-        <button class="btn btn-gold" id="btnConfirmExchangePrize">Confirmar Troca e Entrega</button>
+        <button class="btn btn-gold" id="btnConfirmExchangePrize" onclick="confirmExchangePrize()">Confirmar Troca e Entrega</button>
       </div>
     </div>
   </div>
@@ -1533,13 +1537,22 @@
 
         <div class="form-group">
           <label class="form-label">Opção / Status Escolhido pelo Ganhador</label>
-          <select id="editValeChoiceSelect" class="form-select">
+          <select id="editValeChoiceSelect" class="form-select" onchange="toggleEditValeChoiceFields()">
             <option value="pending_choice">A Decidir (Diária de Pesca ou Vale)</option>
             <option value="diaria">Diária de Pesca (Escolhendo o Dia / Não Agendada)</option>
             <option value="scheduled">Diária de Pesca Agendada (No Calendário)</option>
-            <option value="vale">Vale-Compras de R$ 450,00 (Haver na Loja)</option>
+            <option value="vale">Vale-Compras (Crédito / Saldo de Haver na Loja)</option>
+            <option value="pending_pickup">Prêmio Físico (Aguardando Retirada)</option>
             <option value="delivered">Entregue / Concluído</option>
           </select>
+        </div>
+
+        <div class="form-group" id="editValeAmountGroup" style="display: none;">
+          <label class="form-label">Valor do Vale-Compras (R$) *</label>
+          <input type="number" id="editValeAmount" class="form-input" placeholder="Ex: 450.00" step="10.00">
+          <small style="color: var(--text-dim); font-size: 0.74rem; margin-top: 0.25rem; display: block;">
+            Defina o valor deste vale-compras livremente (não fica fixo em R$ 450).
+          </small>
         </div>
 
         <div class="form-group">

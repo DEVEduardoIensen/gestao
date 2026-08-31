@@ -894,14 +894,15 @@ function renderValesView() {
     // Action Buttons
     let actionsHtml = "";
     if (isDualPending) {
+      const valeAmount = item.initialAmount || 450;
       actionsHtml = `
         <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Escolheu Diária e vai agendar datas">
           Diária (Agendar)
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: var(--primary-gold); color: var(--primary-gold);">
-          Vale R$ 450
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: var(--primary-gold); color: var(--primary-gold);" title="Escolheu Vale-Compras de ${formatCurrency(valeAmount)}">
+          Vale (${formatCurrency(valeAmount)})
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
+        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
         </button>
         <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
@@ -909,14 +910,15 @@ function renderValesView() {
         </button>
       `;
     } else if (isDualSchedule) {
+      const valeAmount = item.initialAmount || 450;
       actionsHtml = `
         <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Agendar datas no calendário">
           Agendar Datas
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Trocar por vale-compras de R$ 450">
-          Trocar p/ Vale
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Trocar por vale-compras de ${formatCurrency(valeAmount)}">
+          Trocar p/ Vale (${formatCurrency(valeAmount)})
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
+        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
         </button>
         <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
@@ -924,14 +926,15 @@ function renderValesView() {
         </button>
       `;
     } else if (isScheduled) {
+      const valeAmount = item.initialAmount || 450;
       actionsHtml = `
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tabBtnAgenda').click()" style="border-color: #10b981; color: #34d399;" title="Ver na Agenda de Pesca">
           Ver na Agenda
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Cancelar agendamento e trocar por vale-compras de R$ 450">
-          Trocar p/ Vale
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Cancelar agendamento e trocar por vale-compras de ${formatCurrency(valeAmount)}">
+          Trocar p/ Vale (${formatCurrency(valeAmount)})
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
+        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
         </button>
         <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
@@ -950,7 +953,7 @@ function renderValesView() {
         <button class="btn btn-whatsapp btn-sm" onclick="generateValeWhatsAppReceipt('${item.id}')">
           WhatsApp
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
+        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações e Saldo">
           Editar
         </button>
         <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
@@ -958,7 +961,16 @@ function renderValesView() {
         </button>
       `;
     } else {
-      if (item.status === "pending_pickup") {
+      if (isExchanged) {
+        actionsHtml = `
+          <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #a855f7; color: #e9d5ff;" title="Editar informações da troca">
+            ✏️ Editar Troca
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="undoCurrentExchangePrizeDirect('${item.id}')" title="Desfazer troca caso o cliente tenha se arrependido e retornar prêmio para Aguardando Retirada">
+            ↩️ Desfazer Troca
+          </button>
+        `;
+      } else if (item.status === "pending_pickup") {
         actionsHtml = `
           <button class="btn btn-gold btn-sm" onclick="markPrizeDelivered('${item.id}')">
             Entregue
@@ -1033,13 +1045,47 @@ function openEditPrizeModal(id) {
     choiceSelect.value = "scheduled";
   } else if (item.type === "vale_compras") {
     choiceSelect.value = "vale";
+  } else if (item.type === "premio_fisico" && item.status === "pending_pickup") {
+    choiceSelect.value = "pending_pickup";
   } else if (item.status === "delivered") {
     choiceSelect.value = "delivered";
   } else {
     choiceSelect.value = "pending_choice";
   }
 
+  // Preenche o campo de valor customizado para vale-compras
+  const amountInput = document.getElementById("editValeAmount");
+  if (amountInput) {
+    const val = (item.currentBalance !== undefined && item.currentBalance !== null && item.currentBalance > 0)
+      ? item.currentBalance
+      : (item.initialAmount || "");
+    amountInput.value = val;
+  }
+
+  toggleEditValeChoiceFields();
   openModal("modalEditValePrize");
+}
+
+function toggleEditValeChoiceFields() {
+  const choice = document.getElementById("editValeChoiceSelect").value;
+  const amountGroup = document.getElementById("editValeAmountGroup");
+  if (!amountGroup) return;
+
+  if (choice === "vale") {
+    amountGroup.style.display = "block";
+    const amountInput = document.getElementById("editValeAmount");
+    if (!amountInput.value) {
+      const id = document.getElementById("editValeId").value;
+      const item = (appData.valesAndPrizes || []).find(v => v.id === id);
+      if (item) {
+        amountInput.value = item.initialAmount || item.currentBalance || 450;
+      } else {
+        amountInput.value = 450;
+      }
+    }
+  } else {
+    amountGroup.style.display = "none";
+  }
 }
 
 async function saveEditedValePrize() {
@@ -1052,6 +1098,7 @@ async function saveEditedValePrize() {
   const newDesc = document.getElementById("editValeDescription").value.trim();
   const newNotes = document.getElementById("editValeNotes").value.trim();
   const newChoice = document.getElementById("editValeChoiceSelect").value;
+  const customAmount = parseFloat(document.getElementById("editValeAmount").value) || item.initialAmount || 450.00;
 
   if (!newName) {
     showToast("Informe o nome do ganhador / cliente.", "warning");
@@ -1069,17 +1116,14 @@ async function saveEditedValePrize() {
   if (newChoice === "pending_choice") {
     item.type = "dual_choice";
     item.status = "pending_choice";
-    // Se mudou de ideia e voltou para 'A Decidir', remove automaticamente o agendamento da Agenda de Pesca
     removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "diaria") {
     item.type = "dual_choice";
     item.status = "pending_schedule";
-    // Se colocou como 'Aguardando Agendamento / Escolhendo o dia', remove agendamento antigo para reagendar
     removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "scheduled") {
     item.type = "dual_choice";
     item.status = "scheduled";
-    // Sincroniza nome e telefone no agendamento existente caso tenha mudado
     const linked = (appData.fishingBookings || []).find(b => b.prizeId === item.id || ((b.clientName || '').trim().toUpperCase() === oldName.trim().toUpperCase() && b.bookingType === 'raffle_prize'));
     if (linked) {
       linked.clientName = newName;
@@ -1088,8 +1132,17 @@ async function saveEditedValePrize() {
   } else if (newChoice === "vale") {
     item.type = "vale_compras";
     item.status = "active";
-    if (!item.currentBalance || item.currentBalance === 0) item.currentBalance = item.initialAmount || 450.00;
-    // Se optou pelo vale de compras, remove qualquer agendamento da pesca imediatamente
+    item.initialAmount = customAmount;
+    item.currentBalance = customAmount;
+    removeLinkedFishingBookings(item.id, oldName);
+  } else if (newChoice === "pending_pickup") {
+    item.type = "premio_fisico";
+    item.status = "pending_pickup";
+    item.deliveredAt = null;
+    item.exchangedItem = null;
+    item.differencePaid = 0;
+    item.exchangeNotes = null;
+    item.exchangedAt = null;
     removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "delivered") {
     item.status = "delivered";
@@ -1112,9 +1165,13 @@ async function saveEditedValePrize() {
           notes: item.notes,
           type: item.type,
           status: item.status,
-          currentBalance: item.currentBalance,
-          initialAmount: item.initialAmount,
-          deliveredAt: item.deliveredAt
+          currentBalance: item.currentBalance || 0,
+          initialAmount: item.initialAmount || 0,
+          deliveredAt: item.deliveredAt,
+          exchangedItem: item.exchangedItem || null,
+          differencePaid: item.differencePaid || 0,
+          exchangeNotes: item.exchangeNotes || null,
+          exchangedAt: item.exchangedAt || null
         })
       });
     } catch (e) {
@@ -1127,7 +1184,7 @@ async function saveEditedValePrize() {
   renderFishingAgendaView();
   updateGlobalStats();
   closeModal("modalEditValePrize");
-  showToast("Registro e agenda sincronizados com sucesso!", "success");
+  showToast(`Registro de ${item.customerName} atualizado com sucesso!`, "success");
 }
 
 async function choosePrizeOption(valeId, choice) {
@@ -1136,12 +1193,12 @@ async function choosePrizeOption(valeId, choice) {
   const oldName = item.customerName;
 
   if (choice === "vale") {
-    const amount = item.initialAmount || 450.00;
+    const amount = item.initialAmount || item.currentBalance || 450.00;
     item.type = "vale_compras";
     item.status = "active";
     item.initialAmount = amount;
     item.currentBalance = amount;
-    item.notes = `Ganhador optou pelo Vale-Compras de ${formatCurrency(amount)}`;
+    item.notes = `Ganhador optou pelo Vale-Compras (${formatCurrency(amount)})`;
 
     // Remove automaticamente qualquer agendamento vinculado do calendário de pesca
     removeLinkedFishingBookings(valeId, oldName);
@@ -1162,7 +1219,7 @@ async function choosePrizeOption(valeId, choice) {
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
-    showToast(`Opção de Vale-Compras confirmada para ${item.customerName}! Saldo de ${formatCurrency(amount)} liberado e removido do calendário de pesca.`, "success");
+    showToast(`Opção de Vale-Compras confirmada para ${item.customerName}! Saldo de ${formatCurrency(amount)} liberado.`, "success");
   } else if (choice === "diaria") {
     item.type = "dual_choice";
     item.status = "pending_schedule";
@@ -1384,7 +1441,7 @@ async function confirmAbaterProduto() {
   showToast(`Baixa realizada! Novo saldo de ${item.customerName}: ${formatCurrency(newBalance)}`, "success");
 }
 
-/* Modal: REGISTRAR TROCA DE PRÊMIO POR OUTRO PRODUTO */
+/* Modal: REGISTRAR / EDITAR TROCA DE PRÊMIO POR OUTRO PRODUTO */
 function openExchangePrizeModal(prizeId) {
   const item = appData.valesAndPrizes.find(v => v.id === prizeId);
   if (!item) return;
@@ -1392,10 +1449,27 @@ function openExchangePrizeModal(prizeId) {
   document.getElementById("exchangePrizeId").value = prizeId;
   document.getElementById("exchangeClientName").textContent = item.customerName;
   document.getElementById("exchangeOriginalItem").textContent = item.description;
-  document.getElementById("exchangeNewItemName").value = "";
-  document.getElementById("exchangeDifferencePaid").value = "0.00";
-  document.getElementById("exchangeDate").value = getLocalDateStr();
-  document.getElementById("exchangeNotes").value = "";
+
+  const isAlreadyExchanged = !!item.exchangedItem;
+  const titleEl = document.getElementById("modalExchangePrizeTitle");
+  if (titleEl) {
+    titleEl.textContent = isAlreadyExchanged ? "Editar / Ajustar Troca de Produto" : "Registrar Troca de Produto Ganho";
+  }
+
+  document.getElementById("exchangeNewItemName").value = item.exchangedItem || "";
+  document.getElementById("exchangeDifferencePaid").value = item.differencePaid !== undefined ? item.differencePaid : "0.00";
+  document.getElementById("exchangeDate").value = item.exchangedAt || item.deliveredAt || getLocalDateStr();
+  document.getElementById("exchangeNotes").value = item.exchangeNotes || "";
+
+  const btnUndo = document.getElementById("btnUndoExchange");
+  if (btnUndo) {
+    btnUndo.style.display = isAlreadyExchanged ? "inline-flex" : "none";
+  }
+
+  const btnConfirm = document.getElementById("btnConfirmExchangePrize");
+  if (btnConfirm) {
+    btnConfirm.textContent = isAlreadyExchanged ? "Salvar Alterações da Troca" : "Confirmar Troca e Entrega";
+  }
 
   openModal("modalExchangePrize");
 }
@@ -1443,7 +1517,50 @@ async function confirmExchangePrize() {
   saveState();
   renderValesView();
   closeModal("modalExchangePrize");
-  showToast(`Troca registrada com sucesso! ${item.customerName} levou: ${newItem}`, "success");
+  showToast(`Troca salva com sucesso! ${item.customerName} levou: ${newItem}`, "success");
+}
+
+async function undoCurrentExchangePrize() {
+  const prizeId = document.getElementById("exchangePrizeId").value;
+  await executeUndoExchange(prizeId);
+  closeModal("modalExchangePrize");
+}
+
+async function undoCurrentExchangePrizeDirect(prizeId) {
+  await executeUndoExchange(prizeId);
+}
+
+async function executeUndoExchange(prizeId) {
+  const item = appData.valesAndPrizes.find(v => v.id === prizeId);
+  if (!item) return;
+
+  if (!confirm(`Deseja realmente desfazer a troca de ${item.customerName} e retornar o prêmio original ("${item.description}") para "Aguardando Retirada"?`)) {
+    return;
+  }
+
+  item.status = "pending_pickup";
+  item.deliveredAt = null;
+  item.exchangedItem = null;
+  item.differencePaid = 0;
+  item.exchangeNotes = null;
+  item.exchangedAt = null;
+
+  if (isConnectedToBackend) {
+    try {
+      await fetch("/api/vales/undo-exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ valeId: prizeId })
+      });
+    } catch (e) {
+      console.warn("Backend undo exchange failed", e);
+    }
+  }
+
+  saveState();
+  renderValesView();
+  updateGlobalStats();
+  showToast(`Troca desfeita! O prêmio de ${item.customerName} voltou para Aguardando Retirada.`, "success");
 }
 
 function generateValeWhatsAppReceipt(valeId) {

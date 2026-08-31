@@ -3,20 +3,31 @@
  * Arquivo do Banco: eldorado_pesca.db
  */
 
+const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 
 const DB_PATH = path.join(__dirname, 'eldorado_pesca.db');
-const db = new DatabaseSync(DB_PATH);
+
+let db;
+try {
+  db = new DatabaseSync(DB_PATH);
+} catch (err) {
+  const shmPath = DB_PATH + '-shm';
+  if (fs.existsSync(shmPath)) {
+    try { fs.unlinkSync(shmPath); } catch (e) {}
+  }
+  db = new DatabaseSync(DB_PATH);
+}
 
 // Enable foreign keys, busy timeout, and safe journal handling for maximum reliability with OneDrive
-db.exec('PRAGMA foreign_keys = ON;');
-db.exec('PRAGMA busy_timeout = 5000;');
 try {
+  db.exec('PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA busy_timeout = 5000;');
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA wal_autocheckpoint = 20;');
 } catch (e) {
-  console.log('Note on SQLite journal mode:', e.message);
+  console.log('Note on SQLite configuration:', e.message);
 }
 
 function checkpointDatabase() {
