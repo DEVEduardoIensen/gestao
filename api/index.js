@@ -142,6 +142,55 @@ module.exports = async (req, res) => {
     return res.status(200).json({ success: true });
   }
 
+  // POST /api/raffles
+  if (req.method === 'POST' && pathname === '/api/raffles') {
+    const body = req.body || {};
+    const raffleId = 'rifa-' + Date.now();
+    const totalNums = parseInt(body.totalNumbers) || 60;
+    const newRaffle = {
+      id: raffleId,
+      number: body.number || body.title?.split(' ')[0] || 'Nova',
+      title: body.title || 'Nova Rifa',
+      subtitle: body.subtitle || 'AÇÃO RÁPIDA',
+      pricePerNumber: parseFloat(body.pricePerNumber) || 25,
+      totalNumbers: totalNums,
+      reservationTimeoutHours: 2,
+      pixKey: '42999162340',
+      pixOwner: 'ELDORADO PESCA LTDA',
+      shippingNote: 'Frete a parte - Envio para todo o Brasil.',
+      liveDrawNote: 'Sorteio ao vivo no Instagram @lojaeldoradopesca',
+      privateContact: '42 9 99162340',
+      rules: '',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      prizes: (body.prizes || []).map((p, idx) => ({
+        position: p.position || (idx + 1),
+        description: p.description || '',
+        winnerNumber: null,
+        winnerName: null
+      })),
+      numbers: Array.from({ length: totalNums }, (_, i) => ({
+        num: i + 1,
+        name: '',
+        status: 'available',
+        reservedAt: null,
+        paidAt: null
+      }))
+    };
+    if (!cloudStore.raffles) cloudStore.raffles = [];
+    cloudStore.raffles.unshift(newRaffle);
+    return res.status(200).json({ success: true, raffleId });
+  }
+
+  // DELETE /api/raffles/:id
+  if (req.method === 'DELETE' && pathname.startsWith('/api/raffles/')) {
+    const raffleId = decodeURIComponent(pathname.replace('/api/raffles/', '')).trim();
+    if (cloudStore.raffles) {
+      cloudStore.raffles = cloudStore.raffles.filter(r => String(r.id) !== String(raffleId));
+    }
+    return res.status(200).json({ success: true });
+  }
+
   // POST /api/vales/abater
   if (req.method === 'POST' && pathname === '/api/vales/abater') {
     const body = req.body || {};

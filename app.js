@@ -151,6 +151,12 @@ function renderAll() {
    ========================================================================== */
 function updateGlobalStats() {
   const raffle = getActiveRaffle();
+  const statRevenueEl = document.getElementById("statRaffleRevenue");
+  const statPaidEl = document.getElementById("statRafflePaidCount");
+  const statReservedEl = document.getElementById("statRaffleReservedCount");
+  const statAvailEl = document.getElementById("statRaffleAvailableCount");
+  const statPercentEl = document.getElementById("statRafflePercent");
+  const statStatusTextEl = document.getElementById("statRaffleStatusText");
   
   if (raffle && Array.isArray(raffle.numbers)) {
     const paidCount = raffle.numbers.filter(n => n.status === "paid").length;
@@ -159,25 +165,21 @@ function updateGlobalStats() {
     const totalRevenue = paidCount * (raffle.pricePerNumber || 0);
     const percentPaid = raffle.totalNumbers > 0 ? Math.round((paidCount / raffle.totalNumbers) * 100) : 0;
 
-    const statRevenueEl = document.getElementById("statRaffleRevenue");
     if (statRevenueEl) statRevenueEl.textContent = formatCurrency(totalRevenue);
-    
-    const statPaidEl = document.getElementById("statRafflePaidCount");
     if (statPaidEl) statPaidEl.textContent = `${paidCount} de ${raffle.totalNumbers} números pagos`;
-
-    const statReservedEl = document.getElementById("statRaffleReservedCount");
     if (statReservedEl) statReservedEl.textContent = `${reservedCount} cotas`;
-
-    const statAvailEl = document.getElementById("statRaffleAvailableCount");
     if (statAvailEl) statAvailEl.textContent = `${availableCount} números livres`;
-
-    const statPercentEl = document.getElementById("statRafflePercent");
     if (statPercentEl) statPercentEl.textContent = `${percentPaid}%`;
-
-    const statStatusTextEl = document.getElementById("statRaffleStatusText");
     if (statStatusTextEl) {
       statStatusTextEl.textContent = raffle.status === 'completed' ? 'Ação Finalizada' : 'Ação Ativa';
     }
+  } else {
+    if (statRevenueEl) statRevenueEl.textContent = "R$ 0,00";
+    if (statPaidEl) statPaidEl.textContent = "0 números pagos";
+    if (statReservedEl) statReservedEl.textContent = "0 cotas";
+    if (statAvailEl) statAvailEl.textContent = "0 números livres";
+    if (statPercentEl) statPercentEl.textContent = "0%";
+    if (statStatusTextEl) statStatusTextEl.textContent = "Sem Ação";
   }
 
   // Vales & Prêmios Counter Badge in Header
@@ -201,6 +203,14 @@ function renderRaffleDropdown() {
 
   selectEl.innerHTML = "";
 
+  if (!appData.raffles || appData.raffles.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Nenhuma ação cadastrada";
+    selectEl.appendChild(opt);
+    return;
+  }
+
   (appData.raffles || []).forEach(r => {
     const opt = document.createElement("option");
     opt.value = r.id;
@@ -219,23 +229,36 @@ function renderRaffleDropdown() {
 
 function renderRaffleView() {
   const raffle = getActiveRaffle();
-  if (!raffle) return;
+  const titleEl = document.getElementById("raffleDisplayTitle");
+  const badgeEl = document.getElementById("raffleBadge");
+  const priceEl = document.getElementById("rafflePriceDisplay");
+  const rulesEl = document.getElementById("raffleRulesSummary");
+  const countEl = document.getElementById("gridNumbersSummary");
+  const prizesListEl = document.getElementById("rafflePrizesList");
+  const gridEl = document.getElementById("raffleNumbersGrid");
+  const actionsCard = document.getElementById("raffleActionsCard");
+
+  if (!raffle) {
+    if (titleEl) titleEl.textContent = "Nenhuma Ação Cadastrada";
+    if (badgeEl) badgeEl.textContent = "SEM AÇÃO";
+    if (priceEl) priceEl.textContent = "R$ 0,00";
+    if (rulesEl) rulesEl.textContent = "Clique em '+ Nova Ação' para iniciar uma rifa.";
+    if (countEl) countEl.textContent = "Total: 0 números";
+    if (prizesListEl) prizesListEl.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-dim);">Nenhum prêmio cadastrado.</div>`;
+    if (gridEl) gridEl.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--text-dim); padding: 3rem; background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border-gold);">Nenhuma rifa disponível. Clique no botão '+ Nova Ação' para criar uma nova rifa.</div>`;
+    if (actionsCard) actionsCard.style.display = "none";
+    return;
+  }
 
   // Header Details
-  document.getElementById("raffleDisplayTitle").textContent = raffle.title || "Ação Eldorado Pesca";
-  document.getElementById("raffleBadge").textContent = raffle.subtitle || "AÇÃO RÁPIDA";
-  document.getElementById("rafflePriceDisplay").textContent = formatCurrency(raffle.pricePerNumber || 25);
-  document.getElementById("raffleRulesSummary").textContent = `Frete a parte - Envio para todo o Brasil.`;
-  document.getElementById("gridNumbersSummary").textContent = `Total: ${raffle.totalNumbers} números`;
+  if (titleEl) titleEl.textContent = raffle.title || "Ação Eldorado Pesca";
+  if (badgeEl) badgeEl.textContent = raffle.subtitle || "AÇÃO RÁPIDA";
+  if (priceEl) priceEl.textContent = formatCurrency(raffle.pricePerNumber || 25);
+  if (rulesEl) rulesEl.textContent = `Frete a parte - Envio para todo o Brasil.`;
+  if (countEl) countEl.textContent = `Total: ${raffle.totalNumbers} números`;
 
-  // Hide action buttons if raffle is completed
-  const actionsCard = document.getElementById("raffleActionsCard");
   if (actionsCard) {
-    if (raffle.status === "completed") {
-      actionsCard.style.display = "none";
-    } else {
-      actionsCard.style.display = "block";
-    }
+    actionsCard.style.display = "block";
   }
 
   // Render Prizes Sidebar
@@ -4041,6 +4064,64 @@ async function saveRaffleForm() {
 }
 
 /* ==========================================================================
+   Excluir Rifa / Ação (Preservando Ganhadores em Vales e Prêmios)
+   ========================================================================== */
+function openDeleteRaffleModal() {
+  const raffle = getActiveRaffle();
+  if (!raffle) {
+    showToast("Nenhuma rifa selecionada para excluir.", "warning");
+    return;
+  }
+
+  const titleEl = document.getElementById("deleteRaffleTitle");
+  if (titleEl) {
+    titleEl.textContent = raffle.title || "esta ação";
+  }
+
+  openModal("modalDeleteRaffle");
+}
+
+async function confirmDeleteRaffle() {
+  const raffle = getActiveRaffle();
+  if (!raffle) {
+    closeModal("modalDeleteRaffle");
+    return;
+  }
+
+  const raffleId = raffle.id;
+  const raffleTitle = raffle.title || "Ação";
+
+  if (isConnectedToBackend) {
+    try {
+      const res = await fetch(`/api/raffles/${encodeURIComponent(raffleId)}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) {
+        throw new Error(`Status ${res.status}`);
+      }
+    } catch (e) {
+      console.warn("Backend delete raffle failed, deleting locally", e);
+    }
+  }
+
+  // Remove the raffle from local state. NOTE: appData.valesAndPrizes and appData.fishingBookings remain 100% UNTOUCHED!
+  appData.raffles = (appData.raffles || []).filter(r => String(r.id) !== String(raffleId));
+
+  // Switch to next active raffle or first available
+  if (appData.raffles.length > 0) {
+    const nextActive = appData.raffles.find(r => r.status === "active") || appData.raffles[0];
+    activeRaffleId = nextActive.id;
+  } else {
+    activeRaffleId = null;
+  }
+
+  saveState();
+  renderAll();
+  closeModal("modalDeleteRaffle");
+  showToast(`Rifa "${raffleTitle}" excluída com sucesso! Os ganhadores e vales foram mantidos.`, "success");
+}
+
+/* ==========================================================================
    UI Event Handlers & Setup
    ========================================================================== */
 function setupEventListeners() {
@@ -4080,6 +4161,15 @@ function setupEventListeners() {
   document.getElementById("btnExportWhatsApp").addEventListener("click", openExportWhatsAppModal);
   document.getElementById("btnImportWhatsApp").addEventListener("click", openImportWhatsAppModal);
   document.getElementById("btnNewRaffle").addEventListener("click", openNewRaffleModal);
+  
+  // Delete Raffle Buttons
+  const btnDeleteRaffle = document.getElementById("btnDeleteRaffle");
+  if (btnDeleteRaffle) btnDeleteRaffle.addEventListener("click", openDeleteRaffleModal);
+  const btnDeleteRaffleSide = document.getElementById("btnDeleteRaffleSide");
+  if (btnDeleteRaffleSide) btnDeleteRaffleSide.addEventListener("click", openDeleteRaffleModal);
+  const btnConfirmDelete = document.getElementById("btnConfirmDeleteRaffle");
+  if (btnConfirmDelete) btnConfirmDelete.addEventListener("click", confirmDeleteRaffle);
+
   document.getElementById("btnAddDynamicPrize").addEventListener("click", () => addDynamicPrizeRow());
   const btnAddFishingPrize = document.getElementById("btnAddFishingPrizeRow");
   if (btnAddFishingPrize) {

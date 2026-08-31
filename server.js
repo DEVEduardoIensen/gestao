@@ -314,6 +314,33 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // DELETE /api/raffles/:id - Excluir Rifa/Ação (mantém registros de ganhadores em vales_prizes intactos)
+  if (req.method === 'DELETE' && pathname.startsWith('/api/raffles/')) {
+    const raffleId = decodeURIComponent(pathname.replace('/api/raffles/', '')).trim();
+    if (!raffleId) {
+      sendJson(res, 400, { error: 'ID da rifa inválido' });
+      return;
+    }
+
+    try {
+      db.exec('BEGIN TRANSACTION;');
+      // Deleta números e prêmios vinculados à rifa
+      db.prepare('DELETE FROM raffle_numbers WHERE raffle_id = ?').run(raffleId);
+      db.prepare('DELETE FROM raffle_prizes WHERE raffle_id = ?').run(raffleId);
+      // Deleta a rifa (vales_prizes NÃO é deletado)
+      db.prepare('DELETE FROM raffles WHERE id = ?').run(raffleId);
+      db.exec('COMMIT;');
+
+      createAutoBackupSnapshot();
+      sendJson(res, 200, { success: true, message: 'Rifa excluída com sucesso' });
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      console.error('Error deleting raffle:', err);
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
   // POST /api/vales - Criar Vale-Compras ou Prêmio Físico
   if (req.method === 'POST' && pathname === '/api/vales') {
     readJsonBody(req, (err, body) => {

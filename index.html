@@ -127,6 +127,10 @@
           <button class="btn-new-raffle-cta" id="btnNewRaffle" title="Criar Nova Ação / Rifa">
             <span class="btn-icon-plus">+</span> Nova Ação
           </button>
+          <!-- Botão Excluir Rifa -->
+          <button class="btn btn-danger" id="btnDeleteRaffle" title="Excluir Rifa Selecionada" style="font-size: 0.85rem; padding: 0.65rem 1rem;">
+            🗑️ Excluir Rifa
+          </button>
         </div>
       </div>
 
@@ -208,6 +212,10 @@
               <button class="btn btn-secondary btn-sm" style="width: 100%; justify-content: flex-start;"
                 id="btnEditRaffleDetails">
                 Editar Título / Prêmios / Preço
+              </button>
+              <button class="btn btn-danger btn-sm" style="width: 100%; justify-content: flex-start; margin-top: 0.25rem;"
+                id="btnDeleteRaffleSide">
+                🗑️ Excluir esta Rifa / Ação
               </button>
             </div>
           </div>
@@ -841,6 +849,43 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modalRaffleForm')">Cancelar</button>
         <button class="btn btn-gold" id="btnSaveRaffleForm">Criar e Iniciar Ação</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4.1. Modal: Confirmar Exclusão de Rifa (com Preservação de Ganhadores e Vales) -->
+  <div class="modal-backdrop" id="modalDeleteRaffle">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.35);">
+        <h3 class="modal-title" style="color: #f87171; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🗑️</span> Confirmar Exclusão da Rifa
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalDeleteRaffle')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size: 0.95rem; color: #ffffff; margin-bottom: 1.15rem; line-height: 1.5;">
+          Tem certeza de que deseja excluir permanentemente a ação <strong id="deleteRaffleTitle" style="color: var(--primary-gold);">107° AÇÃO ELDORADO PESCA</strong>?
+        </div>
+
+        <!-- Banner de Garantia e Proteção dos Ganhadores -->
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-sm); padding: 0.9rem 1.1rem; margin-bottom: 1.15rem;">
+          <div style="font-size: 0.85rem; font-weight: 800; color: #34d399; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
+            <span>🛡️</span> Ganhadores e Prêmios 100% Protegidos
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-light); line-height: 1.45;">
+            Os ganhadores e prêmios já sorteados ou cadastrados na aba <strong>Vales e Prêmios</strong> e na <strong>Agenda de Pesca</strong> serão <strong>mantidos intactos</strong> e não serão deletados.
+          </div>
+        </div>
+
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          A grade de números e o histórico desta rifa serão removidos da aba de Rifas. Esta ação não poderá ser desfeita.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalDeleteRaffle')">Cancelar</button>
+        <button class="btn btn-danger" id="btnConfirmDeleteRaffle" style="background: #dc2626; color: #ffffff; font-weight: 700; border-color: #b91c1c;">
+          Sim, Excluir Rifa
+        </button>
       </div>
     </div>
   </div>

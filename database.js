@@ -195,46 +195,47 @@ function initDatabase() {
     insertSetting.run('eduardoHalfRate', '31.00');
   }
 
-  // Populate 105th Raffle (Ação com Diária de Pesca)
-  const checkRifa105 = db.prepare("SELECT COUNT(*) as count FROM raffles WHERE id = 'rifa-105'").get();
-  if (checkRifa105.count === 0) {
-    seedRifa105();
-  }
+  // Populate initial seed data only once on initial setup so deleted raffles stay deleted
+  const checkDbSeeded = db.prepare("SELECT value FROM settings WHERE key = 'db_seed_completed'").get();
+  if (!checkDbSeeded) {
+    const checkRifa105 = db.prepare("SELECT COUNT(*) as count FROM raffles WHERE id = 'rifa-105'").get();
+    if (checkRifa105.count === 0) {
+      seedRifa105();
+    }
 
-  // Populate 106th Raffle if not already in DB
-  const checkRifa106 = db.prepare("SELECT COUNT(*) as count FROM raffles WHERE id = 'rifa-106'").get();
-  if (checkRifa106.count === 0) {
-    seedRifa106();
-  }
+    const checkRifa106 = db.prepare("SELECT COUNT(*) as count FROM raffles WHERE id = 'rifa-106'").get();
+    if (checkRifa106.count === 0) {
+      seedRifa106();
+    }
 
-  // Populate 107th Raffle if not in DB
-  const checkRifa107 = db.prepare("SELECT COUNT(*) as count FROM raffles WHERE id = 'rifa-107'").get();
-  if (checkRifa107.count === 0) {
-    seedRifa107();
-  }
+    const checkRifa107 = db.prepare("SELECT COUNT(*) as count FROM raffles WHERE id = 'rifa-107'").get();
+    if (checkRifa107.count === 0) {
+      seedRifa107();
+    }
 
-  // Populate RAI from 105th action in vales_prizes (A Decidir: Diária ou Vale)
-  const checkRaiVale = db.prepare("SELECT COUNT(*) as count FROM vales_prizes WHERE id = 'vp-rai-105'").get();
-  if (checkRaiVale.count === 0) {
-    const insertVale = db.prepare(`
-      INSERT OR REPLACE INTO vales_prizes (
-        id, customer_name, customer_phone, type, raffle_ref, date_won,
-        initial_amount, current_balance, description, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    insertVale.run(
-      'vp-rai-105',
-      'RAI',
-      '42 9 9933-4455',
-      'dual_choice',
-      '105° AÇÃO ELDORADO PESCA',
-      '2026-08-01',
-      450.00,
-      450.00,
-      '1º Lugar - DIÁRIA PRA DUAS PESSOAS + COMBUSTÍVEL OU VALE COMPRAS DE 450,00 NA LOJA (Cota #40)',
-      'pending_choice',
-      '2026-08-01T12:00:00.000Z'
-    );
+    const checkRaiVale = db.prepare("SELECT COUNT(*) as count FROM vales_prizes WHERE id = 'vp-rai-105'").get();
+    if (checkRaiVale.count === 0) {
+      const insertVale = db.prepare(`
+        INSERT OR REPLACE INTO vales_prizes (
+          id, customer_name, customer_phone, type, raffle_ref, date_won,
+          initial_amount, current_balance, description, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      insertVale.run(
+        'vp-rai-105',
+        'RAI',
+        '42 9 9933-4455',
+        'dual_choice',
+        '105° AÇÃO ELDORADO PESCA',
+        '2026-08-01',
+        450.00,
+        450.00,
+        '1º Lugar - DIÁRIA PRA DUAS PESSOAS + COMBUSTÍVEL OU VALE COMPRAS DE 450,00 NA LOJA (Cota #40)',
+        'pending_choice',
+        '2026-08-01T12:00:00.000Z'
+      );
+    }
+    insertSetting.run('db_seed_completed', '1');
   }
 
   // Remove fake NPC bookings if present
