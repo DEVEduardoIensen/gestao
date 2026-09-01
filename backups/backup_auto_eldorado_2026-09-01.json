@@ -1383,6 +1383,38 @@
       "notes": ""
     }
   ],
-  "fishingBookings": [],
+  "fishingBookings": [
+    {
+      "id": "fb-1788272802644",
+      "clientName": "DEDO",
+      "clientPhone": "drre5643645",
+      "bookingType": "direct",
+      "raffleRef": "",
+      "prizeId": null,
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-01",
+      "dates": [
+        "2026-09-01"
+      ],
+      "totalDays": 1,
+      "raffleDays": 1,
+      "extraDays": 0,
+      "packageName": "Dupla (2 Pescadores)",
+      "structureType": "dupla",
+      "fishermenCount": 2,
+      "boatsCount": 1,
+      "kayaksCount": 0,
+      "customStructure": "",
+      "totalAmount": 2500,
+      "depositAmount": 1000,
+      "remainingAmount": 1500,
+      "paymentStatus": "deposit_paid",
+      "paymentMethod": "Pix",
+      "notes": "",
+      "guideName": "Thiago Witeck",
+      "status": "scheduled",
+      "createdAt": "2026-09-01"
+    }
+  ],
   "ranchoBookings": []
 }
