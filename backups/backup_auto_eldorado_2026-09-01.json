@@ -29,442 +29,442 @@
         {
           "position": 1,
           "description": "SHIMANO CURADO 200 DIREITA R$ 2200,00 OU 1000,00 EM VALE COMPRAS",
-          "winnerNumber": null,
-          "winnerName": null
+          "winnerNumber": 32,
+          "winnerName": "LUIZ ALBERTH"
         },
         {
           "position": 2,
           "description": "BONÉ SAPOZILLA",
-          "winnerNumber": null,
-          "winnerName": null
+          "winnerNumber": 31,
+          "winnerName": "ANDERSON B"
         },
         {
           "position": 3,
           "description": "BONÉ BEAST SHAD",
-          "winnerNumber": null,
-          "winnerName": null
+          "winnerNumber": 55,
+          "winnerName": "ANDERSON B"
         }
       ],
       "numbers": [
         {
           "num": 1,
-          "name": "",
-          "status": "available",
+          "name": "DIGGO",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.140Z"
         },
         {
           "num": 2,
           "name": "WELLINGTON A",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.140Z"
         },
         {
           "num": 3,
-          "name": "",
-          "status": "available",
+          "name": "DIGGO",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.140Z"
         },
         {
           "num": 4,
-          "name": "",
-          "status": "available",
+          "name": "JOSÉ AUGUSTO",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.140Z"
         },
         {
           "num": 5,
           "name": "FÁBIO MATSUDA",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 6,
           "name": "MATHEUS MARIANO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 7,
           "name": "VINICIUS F",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 8,
           "name": "JÚNIOR JJ",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 9,
           "name": "FELIPE ROCHA",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 10,
-          "name": "",
-          "status": "available",
+          "name": "ÉDSON",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 11,
-          "name": "",
-          "status": "available",
+          "name": "ANDRÉ ARESI",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 12,
-          "name": "",
-          "status": "available",
+          "name": "JUNIOR JJ",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 13,
           "name": "LENON",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 14,
           "name": "ADIMARINS",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 15,
           "name": "VINICIUS F",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 16,
           "name": "VAGNER M",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 17,
           "name": "JOÃO C",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 18,
           "name": "ANDERSON CARNEIRO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 19,
           "name": "CARLOS C",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 20,
           "name": "CÉSAR T",
           "status": "paid",
           "reservedAt": "2026-08-29T11:09:51.554Z",
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 21,
           "name": "EDUARDO F",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 22,
           "name": "EDILSON",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 23,
           "name": "JOÃO C",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 24,
           "name": "HENRIQUE",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 25,
           "name": "EVERTON K",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 26,
           "name": "ANDERSON B",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 27,
           "name": "ALESSANDRO WISOSKI",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 28,
           "name": "DIGGO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 29,
           "name": "JOÃO VICTOR",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 30,
           "name": "RAI",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 31,
           "name": "ANDERSON B",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 32,
           "name": "LUIZ ALBERTH",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 33,
           "name": "JOSIAS",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 34,
           "name": "CLEBINHO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 35,
           "name": "EDILSON",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 36,
           "name": "ANDRÉ ARESI",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 37,
           "name": "NATANAEL",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 38,
           "name": "CLEBINHO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 39,
           "name": "EDUARDO F",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 40,
           "name": "ÉDSON",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 41,
-          "name": "",
-          "status": "available",
+          "name": "JOSÉ AUGUSTO",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 42,
           "name": "LUCAS",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 43,
           "name": "DÊNIS",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 44,
           "name": "RAI",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 45,
           "name": "DIGGO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 46,
           "name": "HENRIQUE K",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 47,
           "name": "ZÁ",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 48,
           "name": "DAVI GUTH",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:53:37.590Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 49,
           "name": "LUCIANO",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 50,
           "name": "JOÃO VICTOR",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 51,
           "name": "MATHEUS MACHADO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 52,
           "name": "FÁBIO MATSUDA",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 53,
           "name": "YGOR K",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 54,
           "name": "VAGNER M",
           "status": "paid",
           "reservedAt": "2026-08-31T12:52:34.972Z",
-          "paidAt": "2026-08-31T14:55:42.665Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 55,
           "name": "ANDERSON B",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 56,
           "name": "GABRIEL DEOLA",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:54:05.732Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 57,
-          "name": "",
-          "status": "available",
+          "name": "DIGGO",
+          "status": "paid",
           "reservedAt": null,
-          "paidAt": null
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 58,
           "name": "DIGGO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 59,
           "name": "ANDERSON B",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         },
         {
           "num": 60,
           "name": "DIGGO",
           "status": "paid",
           "reservedAt": null,
-          "paidAt": "2026-08-31T12:52:34.972Z"
+          "paidAt": "2026-09-01T13:26:02.142Z"
         }
       ]
     },
@@ -1132,6 +1132,63 @@
   ],
   "valesAndPrizes": [
     {
+      "id": "vp-1788269169660",
+      "customerName": "LUIZ ALBERTH",
+      "customerPhone": "",
+      "type": "dual_choice",
+      "raffleRef": "107° AÇÃO ELDORADO PESCA",
+      "dateWon": "2026-09-01",
+      "initialAmount": 1000,
+      "currentBalance": 1000,
+      "description": "1º Lugar - SHIMANO CURADO 200 DIREITA R$ 2200,00 OU 1000,00 EM VALE COMPRAS (Cota #32)",
+      "status": "pending_choice",
+      "deliveredAt": null,
+      "notes": "Ganhador pendente de escolha (Shimano Curado 200 ou R$ 1.000,00 em Vale-Compras)",
+      "exchangedItem": null,
+      "differencePaid": 0,
+      "exchangeNotes": null,
+      "exchangedAt": null,
+      "transactions": []
+    },
+    {
+      "id": "vp-1788269198061",
+      "customerName": "ANDERSON B",
+      "customerPhone": "",
+      "type": "premio_fisico",
+      "raffleRef": "107° AÇÃO ELDORADO PESCA",
+      "dateWon": "2026-09-01",
+      "initialAmount": 0,
+      "currentBalance": 0,
+      "description": "2º Lugar - BONÉ SAPOZILLA (Cota #31)",
+      "status": "pending_pickup",
+      "deliveredAt": null,
+      "notes": "Ganhador da cota #31",
+      "exchangedItem": null,
+      "differencePaid": 0,
+      "exchangeNotes": null,
+      "exchangedAt": null,
+      "transactions": []
+    },
+    {
+      "id": "vp-1788269236151",
+      "customerName": "ANDERSON B",
+      "customerPhone": "",
+      "type": "premio_fisico",
+      "raffleRef": "107° AÇÃO ELDORADO PESCA",
+      "dateWon": "2026-09-01",
+      "initialAmount": 0,
+      "currentBalance": 0,
+      "description": "3º Lugar - BONÉ BEAST SHAD (Cota #55)",
+      "status": "pending_pickup",
+      "deliveredAt": null,
+      "notes": "Ganhador da cota #55",
+      "exchangedItem": null,
+      "differencePaid": 0,
+      "exchangeNotes": null,
+      "exchangedAt": null,
+      "transactions": []
+    },
+    {
       "id": "vp-1787947400520",
       "customerName": "FELLYPE",
       "customerPhone": "",
@@ -1141,8 +1198,8 @@
       "initialAmount": 0,
       "currentBalance": 0,
       "description": "3º Lugar - ISCA KING CRANK LANÇAMENTO 2026 59,90 (Cota #20)",
-      "status": "delivered",
-      "deliveredAt": "2026-08-31",
+      "status": "pending_pickup",
+      "deliveredAt": null,
       "notes": "Ganhador da cota #20",
       "exchangedItem": null,
       "differencePaid": 0,
@@ -1160,42 +1217,14 @@
       "initialAmount": 0,
       "currentBalance": 0,
       "description": "1º Lugar - VARA PRO CHOMPERS KELBERI 329,90 (Cota #43)",
-      "status": "delivered",
-      "deliveredAt": "2026-08-31",
-      "notes": "Ganhador da cota #43",
-      "exchangedItem": "cadenza",
-      "differencePaid": 30,
-      "exchangeNotes": "",
-      "exchangedAt": "2026-08-31",
-      "transactions": []
-    },
-    {
-      "id": "vp-rai-105",
-      "customerName": "RAI",
-      "customerPhone": "42 9 9933-4455",
-      "type": "dual_choice",
-      "raffleRef": "105° AÇÃO ELDORADO PESCA",
-      "dateWon": "2026-08-01",
-      "initialAmount": 450,
-      "currentBalance": 400,
-      "description": "1º Lugar - DIÁRIA PRA DUAS PESSOAS + COMBUSTÍVEL OU VALE COMPRAS DE 450,00 NA LOJA (Cota #40)",
-      "status": "scheduled",
+      "status": "pending_pickup",
       "deliveredAt": null,
-      "notes": "Diária de Pesca confirmada para 2026-08-31, 2026-09-01",
+      "notes": "Ganhador da cota #32 (Opção entre Shimano Curado 200 ou R$ 1000 em Vale Compras)",
       "exchangedItem": null,
       "differencePaid": 0,
       "exchangeNotes": null,
       "exchangedAt": null,
-      "transactions": [
-        {
-          "id": "tx-1788184895667",
-          "date": "2026-08-31",
-          "item": "ddfdsc",
-          "amount": 50,
-          "remainingBalance": 400,
-          "registeredBy": "Loja"
-        }
-      ]
+      "transactions": []
     }
   ],
   "eduardoWorkDays": [
@@ -1345,92 +1374,15 @@
       "hoursWeight": 0.5,
       "amountDue": 31,
       "notes": ""
-    }
-  ],
-  "fishingBookings": [
-    {
-      "id": "fb-1788181078502",
-      "clientName": "EU",
-      "clientPhone": "42998109856",
-      "bookingType": "direct",
-      "raffleRef": "",
-      "prizeId": null,
-      "startDate": "2026-08-31",
-      "endDate": "2026-09-02",
-      "dates": [
-        "2026-08-31",
-        "2026-09-01",
-        "2026-09-02"
-      ],
-      "totalDays": 3,
-      "raffleDays": 1,
-      "extraDays": 0,
-      "packageName": "Trio (3 Pescadores)",
-      "structureType": "trio",
-      "fishermenCount": 3,
-      "boatsCount": 1,
-      "kayaksCount": 0,
-      "customStructure": "",
-      "totalAmount": 5400,
-      "depositAmount": 3000,
-      "remainingAmount": 2400,
-      "paymentStatus": "deposit_paid",
-      "paymentMethod": "Pix",
-      "notes": "",
-      "guideName": "Thiago Witeck",
-      "status": "scheduled",
-      "createdAt": "2026-08-31"
     },
     {
-      "id": "fb-1788185064485",
-      "clientName": "RAI",
-      "clientPhone": "42 9 9933-4455",
-      "bookingType": "raffle_prize",
-      "raffleRef": "105° AÇÃO ELDORADO PESCA",
-      "prizeId": "vp-rai-105",
-      "startDate": "2026-08-31",
-      "endDate": "2026-09-01",
-      "dates": [
-        "2026-08-31",
-        "2026-09-01"
-      ],
-      "totalDays": 2,
-      "raffleDays": 2,
-      "extraDays": 0,
-      "packageName": "Personalizado",
-      "structureType": "custom",
-      "fishermenCount": 4,
-      "boatsCount": 1,
-      "kayaksCount": 2,
-      "customStructure": "querem picanha",
-      "totalAmount": 0,
-      "depositAmount": 0,
-      "remainingAmount": 0,
-      "paymentStatus": "raffle_covered",
-      "paymentMethod": "Pix",
-      "notes": "Prêmio Ganho na Ação: 1º Lugar - DIÁRIA PRA DUAS PESSOAS + COMBUSTÍVEL OU VALE COMPRAS DE 450,00 NA LOJA (Cota #40)",
-      "guideName": "Thiago Witeck (Titular)",
-      "status": "scheduled",
-      "createdAt": "2026-08-31"
+      "date": "2026-09-01",
+      "type": "half",
+      "hoursWeight": 0.5,
+      "amountDue": 31,
+      "notes": ""
     }
   ],
-  "ranchoBookings": [
-    {
-      "id": "rb-1787946089814",
-      "clientName": "DUDU",
-      "clientPhone": "5435345532423",
-      "checkInDate": "2026-12-05",
-      "checkOutDate": "2026-12-06",
-      "totalDays": 2,
-      "guestsCount": 4,
-      "totalAmount": 800,
-      "depositAmount": 350,
-      "remainingAmount": 450,
-      "paymentStatus": "deposit_paid",
-      "paymentMethod": "Pix",
-      "notes": "Quitação R$ 100,00: Quitado via Pix na entrada no rancho | Quitação R$ 250,00: Quitado via Pix na entrada no rancho",
-      "status": "scheduled",
-      "createdAt": "2026-08-28T19:41:29.814Z"
-    }
-  ]
+  "fishingBookings": [],
+  "ranchoBookings": []
 }

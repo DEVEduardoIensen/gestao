@@ -47,6 +47,29 @@ let ranchoCalSelectedMonth = new Date().getMonth();
 let isConnectedToBackend = false;
 
 // Initialize Application on DOM Ready
+function sanitizeAppData(data) {
+  if (!data || typeof data !== 'object') data = {};
+  if (!data.settings || typeof data.settings !== 'object') {
+    data.settings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && INITIAL_SAMPLE_DATA.settings) ? INITIAL_SAMPLE_DATA.settings : { eduardoDailyRate: 62.00, eduardoHalfRate: 31.00 };
+  }
+  if (!Array.isArray(data.raffles)) {
+    data.raffles = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.raffles)) ? INITIAL_SAMPLE_DATA.raffles : [];
+  }
+  if (!Array.isArray(data.valesAndPrizes)) {
+    data.valesAndPrizes = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.valesAndPrizes)) ? INITIAL_SAMPLE_DATA.valesAndPrizes : [];
+  }
+  if (!Array.isArray(data.eduardoWorkDays)) {
+    data.eduardoWorkDays = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.eduardoWorkDays)) ? INITIAL_SAMPLE_DATA.eduardoWorkDays : [];
+  }
+  if (!Array.isArray(data.fishingBookings)) {
+    data.fishingBookings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.fishingBookings)) ? INITIAL_SAMPLE_DATA.fishingBookings : [];
+  }
+  if (!Array.isArray(data.ranchoBookings)) {
+    data.ranchoBookings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.ranchoBookings)) ? INITIAL_SAMPLE_DATA.ranchoBookings : [];
+  }
+  return data;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   await initAppState();
   setupEventListeners();
@@ -77,12 +100,13 @@ async function initAppState() {
     const res = await fetch("/api/data");
     if (res.ok) {
       const serverData = await res.json();
-      appData = serverData;
-      if (!appData.fishingBookings) appData.fishingBookings = [];
-      if (!appData.ranchoBookings) appData.ranchoBookings = [];
+      appData = sanitizeAppData(serverData);
       isConnectedToBackend = true;
       console.log("Conectado ao Banco de Dados SQLite nativo!");
       updateDbStatusBadge(true);
+      try {
+        localStorage.setItem("ELDORADO_PESCA_STORE_DATA", JSON.stringify(appData));
+      } catch (e) {}
     } else {
       throw new Error("Backend API unavailable");
     }
@@ -93,18 +117,12 @@ async function initAppState() {
     const saved = localStorage.getItem("ELDORADO_PESCA_STORE_DATA");
     if (saved) {
       try {
-        appData = JSON.parse(saved);
-        if (!appData.settings) appData.settings = INITIAL_SAMPLE_DATA.settings;
-        if (!appData.raffles || appData.raffles.length === 0) appData.raffles = INITIAL_SAMPLE_DATA.raffles;
-        if (!appData.valesAndPrizes) appData.valesAndPrizes = INITIAL_SAMPLE_DATA.valesAndPrizes;
-        if (!appData.eduardoWorkDays) appData.eduardoWorkDays = INITIAL_SAMPLE_DATA.eduardoWorkDays;
-        if (!appData.fishingBookings) appData.fishingBookings = INITIAL_SAMPLE_DATA.fishingBookings || [];
-        if (!appData.ranchoBookings) appData.ranchoBookings = INITIAL_SAMPLE_DATA.ranchoBookings || [];
+        appData = sanitizeAppData(JSON.parse(saved));
       } catch (e) {
-        appData = JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA));
+        appData = sanitizeAppData(JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA)));
       }
     } else {
-      appData = JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA));
+      appData = sanitizeAppData(JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA)));
     }
   }
 
@@ -115,7 +133,9 @@ async function initAppState() {
 }
 
 async function saveState() {
-  localStorage.setItem("ELDORADO_PESCA_STORE_DATA", JSON.stringify(appData));
+  try {
+    localStorage.setItem("ELDORADO_PESCA_STORE_DATA", JSON.stringify(appData));
+  } catch (e) {}
   updateGlobalStats();
 }
 
@@ -262,8 +282,9 @@ function renderRaffleView() {
   }
 
   // Render Prizes Sidebar
-  const prizesListEl = document.getElementById("rafflePrizesList");
-  prizesListEl.innerHTML = "";
+  if (prizesListEl) {
+    prizesListEl.innerHTML = "";
+  }
 
   if (raffle.prizes && raffle.prizes.length > 0) {
     raffle.prizes.forEach((prize, idx) => {
@@ -294,6 +315,70 @@ function renderRaffleView() {
   renderRaffleNumbersGrid();
 }
 
+/* Global Multi-Cota State */
+let isGridMultiSelectMode = false;
+let gridSelectedCotas = new Set();
+let modalSelectedCotas = new Set();
+let modalPrimaryIndex = 0;
+let isMiniGridOpen = false;
+
+function toggleGridMultiSelectMode() {
+  isGridMultiSelectMode = !isGridMultiSelectMode;
+  const btn = document.getElementById("btnToggleMultiSelectGrid");
+  const icon = document.getElementById("multiSelectToggleIcon");
+  const label = document.getElementById("multiSelectToggleLabel");
+  const bar = document.getElementById("gridMultiSelectActionBar");
+
+  if (isGridMultiSelectMode) {
+    if (btn) btn.classList.add("active");
+    if (icon) icon.textContent = "✓";
+    if (label) label.textContent = "Modo Seleção Ativo";
+    if (bar) bar.style.display = "flex";
+    updateGridMultiSelectBar();
+  } else {
+    if (btn) btn.classList.remove("active");
+    if (icon) icon.textContent = "☑";
+    if (label) label.textContent = "Seleção Múltipla";
+    if (bar) bar.style.display = "none";
+    gridSelectedCotas.clear();
+  }
+  renderRaffleNumbersGrid();
+}
+
+function updateGridMultiSelectBar() {
+  const bar = document.getElementById("gridMultiSelectActionBar");
+  const badge = document.getElementById("gridSelectedCountBadge");
+  const text = document.getElementById("gridSelectedListText");
+  const btnOpen = document.getElementById("btnOpenModalMulti");
+
+  const count = gridSelectedCotas.size;
+  if (badge) badge.textContent = `${count} ${count === 1 ? 'cota selecionada' : 'cotas selecionadas'}`;
+
+  if (count === 0) {
+    if (text) text.textContent = "Clique nos números da grade para selecionar";
+    if (btnOpen) btnOpen.disabled = true;
+  } else {
+    const sortedNums = Array.from(gridSelectedCotas).sort((a, b) => a - b);
+    if (text) text.textContent = sortedNums.map(n => `#${n}`).join(", ");
+    if (btnOpen) btnOpen.disabled = false;
+  }
+}
+
+function clearGridMultiSelection() {
+  gridSelectedCotas.clear();
+  updateGridMultiSelectBar();
+  renderRaffleNumbersGrid();
+}
+
+function openModalWithGridSelection() {
+  if (gridSelectedCotas.size === 0) {
+    showToast("Selecione pelo menos uma cota na grade.", "warning");
+    return;
+  }
+  const numsArray = Array.from(gridSelectedCotas).sort((a, b) => a - b);
+  openEditNumberModal(numsArray);
+}
+
 function renderRaffleNumbersGrid() {
   const raffle = getActiveRaffle();
   const gridEl = document.getElementById("raffleNumbersGrid");
@@ -316,9 +401,11 @@ function renderRaffleNumbersGrid() {
       if (!matchNum && !matchName) return;
     }
 
+    const isSelected = gridSelectedCotas.has(item.num);
     const tile = document.createElement("div");
-    tile.className = `num-tile ${item.status}`;
+    tile.className = `num-tile ${item.status}` + (isSelected ? " multi-selected" : "");
     tile.dataset.index = index;
+    tile.dataset.num = item.num;
 
     // Check if this number won any prize
     const wonPrize = (raffle.prizes || []).find(p => p.winnerNumber === item.num);
@@ -342,42 +429,106 @@ function renderRaffleNumbersGrid() {
       </div>
     `;
 
-    tile.addEventListener("click", () => openEditNumberModal(index));
+    tile.addEventListener("click", () => {
+      if (isGridMultiSelectMode) {
+        if (gridSelectedCotas.has(item.num)) {
+          gridSelectedCotas.delete(item.num);
+        } else {
+          gridSelectedCotas.add(item.num);
+        }
+        updateGridMultiSelectBar();
+        renderRaffleNumbersGrid();
+      } else {
+        openEditNumberModal(index);
+      }
+    });
+
     gridEl.appendChild(tile);
   });
 }
 
-/* Modal: Editar Número Individual & Definir Ganhador Físico */
-function openEditNumberModal(index) {
+/* Modal: Editar Número Individual ou Múltiplas Cotas & Definir Ganhador Físico */
+function openEditNumberModal(target) {
   const raffle = getActiveRaffle();
-  const item = raffle.numbers[index];
-  if (!item) return;
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
 
-  document.getElementById("editNumIndex").value = index;
-  document.getElementById("modalNumTitle").textContent = `#${item.num}`;
-  document.getElementById("editNumName").value = item.name || "";
+  modalSelectedCotas.clear();
 
-  selectEditStatus(item.status || "available");
+  let firstIndex = 0;
+  if (Array.isArray(target)) {
+    // Array of numbers or indices
+    target.forEach(val => {
+      const numVal = parseInt(val, 10);
+      const matchItem = raffle.numbers.find(n => n.num === numVal);
+      if (matchItem) {
+        modalSelectedCotas.add(matchItem.num);
+      }
+    });
+    if (modalSelectedCotas.size > 0) {
+      const firstNum = Array.from(modalSelectedCotas)[0];
+      firstIndex = raffle.numbers.findIndex(n => n.num === firstNum);
+    }
+  } else {
+    // Single index or number
+    const idx = parseInt(target, 10);
+    if (!isNaN(idx) && raffle.numbers[idx]) {
+      firstIndex = idx;
+      modalSelectedCotas.add(raffle.numbers[idx].num);
+    } else {
+      const matchItem = raffle.numbers.find(n => n.num === idx);
+      if (matchItem) {
+        firstIndex = raffle.numbers.findIndex(n => n.num === matchItem.num);
+        modalSelectedCotas.add(matchItem.num);
+      }
+    }
+  }
+
+  if (modalSelectedCotas.size === 0 && raffle.numbers.length > 0) {
+    modalSelectedCotas.add(raffle.numbers[0].num);
+    firstIndex = 0;
+  }
+
+  modalPrimaryIndex = firstIndex >= 0 ? firstIndex : 0;
+  const primaryItem = raffle.numbers[modalPrimaryIndex] || raffle.numbers[0];
+
+  document.getElementById("editNumIndex").value = modalPrimaryIndex;
+  document.getElementById("editNumName").value = primaryItem.name || "";
+  const inputExtra = document.getElementById("inputAddExtraCota");
+  if (inputExtra) inputExtra.value = "";
+
+  selectEditStatus(primaryItem.status || "available");
 
   // Populate dynamic prize dropdown
   const selectPrizeEl = document.getElementById("selectAssignPrize");
-  selectPrizeEl.innerHTML = "";
-
-  if (raffle.prizes && raffle.prizes.length > 0) {
-    raffle.prizes.forEach((p, idx) => {
-      const pos = p.position || (idx + 1);
+  if (selectPrizeEl) {
+    selectPrizeEl.innerHTML = "";
+    if (raffle.prizes && raffle.prizes.length > 0) {
+      raffle.prizes.forEach((p, idx) => {
+        const pos = p.position || (idx + 1);
+        const opt = document.createElement("option");
+        opt.value = pos;
+        opt.textContent = `${pos}º Prêmio: ${p.description}`;
+        selectPrizeEl.appendChild(opt);
+      });
+    } else {
       const opt = document.createElement("option");
-      opt.value = pos;
-      opt.textContent = `${pos}º Prêmio: ${p.description}`;
+      opt.value = 1;
+      opt.textContent = `1º Prêmio`;
       selectPrizeEl.appendChild(opt);
-    });
-  } else {
-    const opt = document.createElement("option");
-    opt.value = 1;
-    opt.textContent = `1º Prêmio`;
-    selectPrizeEl.appendChild(opt);
+    }
   }
 
+  // Ensure mini-grid drawer starts in remembered state
+  const miniGridContainer = document.getElementById("modalCotasMiniGridContainer");
+  const toggleText = document.getElementById("miniGridToggleText");
+  if (miniGridContainer) {
+    miniGridContainer.style.display = isMiniGridOpen ? "block" : "none";
+  }
+  if (toggleText) {
+    toggleText.textContent = isMiniGridOpen ? "Ocultar Grade ▴" : "Ver Grade de Cotas ▾";
+  }
+
+  renderModalSelectedCotas();
   openModal("modalEditNumber");
 }
 
@@ -389,38 +540,276 @@ function selectEditStatus(status) {
   const btnRes = document.getElementById("btnStatusReserved");
   const btnPaid = document.getElementById("btnStatusPaid");
 
-  btnAvail.className = "status-toggle-btn" + (status === "available" ? " selected-available" : "");
-  btnRes.className = "status-toggle-btn" + (status === "reserved" ? " selected-reserved" : "");
-  btnPaid.className = "status-toggle-btn" + (status === "paid" ? " selected-paid" : "");
+  if (btnAvail) btnAvail.className = "status-toggle-btn" + (status === "available" ? " selected-available" : "");
+  if (btnRes) btnRes.className = "status-toggle-btn" + (status === "reserved" ? " selected-reserved" : "");
+  if (btnPaid) btnPaid.className = "status-toggle-btn" + (status === "paid" ? " selected-paid" : "");
+
+  renderModalSelectedCotas();
+}
+
+function renderModalSelectedCotas() {
+  const raffle = getActiveRaffle();
+  if (!raffle) return;
+
+  const chipsContainer = document.getElementById("cotaChipsContainer");
+  const countBadge = document.getElementById("modalNumCountBadge");
+  const summaryCount = document.getElementById("modalSummaryCountText");
+  const summaryAmount = document.getElementById("modalSummaryAmountText");
+  const btnSaveText = document.getElementById("btnSaveNumberModalText");
+  const selectAssignWinnerCota = document.getElementById("selectAssignWinnerCota");
+
+  const count = modalSelectedCotas.size;
+  const sortedNums = Array.from(modalSelectedCotas).sort((a, b) => a - b);
+
+  // Update header count badge
+  if (countBadge) {
+    countBadge.textContent = `${count} ${count === 1 ? 'cota' : 'cotas'}`;
+  }
+
+  // Render chips
+  if (chipsContainer) {
+    chipsContainer.innerHTML = "";
+    sortedNums.forEach(num => {
+      const chip = document.createElement("span");
+      chip.className = "cota-chip";
+      chip.innerHTML = `
+        <span class="cota-chip-num">#${num}</span>
+        ${count > 1 ? `<button type="button" class="cota-chip-remove" onclick="removeCotaFromModalSelection(${num})" title="Remover cota #${num} deste cadastro">✕</button>` : ''}
+      `;
+      chipsContainer.appendChild(chip);
+    });
+  }
+
+  // Financial summary
+  const pricePer = raffle.pricePerNumber || 0;
+  const totalAmount = count * pricePer;
+  
+  if (summaryCount) {
+    summaryCount.textContent = `${count} ${count === 1 ? 'cota selecionada' : 'cotas selecionadas'}`;
+  }
+  if (summaryAmount) {
+    if (currentEditStatus === "available") {
+      summaryAmount.textContent = `Status: Livre (R$ 0,00)`;
+    } else {
+      summaryAmount.textContent = `Total: ${formatCurrency(totalAmount)} (${formatCurrency(pricePer)} cada)`;
+    }
+  }
+
+  // Save button dynamic text
+  if (btnSaveText) {
+    if (count === 1) {
+      btnSaveText.textContent = "Salvar Dados da Cota";
+    } else {
+      const amountStr = currentEditStatus === "available" ? "" : ` (${formatCurrency(totalAmount)})`;
+      btnSaveText.textContent = `Salvar ${count} Cotas${amountStr}`;
+    }
+  }
+
+  // Populate Cota Sorteada dropdown
+  if (selectAssignWinnerCota) {
+    const currentVal = selectAssignWinnerCota.value;
+    selectAssignWinnerCota.innerHTML = "";
+    sortedNums.forEach(num => {
+      const opt = document.createElement("option");
+      opt.value = num;
+      opt.textContent = `Cota #${num}`;
+      selectAssignWinnerCota.appendChild(opt);
+    });
+    if (currentVal && modalSelectedCotas.has(parseInt(currentVal, 10))) {
+      selectAssignWinnerCota.value = currentVal;
+    }
+  }
+
+  // Detecta se há outras cotas disponíveis e oculta a adição rápida se não houver mais cotas livres
+  const availCount = (raffle.numbers || []).filter(n => n.status === "available" && !modalSelectedCotas.has(n.num)).length;
+  const addExtraSection = document.getElementById("groupAddExtraCotaSection");
+  if (addExtraSection) {
+    addExtraSection.style.display = availCount > 0 ? "block" : "none";
+  }
+
+  // Also update mini-grid if visible
+  if (isMiniGridOpen) {
+    renderModalMiniGrid();
+  }
+}
+
+function addExtraCotasFromInput() {
+  const input = document.getElementById("inputAddExtraCota");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+
+  // Split by comma, space, semicolon, dash
+  const rawParts = text.split(/[\s,;]+/);
+  let addedCount = 0;
+
+  rawParts.forEach(part => {
+    const cleanStr = part.replace(/[^\d]/g, '');
+    const num = parseInt(cleanStr, 10);
+    if (!isNaN(num) && num > 0) {
+      const exists = raffle.numbers.find(n => n.num === num);
+      if (exists) {
+        if (!modalSelectedCotas.has(num)) {
+          modalSelectedCotas.add(num);
+          addedCount++;
+        }
+      }
+    }
+  });
+
+  input.value = "";
+  if (addedCount > 0) {
+    renderModalSelectedCotas();
+    showToast(`${addedCount} ${addedCount === 1 ? 'cota adicionada' : 'cotas adicionadas'} à seleção!`, "success");
+  } else {
+    showToast("Nenhuma nova cota válida encontrada para adicionar.", "warning");
+  }
+}
+
+function addNextAvailableCotas(qty) {
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+
+  let added = 0;
+  for (let i = 0; i < raffle.numbers.length && added < qty; i++) {
+    const item = raffle.numbers[i];
+    if (item.status === "available" && !modalSelectedCotas.has(item.num)) {
+      modalSelectedCotas.add(item.num);
+      added++;
+    }
+  }
+
+  if (added > 0) {
+    renderModalSelectedCotas();
+    showToast(`+${added} ${added === 1 ? 'cota livre adicionada' : 'cotas livres adicionadas'}!`, "success");
+  } else {
+    showToast("Não há mais cotas livres disponíveis nesta ação.", "warning");
+  }
+}
+
+function removeCotaFromModalSelection(num) {
+  if (modalSelectedCotas.size <= 1) {
+    showToast("Pelo menos uma cota deve permanecer selecionada.", "warning");
+    return;
+  }
+  modalSelectedCotas.delete(num);
+  renderModalSelectedCotas();
+}
+
+function resetModalSelectionToPrimary() {
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+  const primaryItem = raffle.numbers[modalPrimaryIndex] || raffle.numbers[0];
+  modalSelectedCotas.clear();
+  if (primaryItem) {
+    modalSelectedCotas.add(primaryItem.num);
+  }
+  renderModalSelectedCotas();
+  showToast("Seleção redefinida para a cota principal.", "info");
+}
+
+function toggleModalMiniGrid() {
+  isMiniGridOpen = !isMiniGridOpen;
+  const container = document.getElementById("modalCotasMiniGridContainer");
+  const toggleText = document.getElementById("miniGridToggleText");
+  if (container) {
+    container.style.display = isMiniGridOpen ? "block" : "none";
+  }
+  if (toggleText) {
+    toggleText.textContent = isMiniGridOpen ? "Ocultar Grade ▴" : "Ver Grade de Cotas ▾";
+  }
+  if (isMiniGridOpen) {
+    renderModalMiniGrid();
+  }
+}
+
+function renderModalMiniGrid() {
+  const container = document.getElementById("modalCotasMiniGrid");
+  if (!container || !isMiniGridOpen) return;
+
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+
+  container.innerHTML = "";
+  raffle.numbers.forEach(item => {
+    const isSelected = modalSelectedCotas.has(item.num);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `mini-cota-item ${item.status}` + (isSelected ? " selected" : "");
+    btn.textContent = `#${item.num}`;
+    btn.title = `Cota #${item.num} (${item.status === 'available' ? 'Livre' : item.name || item.status})`;
+    btn.onclick = () => toggleMiniGridNumber(item.num);
+    container.appendChild(btn);
+  });
+}
+
+function toggleMiniGridNumber(num) {
+  if (modalSelectedCotas.has(num)) {
+    if (modalSelectedCotas.size <= 1) {
+      showToast("Pelo menos uma cota deve permanecer selecionada.", "warning");
+      return;
+    }
+    modalSelectedCotas.delete(num);
+  } else {
+    modalSelectedCotas.add(num);
+  }
+  renderModalSelectedCotas();
 }
 
 async function saveNumberModal() {
   const raffle = getActiveRaffle();
-  const index = parseInt(document.getElementById("editNumIndex").value, 10);
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+
   const name = document.getElementById("editNumName").value.trim().toUpperCase();
+  const selectedNums = Array.from(modalSelectedCotas);
 
-  if (isNaN(index) || !raffle.numbers[index]) return;
+  if (selectedNums.length === 0) {
+    showToast("Nenhuma cota selecionada.", "warning");
+    return;
+  }
 
-  const item = raffle.numbers[index];
-  item.status = currentEditStatus;
-  item.name = (currentEditStatus === "available") ? "" : name;
-  item.reservedAt = (currentEditStatus === "reserved") ? new Date().toISOString() : null;
-  item.paidAt = (currentEditStatus === "paid") ? new Date().toISOString() : null;
+  const nowIso = new Date().toISOString();
+  let updatedItems = [];
 
-  if (isConnectedToBackend) {
+  selectedNums.forEach(num => {
+    const item = raffle.numbers.find(n => n.num === num);
+    if (item) {
+      item.status = currentEditStatus;
+      item.name = (currentEditStatus === "available") ? "" : name;
+      item.reservedAt = (currentEditStatus === "reserved") ? (item.reservedAt || nowIso) : null;
+      item.paidAt = (currentEditStatus === "paid") ? (item.paidAt || nowIso) : null;
+      updatedItems.push(item);
+    }
+  });
+
+  if (isConnectedToBackend && updatedItems.length > 0) {
     try {
-      await fetch("/api/raffles/number", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          raffleId: raffle.id,
-          num: item.num,
-          name: item.name,
-          status: item.status,
-          reservedAt: item.reservedAt,
-          paidAt: item.paidAt
-        })
-      });
+      if (updatedItems.length === 1) {
+        await fetch("/api/raffles/number", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            raffleId: raffle.id,
+            num: updatedItems[0].num,
+            name: updatedItems[0].name,
+            status: updatedItems[0].status,
+            reservedAt: updatedItems[0].reservedAt,
+            paidAt: updatedItems[0].paidAt
+          })
+        });
+      } else {
+        await fetch("/api/raffles/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            raffleId: raffle.id,
+            numbers: updatedItems
+          })
+        });
+      }
     } catch (e) {
       console.warn("Backend sync failed, saved locally", e);
     }
@@ -428,51 +817,135 @@ async function saveNumberModal() {
 
   saveState();
   renderRaffleNumbersGrid();
+  updateGlobalStats();
   closeModal("modalEditNumber");
-  showToast(`Cota #${item.num} atualizada com sucesso!`, "success");
+
+  // Clear grid multi-select if it was active
+  if (gridSelectedCotas.size > 0) {
+    gridSelectedCotas.clear();
+    updateGridMultiSelectBar();
+  }
+
+  const numsLabel = selectedNums.sort((a, b) => a - b).map(n => `#${n}`).join(", ");
+  if (selectedNums.length === 1) {
+    showToast(`Cota ${numsLabel} atualizada com sucesso!`, "success");
+  } else {
+    showToast(`${selectedNums.length} cotas (${numsLabel}) salvas com sucesso!`, "success");
+  }
 }
 
 /* Sorteio Físico na Loja: Definir Cota como Ganhadora e Sincronizar com Vales & Prêmios */
 async function assignPrizeWinner() {
   const raffle = getActiveRaffle();
-  const index = parseInt(document.getElementById("editNumIndex").value, 10);
-  const name = document.getElementById("editNumName").value.trim().toUpperCase();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
 
-  if (isNaN(index) || !raffle.numbers[index]) return;
-  const item = raffle.numbers[index];
+  const winnerCotaEl = document.getElementById("selectAssignWinnerCota");
+  const selectedCotaNum = winnerCotaEl ? parseInt(winnerCotaEl.value, 10) : null;
+  const targetNum = !isNaN(selectedCotaNum) && selectedCotaNum > 0 ? selectedCotaNum : Array.from(modalSelectedCotas)[0];
+  const item = raffle.numbers.find(n => n.num === targetNum) || raffle.numbers[modalPrimaryIndex];
 
-  const winnerName = name || item.name || `Cota #${item.num}`;
+  if (!item) {
+    showToast("Cota não encontrada para sortear.", "error");
+    return;
+  }
+
+  const winnerNameInput = document.getElementById("editNumName").value.trim();
+  const winnerName = winnerNameInput || item.name || `Ganhador da Cota #${item.num}`;
   const position = parseInt(document.getElementById("selectAssignPrize").value, 10) || 1;
 
   // Find prize description
   const prizeObj = (raffle.prizes || []).find(p => p.position === position) || { position: position, description: `${position}º Prêmio` };
-  const prizeDesc = prizeObj.description;
+  const prizeDesc = (prizeObj.description || `${position}º Prêmio`).trim();
+  const descUpper = prizeDesc.toUpperCase();
 
   // Mark in local state
   prizeObj.winnerNumber = item.num;
   prizeObj.winnerName = winnerName;
   item.status = "paid";
   item.name = winnerName;
+  item.paidAt = item.paidAt || new Date().toISOString();
 
-  // Check if dual choice (Diária OU Vale), vale compras, or physical prize
-  const isDualChoice = /diaria.*ou.*vale|vale.*ou.*diaria|\bou\b/i.test(prizeDesc) && (/diaria|diária|pesca/i.test(prizeDesc) || /vale/i.test(prizeDesc));
-  const isVale = !isDualChoice && /vale/i.test(prizeDesc);
+  // Extração inteligente e universal de tipo de prêmio e valor de vale (baseado em R$ e palavras-chave)
+  const hasOu = /\bOU\b/i.test(descUpper);
+  const hasVale = /VALE|VALE-COMPRAS|VALE COMPRAS|HAVER|CRÉDITO|CREDITO/i.test(descUpper);
+  const hasPesca = /DIARIA|DIÁRIA|PESCA|LAGO|RANCHO|POUSADA/i.test(descUpper);
+
   let initialAmount = 0;
+  
+  // Padrão A: "R$ [valor] ... VALE" ou "R$ [valor] EM VALE"
+  const matchRsBeforeVale = descUpper.match(/R\$\s*([\d\.\,]+)\s*(?:REAIS)?\s*(?:EM|NO|DE)?\s*VALE/i);
+  if (matchRsBeforeVale) {
+    const cleanNum = parseFloat(matchRsBeforeVale[1].replace(/\./g, '').replace(',', '.'));
+    if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+  }
 
-  const matchAmount = prizeDesc.match(/(\d+[\.,]?\d*)/);
-  if (matchAmount) {
-    initialAmount = parseFloat(matchAmount[1].replace('.', '').replace(',', '.')) || 0;
+  // Padrão B: "VALE ... R$ [valor]"
+  if (initialAmount === 0) {
+    const matchRsAfterVale = descUpper.match(/VALE(?:\s*COMPRAS)?(?:\s*DE)?\s*R\$\s*([\d\.\,]+)/i);
+    if (matchRsAfterVale) {
+      const cleanNum = parseFloat(matchRsAfterVale[1].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+    }
+  }
+
+  // Padrão C: "OU R$ [valor]"
+  if (initialAmount === 0 && hasOu) {
+    const matchRsAfterOu = descUpper.match(/OU\s*R\$\s*([\d\.\,]+)/i);
+    if (matchRsAfterOu) {
+      const cleanNum = parseFloat(matchRsAfterOu[1].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+    }
+  }
+
+  // Padrão D: Sem R$, mas com "1000,00 EM VALE" ou "VALE 500"
+  if (initialAmount === 0 && hasVale) {
+    const matchNumBeforeVale = descUpper.match(/([\d\.\,]+)\s*(?:REAIS)?\s*EM\s*VALE/i);
+    if (matchNumBeforeVale) {
+      const cleanNum = parseFloat(matchNumBeforeVale[1].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+    }
+  }
+
+  if (initialAmount === 0 && hasVale) {
+    const matchNumAfterVale = descUpper.match(/VALE(?:\s*COMPRAS)?(?:\s*DE)?\s*([\d\.\,]+)/i);
+    if (matchNumAfterVale) {
+      const cleanNum = parseFloat(matchNumAfterVale[1].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+    }
+  }
+
+  // Padrão E: Qualquer "R$ [valor]" presente se for identificado como opção de Vale
+  if (initialAmount === 0 && (hasVale || hasOu)) {
+    const allRsMatches = [...descUpper.matchAll(/R\$\s*([\d\.\,]+)/gi)];
+    if (allRsMatches.length > 0) {
+      const lastMatch = allRsMatches[allRsMatches.length - 1];
+      const cleanNum = parseFloat(lastMatch[1].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+    }
+  }
+
+  if (initialAmount === 0 && hasPesca && hasVale) {
+    initialAmount = 450.00;
   }
 
   let entryType = "premio_fisico";
   let entryStatus = "pending_pickup";
+  let entryNotes = "Ganhador sorteado na loja";
 
-  if (isDualChoice) {
+  if (hasOu && (hasVale || initialAmount > 0)) {
     entryType = "dual_choice";
     entryStatus = "pending_choice";
-  } else if (isVale) {
+    entryNotes = hasPesca 
+      ? "Ganhador pendente de escolha (Diária de Pesca ou Vale-Compras)"
+      : `Ganhador pendente de escolha (Prêmio Físico ou Vale-Compras de ${formatCurrency(initialAmount)})`;
+  } else if (hasVale && !hasOu) {
     entryType = "vale_compras";
     entryStatus = "active";
+    entryNotes = `Vale-Compras ativo de ${formatCurrency(initialAmount)}`;
+  } else {
+    entryType = "premio_fisico";
+    entryStatus = "pending_pickup";
+    entryNotes = "Aguardando retirada do prêmio físico na loja";
   }
 
   const newValeEntry = {
@@ -488,7 +961,7 @@ async function assignPrizeWinner() {
     status: entryStatus,
     deliveredAt: null,
     transactions: [],
-    notes: isDualChoice ? "Ganhador pendente de escolha (Diária de Pesca ou Vale-Compras)" : "Ganhador sorteado na loja"
+    notes: entryNotes
   };
 
   if (isConnectedToBackend) {
@@ -516,9 +989,10 @@ async function assignPrizeWinner() {
   renderFishingAgendaView();
   closeModal("modalEditNumber");
   
-  if (isDualChoice) {
-    showToast(`Cota #${item.num} (${winnerName}) ganhou ${position}º Lugar! Pendente de escolha (Diária ou Vale) em Vales & Prêmios.`, "success");
-  } else if (/diaria|diária|pesca|lago|rancho/i.test(prizeDesc)) {
+  if (entryType === "dual_choice") {
+    const choiceText = hasPesca ? "Diária ou Vale" : "Prêmio Físico ou Vale";
+    showToast(`Cota #${item.num} (${winnerName}) ganhou ${position}º Lugar! Pendente de escolha (${choiceText}) em Vales & Prêmios.`, "success");
+  } else if (hasPesca) {
     showToast(`Cota #${item.num} (${winnerName}) ganhou ${position}º Lugar (${prizeDesc})! Disponível para agendamento na aba Agenda de Pesca!`, "success");
   } else {
     showToast(`Cota #${item.num} (${winnerName}) confirmada como ${position}º Lugar e enviada para a aba Vales e Prêmios!`, "success");
@@ -764,8 +1238,12 @@ function renderValesView() {
     
     // Type Badge com estilo visual distinto
     let typeBadge = "";
+    const isFishingPrize = /diaria|diária|pesca|lago|rancho/i.test(item.description || '');
+
     if (isDualPending) {
-      typeBadge = `<span class="badge-pill badge-choice">A Decidir (Diária ou Vale)</span>`;
+      typeBadge = isFishingPrize
+        ? `<span class="badge-pill badge-choice">A Decidir (Diária ou Vale)</span>`
+        : `<span class="badge-pill badge-choice" style="background: rgba(99, 102, 241, 0.2); border-color: #818cf8; color: #c7d2fe;">A Decidir (Prêmio ou Vale)</span>`;
     } else if (isDualSchedule) {
       typeBadge = `<span class="badge-pill badge-schedule">Escolhendo o Dia</span>`;
     } else if (isScheduled) {
@@ -795,7 +1273,7 @@ function renderValesView() {
           <div style="font-size: 0.7rem; color: #38bdf8; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">Opções de Prêmio da Ação:</div>
           <div style="font-size: 0.88rem; font-weight: 800; color: #ffffff; margin-top: 0.15rem; line-height: 1.3;">${escapeHtml(item.description)}</div>
           <div style="font-size: 0.74rem; color: #cbd5e1; margin-top: 0.3rem; background: rgba(0, 0, 0, 0.35); padding: 0.4rem 0.55rem; border-radius: 4px; line-height: 1.35;">
-            Ganhador ainda <strong>não decidiu</strong>. Escolha Diária ou Vale abaixo:
+            Ganhador ainda <strong>não decidiu</strong>. Escolha ${isFishingPrize ? 'Diária ou Vale' : 'Prêmio Físico ou Vale'} abaixo:
           </div>
         </div>
       `;
@@ -894,21 +1372,42 @@ function renderValesView() {
     // Action Buttons
     let actionsHtml = "";
     if (isDualPending) {
-      const valeAmount = item.initialAmount || 450;
-      actionsHtml = `
-        <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Escolheu Diária e vai agendar datas">
-          Diária (Agendar)
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: var(--primary-gold); color: var(--primary-gold);" title="Escolheu Vale-Compras de ${formatCurrency(valeAmount)}">
-          Vale (${formatCurrency(valeAmount)})
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
-          Editar
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
-          Excluir
-        </button>
-      `;
+      const valeAmount = item.initialAmount || item.currentBalance || (isFishingPrize ? 450 : 100);
+
+      if (isFishingPrize) {
+        actionsHtml = `
+          <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Escolheu Diária e vai agendar datas">
+            Diária (Agendar)
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: var(--primary-gold); color: var(--primary-gold);" title="Escolheu Vale-Compras de ${formatCurrency(valeAmount)}">
+            Vale (${formatCurrency(valeAmount)})
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
+            Editar
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+            Excluir
+          </button>
+        `;
+      } else {
+        actionsHtml = `
+          <button class="btn btn-gold btn-sm" onclick="choosePrizeOption('${item.id}', 'premio_entregue')" title="Ganhador retirou o produto físico na loja">
+            Entregar Prêmio
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: #818cf8; color: #a5b4fc;" title="Escolheu ficar com o Vale-Compras de ${formatCurrency(valeAmount)}">
+            Vale (${formatCurrency(valeAmount)})
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #8b5cf6; color: #c4b5fd;" title="Ganhador quer trocar por outro produto na loja">
+            Troca
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
+            Editar
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+            Excluir
+          </button>
+        `;
+      }
     } else if (isDualSchedule) {
       const valeAmount = item.initialAmount || 450;
       actionsHtml = `
@@ -1245,10 +1744,57 @@ async function choosePrizeOption(valeId, choice) {
     renderFishingAgendaView();
     updateGlobalStats();
     showToast(`Opção de Diária de Pesca confirmada para ${item.customerName}! Status atualizado para "Escolhendo o Dia".`, "success");
+  } else if (choice === "premio_entregue" || choice === "delivered") {
+    item.type = "premio_fisico";
+    item.status = "delivered";
+    item.deliveredAt = getLocalDateStr();
+    item.notes = "Ganhador retirou o prêmio físico na loja (Entregue)";
+    removeLinkedFishingBookings(valeId, oldName);
+
+    if (isConnectedToBackend) {
+      try {
+        await fetch("/api/vales/choose-option", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valeId: valeId, choice: "premio_entregue" })
+        });
+      } catch (e) {
+        console.warn("Backend sync failed", e);
+      }
+    }
+
+    saveState();
+    renderValesView();
+    renderFishingAgendaView();
+    updateGlobalStats();
+    showToast(`Prêmio físico entregue com sucesso para ${item.customerName}!`, "success");
+  } else if (choice === "premio_fisico") {
+    item.type = "premio_fisico";
+    item.status = "pending_pickup";
+    item.notes = "Ganhador optou pelo Prêmio Físico (Aguardando Retirada)";
+    removeLinkedFishingBookings(valeId, oldName);
+
+    if (isConnectedToBackend) {
+      try {
+        await fetch("/api/vales/choose-option", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valeId: valeId, choice: "premio_fisico" })
+        });
+      } catch (e) {
+        console.warn("Backend sync failed", e);
+      }
+    }
+
+    saveState();
+    renderValesView();
+    renderFishingAgendaView();
+    updateGlobalStats();
+    showToast(`Opção de Prêmio Físico confirmada para ${item.customerName}! Aguardando retirada na loja.`, "success");
   } else if (choice === "pending_choice") {
     item.type = "dual_choice";
     item.status = "pending_choice";
-    item.notes = "Ganhador pendente de escolha (Diária de Pesca ou Vale-Compras)";
+    item.notes = "Ganhador pendente de escolha";
 
     // Remove agendamento anterior para sair do calendário
     removeLinkedFishingBookings(valeId, oldName);
@@ -1269,7 +1815,7 @@ async function choosePrizeOption(valeId, choice) {
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
-    showToast(`Status de ${item.customerName} atualizado para "A Decidir (Diária ou Vale)".`, "success");
+    showToast(`Status de ${item.customerName} atualizado para "A Decidir".`, "success");
   }
 }
 
@@ -1717,14 +2263,15 @@ function renderPendingWinnersBanner() {
       phoneHtml = `<a href="https://wa.me/55${clean}" target="_blank" style="color: #22c55e; font-size: 0.78rem; text-decoration: none; margin-left: 0.35rem;">● ${escapeHtml(item.customerPhone)}</a>`;
     }
 
+    const prizeValeAmount = item.initialAmount || item.currentBalance || 450;
     let actionButtonsHtml = "";
     if (item.status === "pending_choice" || item.type === "dual_choice") {
       actionButtonsHtml = `
         <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Escolheu a diária de pesca e vai definir as datas">
           Diária de Pesca
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Escolheu o vale-compras na loja">
-          Vale-Compras (R$ 450)
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Escolheu o vale-compras na loja de ${formatCurrency(prizeValeAmount)}">
+          Vale-Compras (${formatCurrency(prizeValeAmount)})
         </button>
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar dados do prêmio">
           Editar
@@ -1735,8 +2282,8 @@ function renderPendingWinnersBanner() {
         <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Definir as datas da pescaria">
           Definir Datas da Pescaria
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Trocar por vale-compras">
-          Trocar p/ Vale (R$ 450)
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Trocar por vale-compras de ${formatCurrency(prizeValeAmount)}">
+          Trocar p/ Vale (${formatCurrency(prizeValeAmount)})
         </button>
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar dados">
           Editar
@@ -2057,7 +2604,8 @@ function renderUpcomingFishingSidebar() {
       </div>
     `;
 
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (e) => {
+      if (e.target && e.target.closest && e.target.closest("button, a, input, select")) return;
       openEditFishingBookingModal(b.id);
     });
 
@@ -2972,8 +3520,7 @@ function openFishingWhatsAppModal(bookingId) {
   msg += `• Data(s): *${dateDisplay}* (${b.totalDays || 1} ${(b.totalDays || 1) === 1 ? 'Diária' : 'Diárias'})\n`;
   msg += `• Pacote: *${structureText}*\n`;
   msg += `• Pescadores: *${b.fishermenCount || 2} pessoas*\n`;
-  msg += `• Guia: *${b.guideName || 'Thiago Witeck (Titular)'}*\n`;
-  msg += `• Estrutura: Embarcação completa com motor elétrico, gasolina inclusa e internet Starlink no rancho.\n\n`;
+  msg += `• Guia: *${b.guideName || 'Thiago Witeck (Titular)'}*\n\n`;
 
   if (b.bookingType === "raffle_prize") {
     const extraDays = parseInt(b.extraDays) || 0;
@@ -3260,7 +3807,10 @@ function renderUpcomingRanchoSidebar() {
       </div>
     `;
 
-    item.addEventListener("click", () => openEditRanchoBookingModal(b.id));
+    item.addEventListener("click", (e) => {
+      if (e.target && e.target.closest && e.target.closest("button, a, input, select")) return;
+      openEditRanchoBookingModal(b.id);
+    });
     container.appendChild(item);
   });
 }
@@ -4048,16 +4598,56 @@ function getNextRaffleTitle() {
 
 function openNewRaffleModal() {
   document.getElementById("modalRaffleFormTitle").textContent = "Nova Ação / Rifa";
+  document.getElementById("rfEditId").value = "";
   document.getElementById("rfTitle").value = getNextRaffleTitle();
   document.getElementById("rfPrice").value = "";
-  document.getElementById("rfTotalNumbers").value = "";
+  const rfTotal = document.getElementById("rfTotalNumbers");
+  rfTotal.value = "";
+  rfTotal.disabled = false;
   
+  const saveBtn = document.getElementById("btnSaveRaffleForm");
+  if (saveBtn) saveBtn.textContent = "Criar e Iniciar Ação";
+
   // Render clean dynamic prizes list (3 blank rows by default)
   const dynamicList = document.getElementById("dynamicPrizesList");
   dynamicList.innerHTML = "";
   addDynamicPrizeRow(1, "");
   addDynamicPrizeRow(2, "");
   addDynamicPrizeRow(3, "");
+
+  openModal("modalRaffleForm");
+}
+
+function openEditRaffleDetailsModal() {
+  const raffle = getActiveRaffle();
+  if (!raffle) {
+    showToast("Nenhuma ação ativa selecionada para editar.", "warning");
+    return;
+  }
+
+  document.getElementById("modalRaffleFormTitle").textContent = `Editar Ação: ${raffle.title}`;
+  document.getElementById("rfEditId").value = raffle.id;
+  document.getElementById("rfTitle").value = raffle.title || "";
+  document.getElementById("rfPrice").value = raffle.pricePerNumber || "";
+  const rfTotal = document.getElementById("rfTotalNumbers");
+  rfTotal.value = raffle.totalNumbers || (raffle.numbers ? raffle.numbers.length : 60);
+  rfTotal.disabled = true; // Quantidade de cotas preservada para não corromper números existentes
+
+  const saveBtn = document.getElementById("btnSaveRaffleForm");
+  if (saveBtn) saveBtn.textContent = "Salvar Alterações da Ação";
+
+  // Carrega prêmios existentes da rifa
+  const dynamicList = document.getElementById("dynamicPrizesList");
+  dynamicList.innerHTML = "";
+  if (raffle.prizes && raffle.prizes.length > 0) {
+    raffle.prizes.forEach((p, idx) => {
+      addDynamicPrizeRow(p.position || (idx + 1), p.description || "");
+    });
+  } else {
+    addDynamicPrizeRow(1, "");
+    addDynamicPrizeRow(2, "");
+    addDynamicPrizeRow(3, "");
+  }
 
   openModal("modalRaffleForm");
 }
@@ -4075,7 +4665,7 @@ function addDynamicPrizeRow(posOrVal, maybeVal) {
 
   row.innerHTML = `
     <span style="font-size: 0.82rem; font-weight: 700; color: var(--primary-gold); min-width: 60px;">${currentPos}º Prêmio:</span>
-    <input type="text" class="form-input dynamic-prize-input" placeholder="Ex: Vara, Carretilha ou Vale Compras" value="${escapeHtml(val)}" style="flex-grow: 1;">
+    <input type="text" class="form-input dynamic-prize-input" placeholder="Ex: Produto Físico OU R$ 500,00 em Vale Compras" value="${escapeHtml(val)}" style="flex-grow: 1;">
     <button type="button" class="btn btn-secondary btn-sm" onclick="removeDynamicPrizeRow(this)" style="padding: 0.35rem 0.6rem; color: #ef4444;">✕</button>
   `;
 
@@ -4095,6 +4685,7 @@ function removeDynamicPrizeRow(btn) {
 }
 
 async function saveRaffleForm() {
+  const editId = document.getElementById("rfEditId").value;
   const title = document.getElementById("rfTitle").value.trim();
   const price = parseFloat(document.getElementById("rfPrice").value);
   const totalNums = parseInt(document.getElementById("rfTotalNumbers").value, 10);
@@ -4105,10 +4696,6 @@ async function saveRaffleForm() {
   }
   if (isNaN(price) || price <= 0) {
     showToast("Informe um valor válido por número.", "warning");
-    return;
-  }
-  if (isNaN(totalNums) || totalNums <= 0) {
-    showToast("Informe a quantidade total de números.", "warning");
     return;
   }
 
@@ -4126,6 +4713,70 @@ async function saveRaffleForm() {
       });
     }
   });
+
+  if (prizesArray.length === 0) {
+    showToast("Adicione pelo menos um prêmio para a ação.", "warning");
+    return;
+  }
+
+  // Se estiver EDITANDO a rifa ativa
+  if (editId) {
+    const targetRaffle = (appData.raffles || []).find(r => String(r.id) === String(editId));
+    if (!targetRaffle) {
+      showToast("Ação não encontrada para atualização.", "error");
+      return;
+    }
+
+    targetRaffle.title = title;
+    targetRaffle.pricePerNumber = price;
+    
+    // Preserva ganhadores já sorteados se existirem
+    const winnerMap = {};
+    (targetRaffle.prizes || []).forEach(p => {
+      if (p.winnerNumber) {
+        winnerMap[p.position] = { winnerNumber: p.winnerNumber, winnerName: p.winnerName };
+      }
+    });
+
+    prizesArray.forEach(p => {
+      if (winnerMap[p.position]) {
+        p.winnerNumber = winnerMap[p.position].winnerNumber;
+        p.winnerName = winnerMap[p.position].winnerName;
+      }
+    });
+
+    targetRaffle.prizes = prizesArray;
+
+    if (isConnectedToBackend) {
+      try {
+        await fetch("/api/raffles/update-details", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            raffleId: editId,
+            title: title,
+            pricePerNumber: price,
+            prizes: prizesArray
+          })
+        });
+      } catch (e) {
+        console.warn("Backend update raffle details failed", e);
+      }
+    }
+
+    saveState();
+    renderRaffleDropdown();
+    renderRaffleView();
+    closeModal("modalRaffleForm");
+    showToast(`Ação "${title}" atualizada com sucesso!`, "success");
+    return;
+  }
+
+  // Caso contrário: CRIAR NOVA RIFA
+  if (isNaN(totalNums) || totalNums <= 0) {
+    showToast("Informe a quantidade total de números.", "warning");
+    return;
+  }
 
   const numbersArray = [];
   for (let i = 1; i <= totalNums; i++) {
@@ -4291,12 +4942,12 @@ function setupEventListeners() {
   const btnAddFishingPrize = document.getElementById("btnAddFishingPrizeRow");
   if (btnAddFishingPrize) {
     btnAddFishingPrize.addEventListener("click", () => {
-      addDynamicPrizeRow("DIÁRIA PRA DUAS PESSOAS + COMBUSTÍVEL OU VALE COMPRAS DE 450,00 NA LOJA");
+      addDynamicPrizeRow("DIÁRIA DE PESCA NO LAGO OU R$ 450,00 EM VALE COMPRAS");
     });
   }
 
   document.getElementById("btnMarkAllPaid").addEventListener("click", markAllReservedAsPaid);
-  document.getElementById("btnEditRaffleDetails").addEventListener("click", openNewRaffleModal);
+  document.getElementById("btnEditRaffleDetails").addEventListener("click", openEditRaffleDetailsModal);
 
   // Number Edit Modal & Assign Winner
   document.getElementById("btnSaveNumberModal").addEventListener("click", saveNumberModal);
@@ -4429,14 +5080,67 @@ function setupEventListeners() {
    Helper Utilities
    ========================================================================= */
 function openModal(id) {
+  // Fecha e remove a classe 'open' de absolutamente todos os outros modais para isolamento total
+  document.querySelectorAll(".modal-backdrop").forEach(m => {
+    if (m.id !== id) {
+      m.classList.remove("open");
+    }
+  });
+
   const modal = document.getElementById(id);
-  if (modal) modal.classList.add("open");
+  if (modal) {
+    modal.classList.add("open");
+
+    // Foca automaticamente no primeiro campo editável de forma confiável
+    setTimeout(() => {
+      const firstInput = modal.querySelector("input:not([type=hidden]):not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])");
+      if (firstInput) {
+        firstInput.focus();
+        if (firstInput.select && firstInput.type !== 'date' && firstInput.type !== 'number') {
+          try { firstInput.select(); } catch (e) {}
+        }
+      }
+    }, 80);
+  }
 }
 
 function closeModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) modal.classList.remove("open");
+  if (id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.classList.remove("open");
+  } else {
+    document.querySelectorAll(".modal-backdrop").forEach(m => m.classList.remove("open"));
+  }
 }
+
+// Fechamento infalível de modais ao clicar no botão X, botão Cancelar ou no fundo escuro
+document.addEventListener("click", (e) => {
+  if (!e.target) return;
+
+  // 1. Clicou no backdrop escuro fora da janela
+  if (e.target.classList && e.target.classList.contains("modal-backdrop")) {
+    e.target.classList.remove("open");
+    return;
+  }
+
+  // 2. Clicou no botão de fechar (X)
+  const closeBtn = e.target.closest(".modal-close-btn");
+  if (closeBtn) {
+    const parentModal = closeBtn.closest(".modal-backdrop");
+    if (parentModal) {
+      parentModal.classList.remove("open");
+    } else {
+      closeModal();
+    }
+  }
+});
+
+// Fechar modais ao pressionar a tecla ESC
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    document.querySelectorAll(".modal-backdrop").forEach(m => m.classList.remove("open"));
+  }
+});
 
 function formatCurrency(val) {
   return "R$ " + (parseFloat(val) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

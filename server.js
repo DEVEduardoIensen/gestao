@@ -160,20 +160,89 @@ const server = http.createServer((req, res) => {
         `);
         updatePrize.run(body.num, body.winnerName || '', body.raffleId, body.position);
 
-        // 2. Determine type (Vale Compras or Prêmio Físico)
-        const prizeDesc = body.prizeDescription || `${body.position}º Prêmio`;
-        const isVale = /vale/i.test(prizeDesc);
-        
+        // 2. Extração inteligente e universal de tipo de prêmio e valor de vale (baseado em R$ e palavras-chave)
+        const prizeDesc = (body.prizeDescription || `${body.position}º Prêmio`).trim();
+        const descUpper = prizeDesc.toUpperCase();
+        const hasOu = /\bOU\b/i.test(descUpper);
+        const hasVale = /VALE|VALE-COMPRAS|VALE COMPRAS|HAVER|CRÉDITO|CREDITO/i.test(descUpper);
+        const hasPesca = /DIARIA|DIÁRIA|PESCA|LAGO|RANCHO|POUSADA/i.test(descUpper);
+
         let initialAmount = 0;
-        if (isVale) {
-          // Extract amount if possible e.g. "R$ 1000" or "1000,00"
-          const matchAmount = prizeDesc.match(/(\d+[\.,]?\d*)/);
-          if (matchAmount) {
-            initialAmount = parseFloat(matchAmount[1].replace('.', '').replace(',', '.')) || 0;
+        
+        // Padrão A: "R$ [valor] ... VALE" ou "R$ [valor] EM VALE"
+        const matchRsBeforeVale = descUpper.match(/R\$\s*([\d\.\,]+)\s*(?:REAIS)?\s*(?:EM|NO|DE)?\s*VALE/i);
+        if (matchRsBeforeVale) {
+          const cleanNum = parseFloat(matchRsBeforeVale[1].replace(/\./g, '').replace(',', '.'));
+          if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+        }
+
+        // Padrão B: "VALE ... R$ [valor]"
+        if (initialAmount === 0) {
+          const matchRsAfterVale = descUpper.match(/VALE(?:\s*COMPRAS)?(?:\s*DE)?\s*R\$\s*([\d\.\,]+)/i);
+          if (matchRsAfterVale) {
+            const cleanNum = parseFloat(matchRsAfterVale[1].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
           }
-          if (initialAmount === 0 && parseFloat(body.amount)) {
-            initialAmount = parseFloat(body.amount);
+        }
+
+        // Padrão C: "OU R$ [valor]"
+        if (initialAmount === 0 && hasOu) {
+          const matchRsAfterOu = descUpper.match(/OU\s*R\$\s*([\d\.\,]+)/i);
+          if (matchRsAfterOu) {
+            const cleanNum = parseFloat(matchRsAfterOu[1].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
           }
+        }
+
+        // Padrão D: Sem R$, mas com "1000,00 EM VALE" ou "VALE 500"
+        if (initialAmount === 0 && hasVale) {
+          const matchNumBeforeVale = descUpper.match(/([\d\.\,]+)\s*(?:REAIS)?\s*EM\s*VALE/i);
+          if (matchNumBeforeVale) {
+            const cleanNum = parseFloat(matchNumBeforeVale[1].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+          }
+        }
+
+        if (initialAmount === 0 && hasVale) {
+          const matchNumAfterVale = descUpper.match(/VALE(?:\s*COMPRAS)?(?:\s*DE)?\s*([\d\.\,]+)/i);
+          if (matchNumAfterVale) {
+            const cleanNum = parseFloat(matchNumAfterVale[1].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+          }
+        }
+
+        // Padrão E: Qualquer "R$ [valor]" presente se for identificado como opção de Vale
+        if (initialAmount === 0 && (hasVale || hasOu)) {
+          const allRsMatches = [...descUpper.matchAll(/R\$\s*([\d\.\,]+)/gi)];
+          if (allRsMatches.length > 0) {
+            const lastMatch = allRsMatches[allRsMatches.length - 1];
+            const cleanNum = parseFloat(lastMatch[1].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(cleanNum) && cleanNum > 0) initialAmount = cleanNum;
+          }
+        }
+
+        if (initialAmount === 0 && hasPesca && hasVale) {
+          initialAmount = 450.00;
+        }
+
+        let prizeType = "premio_fisico";
+        let prizeStatus = "pending_pickup";
+        let prizeNotes = "Ganhador sorteado na loja";
+
+        if (hasOu && (hasVale || initialAmount > 0)) {
+          prizeType = "dual_choice";
+          prizeStatus = "pending_choice";
+          prizeNotes = hasPesca 
+            ? "Ganhador pendente de escolha (Diária de Pesca ou Vale-Compras)"
+            : `Ganhador pendente de escolha (Prêmio Físico ou Vale-Compras de R$ ${initialAmount.toFixed(2).replace('.', ',')})`;
+        } else if (hasVale && !hasOu) {
+          prizeType = "vale_compras";
+          prizeStatus = "active";
+          prizeNotes = `Vale-Compras ativo de R$ ${initialAmount.toFixed(2).replace('.', ',')}`;
+        } else {
+          prizeType = "premio_fisico";
+          prizeStatus = "pending_pickup";
+          prizeNotes = "Aguardando retirada do prêmio físico na loja";
         }
 
         const valeId = 'vp-' + Date.now();
@@ -186,15 +255,15 @@ const server = http.createServer((req, res) => {
           valeId,
           body.winnerName || `Cota #${body.num}`,
           body.customerPhone || '',
-          isVale ? 'vale_compras' : 'premio_fisico',
+          prizeType,
           raffleTitle,
           getLocalDateStr(),
           initialAmount,
           initialAmount,
           `${body.position}º Lugar - ${prizeDesc} (Cota #${body.num})`,
-          isVale ? 'active' : 'pending_pickup',
+          prizeStatus,
           null,
-          `Ganhador da cota #${body.num}`,
+          prizeNotes,
           getLocalDateStr()
         );
 
@@ -308,6 +377,74 @@ const server = http.createServer((req, res) => {
       } catch (err) {
         db.exec('ROLLBACK;');
         console.error('Error creating raffle:', err);
+        sendJson(res, 500, { error: err.message });
+      }
+    });
+    return;
+  }
+
+  // POST /api/raffles/update-details - Atualizar Título, Preço e Prêmios da Rifa Ativa (sem apagar números)
+  if (req.method === 'POST' && pathname === '/api/raffles/update-details') {
+    readJsonBody(req, (err, body) => {
+      if (err || !body.raffleId || !body.title) {
+        sendJson(res, 400, { error: 'ID da rifa e título são obrigatórios' });
+        return;
+      }
+
+      try {
+        db.exec('BEGIN TRANSACTION;');
+
+        // Atualiza título e preço da rifa
+        const updateRaffle = db.prepare(`
+          UPDATE raffles 
+          SET title = ?, price_per_number = ?
+          WHERE id = ?
+        `);
+        updateRaffle.run(
+          body.title.trim(),
+          parseFloat(body.pricePerNumber) || 25,
+          body.raffleId
+        );
+
+        // Se foram enviados prêmios, atualiza prêmios
+        if (Array.isArray(body.prizes) && body.prizes.length > 0) {
+          // Obtém prêmios existentes para preservar ganhadores
+          const existingPrizes = db.prepare('SELECT position, winner_number, winner_name FROM raffle_prizes WHERE raffle_id = ?').all(body.raffleId);
+          const winnerMap = {};
+          existingPrizes.forEach(p => {
+            winnerMap[p.position] = { winnerNumber: p.winner_number, winnerName: p.winner_name };
+          });
+
+          // Deleta prêmios anteriores da rifa
+          db.prepare('DELETE FROM raffle_prizes WHERE raffle_id = ?').run(body.raffleId);
+
+          const insertPrize = db.prepare(`
+            INSERT INTO raffle_prizes (raffle_id, position, description, winner_number, winner_name)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+
+          body.prizes.forEach((p, idx) => {
+            const pos = p.position || (idx + 1);
+            const desc = (p.description || '').trim();
+            if (desc) {
+              const existingWinner = winnerMap[pos] || {};
+              insertPrize.run(
+                body.raffleId,
+                pos,
+                desc,
+                p.winnerNumber !== undefined ? p.winnerNumber : (existingWinner.winnerNumber || null),
+                p.winnerName !== undefined ? p.winnerName : (existingWinner.winnerName || null)
+              );
+            }
+          });
+        }
+
+        db.exec('COMMIT;');
+        createAutoBackupSnapshot();
+        sendJson(res, 200, { success: true });
+      } catch (err) {
+        db.exec('ROLLBACK;');
+        console.error('Error updating raffle details:', err);
         sendJson(res, 500, { error: err.message });
       }
     });
@@ -560,6 +697,27 @@ const server = http.createServer((req, res) => {
           stmt.run('Ganhador optou pela Diária de Pesca (Aguardando Agendamento da Data)', body.valeId);
           // Remove agendamento anterior para escolha limpa de nova data
           db.prepare("DELETE FROM fishing_bookings WHERE prize_id = ?").run(body.valeId);
+        } else if (body.choice === 'premio_fisico') {
+          const stmt = db.prepare(`
+            UPDATE vales_prizes 
+            SET type = 'premio_fisico',
+                status = 'pending_pickup',
+                notes = ?
+            WHERE id = ?
+          `);
+          stmt.run('Ganhador optou pelo Prêmio Físico (Aguardando Retirada)', body.valeId);
+          db.prepare("DELETE FROM fishing_bookings WHERE prize_id = ?").run(body.valeId);
+        } else if (body.choice === 'premio_entregue' || body.choice === 'delivered') {
+          const stmt = db.prepare(`
+            UPDATE vales_prizes 
+            SET type = 'premio_fisico',
+                status = 'delivered',
+                delivered_at = ?,
+                notes = ?
+            WHERE id = ?
+          `);
+          stmt.run(getLocalDateStr(), 'Ganhador retirou o Prêmio Físico na loja (Entregue)', body.valeId);
+          db.prepare("DELETE FROM fishing_bookings WHERE prize_id = ?").run(body.valeId);
         } else if (body.choice === 'pending_choice') {
           const stmt = db.prepare(`
             UPDATE vales_prizes 
@@ -568,7 +726,7 @@ const server = http.createServer((req, res) => {
                 notes = ?
             WHERE id = ?
           `);
-          stmt.run('Ganhador pendente de escolha (Diária de Pesca ou Vale-Compras)', body.valeId);
+          stmt.run('Ganhador pendente de escolha', body.valeId);
           // Remove agendamento anterior
           db.prepare("DELETE FROM fishing_bookings WHERE prize_id = ?").run(body.valeId);
         }

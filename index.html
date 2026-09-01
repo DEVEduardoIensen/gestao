@@ -128,7 +128,8 @@
             <span class="btn-icon-plus">+</span> Nova Ação
           </button>
           <!-- Botão Excluir Rifa -->
-          <button class="btn btn-danger" id="btnDeleteRaffle" title="Excluir Rifa Selecionada" style="font-size: 0.85rem; padding: 0.65rem 1rem;">
+          <button class="btn btn-danger" id="btnDeleteRaffle" title="Excluir Rifa Selecionada"
+            style="font-size: 0.85rem; padding: 0.65rem 1rem;">
             🗑️ Excluir Rifa
           </button>
         </div>
@@ -168,10 +169,31 @@
                 <span class="legend-dot paid"></span>
                 <span>Pago Pix (✅)</span>
               </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnToggleMultiSelectGrid"
+                onclick="toggleGridMultiSelectMode()" title="Ativar seleção de várias cotas ao mesmo tempo na grade">
+                <span id="multiSelectToggleIcon">☑</span> <span id="multiSelectToggleLabel">Seleção Múltipla</span>
+              </button>
             </div>
 
             <div>
               <input type="text" id="inputSearchRaffle" class="search-input" placeholder="Buscar número ou nome...">
+            </div>
+          </div>
+
+          <!-- Barra de Ação Flutuante para Seleção Múltipla na Grade -->
+          <div id="gridMultiSelectActionBar" class="grid-multiselect-bar" style="display: none;">
+            <div class="multiselect-info">
+              <span class="multiselect-count-badge" id="gridSelectedCountBadge">0 cotas selecionadas</span>
+              <span class="multiselect-list-text" id="gridSelectedListText">#—</span>
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="clearGridMultiSelection()">
+                Limpar Seleção
+              </button>
+              <button type="button" class="btn btn-gold btn-sm" onclick="openModalWithGridSelection()"
+                id="btnOpenModalMulti">
+                Cadastrar Cotas Selecionadas
+              </button>
             </div>
           </div>
 
@@ -213,8 +235,8 @@
                 id="btnEditRaffleDetails">
                 Editar Título / Prêmios / Preço
               </button>
-              <button class="btn btn-danger btn-sm" style="width: 100%; justify-content: flex-start; margin-top: 0.25rem;"
-                id="btnDeleteRaffleSide">
+              <button class="btn btn-danger btn-sm"
+                style="width: 100%; justify-content: flex-start; margin-top: 0.25rem;" id="btnDeleteRaffleSide">
                 🗑️ Excluir esta Rifa / Ação
               </button>
             </div>
@@ -684,25 +706,79 @@
        MODALS
        ==================================================================== -->
 
-  <!-- 1. Modal: Editar Número Individual da Rifa (Com Opção de Definir Ganhador) -->
+  <!-- 1. Modal: Editar / Cadastrar Cotas da Rifa (Individual ou em Lote) -->
   <div class="modal-backdrop" id="modalEditNumber">
-    <div class="modal-dialog">
+    <div class="modal-dialog" style="max-width: 620px;">
       <div class="modal-header">
-        <h3 class="modal-title">
-          Cota <span id="modalNumTitle">#1</span>
-        </h3>
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <h3 class="modal-title" style="margin: 0;">
+            Cadastro de Cota(s)
+          </h3>
+          <span class="badge-pill" id="modalNumCountBadge"
+            style="background: var(--primary-gold); color: #070c16; font-weight: 800; font-size: 0.75rem; padding: 0.2rem 0.55rem;">1
+            cota</span>
+        </div>
         <button class="modal-close-btn" onclick="closeModal('modalEditNumber')">✕</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="editNumIndex">
 
-        <div class="form-group">
+        <!-- Seção de Seleção e Gerenciamento de Cotas -->
+        <div class="cota-selection-card">
+          <div class="cota-selection-header">
+            <label class="form-label" style="margin: 0; color: var(--primary-gold); font-weight: 700;">
+              Cotas Selecionadas neste Cadastro:
+            </label>
+            <button type="button" class="btn-text-gold" id="btnToggleMiniGrid" onclick="toggleModalMiniGrid()">
+              <span id="miniGridToggleText">Ver Grade de Cotas ▾</span>
+            </button>
+          </div>
+
+          <!-- Chips Container das Cotas Selecionadas -->
+          <div class="cota-chips-wrap" id="cotaChipsContainer">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Resumo Financeiro Dinâmico -->
+          <div class="cota-selection-summary" id="modalCotaSummary">
+            <span id="modalSummaryCountText">1 cota selecionada</span>
+            <span class="summary-divider">•</span>
+            <span id="modalSummaryAmountText" class="summary-amount">Total: R$ 25,00</span>
+          </div>
+
+          <!-- Barra de Adição Rápida de Cotas (oculta quando não há mais cotas disponíveis) -->
+          <div class="cota-quick-add-section" id="groupAddExtraCotaSection">
+            <div class="cota-quick-input-row">
+              <input type="text" id="inputAddExtraCota" class="form-input form-input-sm"
+                placeholder="Digitar número(s) ex: 15, 22, 40..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); addExtraCotasFromInput();}">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addExtraCotasFromInput()"
+                style="white-space: nowrap;">
+                + Adicionar
+              </button>
+            </div>
+          </div>
+
+          <!-- Mini-grade Interativa Retrátil -->
+          <div id="modalCotasMiniGridContainer" class="modal-minigrid-drawer" style="display: none;">
+            <div
+              style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+              <span>Clique nas cotas abaixo para marcar/desmarcar da seleção:</span>
+              <span style="color: var(--primary-gold);">● Selecionada</span>
+            </div>
+            <div class="mini-cotas-grid-scroll" id="modalCotasMiniGrid">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 1.15rem;">
           <label class="form-label">Nome do Participante / Comprador</label>
           <input type="text" id="editNumName" class="form-input" placeholder="Ex: VINICIUS F, JÚNIOR JJ...">
         </div>
 
         <div class="form-group">
-          <label class="form-label">Status do Pagamento</label>
+          <label class="form-label">Status do Pagamento para as Cotas Selecionadas</label>
           <div class="status-toggle-group">
             <button type="button" class="status-toggle-btn" id="btnStatusAvailable"
               onclick="selectEditStatus('available')">
@@ -725,14 +801,22 @@
             Sorteio Físico na Loja (Definir Ganhador)
           </div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-            Se este número foi sorteado, escolha qual prêmio ele ganhou para enviar automaticamente para a aba de Vales
-            e Prêmios (Aguardando Retirada):
+            Se uma cota foi sorteada, selecione o prêmio e a cota premiada para enviar para a aba de Vales e Prêmios:
           </p>
 
-          <div class="form-group" style="margin-bottom: 0.75rem;">
-            <select id="selectAssignPrize" class="form-select" style="font-size: 0.85rem;">
-              <!-- Populated dynamically by JS -->
-            </select>
+          <div class="form-row-2" style="gap: 0.65rem; margin-bottom: 0.75rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" style="font-size: 0.75rem;">Prêmio Ganho:</label>
+              <select id="selectAssignPrize" class="form-select" style="font-size: 0.85rem;">
+                <!-- Populated dynamically by JS -->
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;" id="groupAssignWinnerCota">
+              <label class="form-label" style="font-size: 0.75rem;">Cota Sorteada:</label>
+              <select id="selectAssignWinnerCota" class="form-select" style="font-size: 0.85rem;">
+                <!-- Populated dynamically by JS with selected cotas -->
+              </select>
+            </div>
           </div>
 
           <button type="button" class="btn btn-gold btn-sm" id="btnConfirmWinner" style="width: 100%;">
@@ -743,7 +827,9 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modalEditNumber')">Cancelar</button>
-        <button class="btn btn-gold" id="btnSaveNumberModal">Salvar Dados da Cota</button>
+        <button class="btn btn-gold" id="btnSaveNumberModal">
+          <span id="btnSaveNumberModalText">Salvar Dados da Cota</span>
+        </button>
       </div>
     </div>
   </div>
@@ -809,6 +895,7 @@
         <button class="modal-close-btn" onclick="closeModal('modalRaffleForm')">✕</button>
       </div>
       <div class="modal-body">
+        <input type="hidden" id="rfEditId" value="">
         <div class="form-group">
           <label class="form-label">Título da Ação</label>
           <input type="text" id="rfTitle" class="form-input" placeholder="Ex: 108° AÇÃO ELDORADO PESCA">
@@ -864,26 +951,32 @@
       </div>
       <div class="modal-body">
         <div style="font-size: 0.95rem; color: #ffffff; margin-bottom: 1.15rem; line-height: 1.5;">
-          Tem certeza de que deseja excluir permanentemente a ação <strong id="deleteRaffleTitle" style="color: var(--primary-gold);">107° AÇÃO ELDORADO PESCA</strong>?
+          Tem certeza de que deseja excluir permanentemente a ação <strong id="deleteRaffleTitle"
+            style="color: var(--primary-gold);">107° AÇÃO ELDORADO PESCA</strong>?
         </div>
 
         <!-- Banner de Garantia e Proteção dos Ganhadores -->
-        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-sm); padding: 0.9rem 1.1rem; margin-bottom: 1.15rem;">
-          <div style="font-size: 0.85rem; font-weight: 800; color: #34d399; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
+        <div
+          style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-sm); padding: 0.9rem 1.1rem; margin-bottom: 1.15rem;">
+          <div
+            style="font-size: 0.85rem; font-weight: 800; color: #34d399; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
             <span>🛡️</span> Ganhadores e Prêmios 100% Protegidos
           </div>
           <div style="font-size: 0.8rem; color: var(--text-light); line-height: 1.45;">
-            Os ganhadores e prêmios já sorteados ou cadastrados na aba <strong>Vales e Prêmios</strong> e na <strong>Agenda de Pesca</strong> serão <strong>mantidos intactos</strong> e não serão deletados.
+            Os ganhadores e prêmios já sorteados ou cadastrados na aba <strong>Vales e Prêmios</strong> e na
+            <strong>Agenda de Pesca</strong> serão <strong>mantidos intactos</strong> e não serão deletados.
           </div>
         </div>
 
         <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-          A grade de números e o histórico desta rifa serão removidos da aba de Rifas. Esta ação não poderá ser desfeita.
+          A grade de números e o histórico desta rifa serão removidos da aba de Rifas. Esta ação não poderá ser
+          desfeita.
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modalDeleteRaffle')">Cancelar</button>
-        <button class="btn btn-danger" id="btnConfirmDeleteRaffle" style="background: #dc2626; color: #ffffff; font-weight: 700; border-color: #b91c1c;">
+        <button class="btn btn-danger" id="btnConfirmDeleteRaffle"
+          style="background: #dc2626; color: #ffffff; font-weight: 700; border-color: #b91c1c;">
           Sim, Excluir Rifa
         </button>
       </div>
@@ -1045,7 +1138,7 @@
           ↩️ Desfazer Troca (Cancelar Troca)
         </button>
         <button class="btn btn-secondary" onclick="closeModal('modalExchangePrize')">Cancelar</button>
-        <button class="btn btn-gold" id="btnConfirmExchangePrize" onclick="confirmExchangePrize()">Confirmar Troca e Entrega</button>
+        <button class="btn btn-gold" id="btnConfirmExchangePrize">Confirmar Troca e Entrega</button>
       </div>
     </div>
   </div>
