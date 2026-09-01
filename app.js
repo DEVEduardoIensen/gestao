@@ -77,54 +77,102 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 /* ==========================================================================
-   State & Persistence Management
+   State & Persistence Management (Offline-First Dexie + Supabase + Outbox)
    ========================================================================== */
-function updateDbStatusBadge(isOnline) {
+function updateDbStatusBadge(status) {
   const badge = document.getElementById("dbStatusBadge");
   const text = document.getElementById("dbStatusText");
   if (!badge || !text) return;
 
-  if (isOnline) {
+  if (status === "online" || status === "synced" || status === true) {
     badge.className = "db-status-badge online";
-    badge.title = "Banco de Dados SQLite nativo ativo e sincronizado!";
-    text.textContent = "SQLite Conectado";
+    badge.title = "Supabase PostgreSQL conectado e sincronizado!";
+    text.textContent = "Sincronizado";
+  } else if (status === "syncing") {
+    badge.className = "db-status-badge syncing";
+    badge.title = "Enviando alterações pendentes para o Supabase...";
+    text.textContent = "Sincronizando...";
+  } else if (status === "conflict") {
+    badge.className = "db-status-badge conflict";
+    badge.title = "Atenção: Conflito detectado na sincronização! Clique para resolver.";
+    text.textContent = "Conflito";
   } else {
     badge.className = "db-status-badge offline";
-    badge.title = "Atenção: Modo Local (offline). Abra pelo atalho da Área de Trabalho para conectar ao SQLite!";
-    text.textContent = "Modo Local (Offline)";
+    badge.title = "Modo Offline ativo (IndexedDB). As alterações serão sincronizadas ao reconectar.";
+    text.textContent = "Offline";
   }
 }
 
 async function initAppState() {
-  try {
-    const res = await fetch("/api/data");
-    if (res.ok) {
-      const serverData = await res.json();
-      appData = sanitizeAppData(serverData);
-      isConnectedToBackend = true;
-      console.log("Conectado ao Banco de Dados SQLite nativo!");
-      updateDbStatusBadge(true);
-      try {
-        localStorage.setItem("ELDORADO_PESCA_STORE_DATA", JSON.stringify(appData));
-      } catch (e) {}
-    } else {
-      throw new Error("Backend API unavailable");
+  const orgId = window.authManager ? window.authManager.getOrganizationId() : '00000000-0000-0000-0000-000000000001';
+
+  // 1. Recupera sessão do usuário se houver
+  if (window.authManager) {
+    try {
+      await window.authManager.checkInitialSession();
+      updateAuthUi();
+    } catch (e) {
+      console.warn('[Auth] Erro na sessão inicial:', e);
     }
-  } catch (err) {
-    console.log("Modo local ativo.");
-    isConnectedToBackend = false;
-    updateDbStatusBadge(false);
+  }
+
+  // 2. Carrega primeiro do cache local IndexedDB (Abertura instantânea mesmo offline)
+  let loadedFromLocal = false;
+  if (window.localDB) {
+    try {
+      const localData = await window.localDB.loadFullAppData(orgId);
+      if (localData && (localData.raffles || localData.valesAndPrizes || localData.fishingBookings || localData.ranchoBookings)) {
+        appData = sanitizeAppData(localData);
+        loadedFromLocal = true;
+        console.log('[Offline-First] Dados carregados do IndexedDB local com sucesso.');
+      }
+    } catch (err) {
+      console.warn('[Offline-First] Erro ao ler IndexedDB:', err);
+    }
+  }
+
+  if (!loadedFromLocal) {
     const saved = localStorage.getItem("ELDORADO_PESCA_STORE_DATA");
     if (saved) {
       try {
         appData = sanitizeAppData(JSON.parse(saved));
-      } catch (e) {
-        appData = sanitizeAppData(JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA)));
-      }
-    } else {
-      appData = sanitizeAppData(JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA)));
+        loadedFromLocal = true;
+      } catch (e) {}
     }
   }
+
+  if (!loadedFromLocal) {
+    appData = sanitizeAppData(JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA)));
+  }
+
+  // 3. Se estiver online e com Supabase conectado, sincroniza em segundo plano
+  if (navigator.onLine && window.syncEngine && window.supabaseClient) {
+    try {
+      updateDbStatusBadge('syncing');
+      const remoteData = await window.syncEngine.fetchRemoteData(orgId);
+      if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings)) {
+        appData = sanitizeAppData(remoteData);
+        if (window.localDB) {
+          await window.localDB.saveFullAppData(appData, orgId);
+        }
+        console.log('[Supabase] Dados sincronizados da nuvem com sucesso!');
+      }
+      updateDbStatusBadge('synced');
+    } catch (err) {
+      console.warn('[Supabase] Falha ao sincronizar com nuvem:', err);
+      updateDbStatusBadge('offline');
+    }
+  } else {
+    updateDbStatusBadge(navigator.onLine ? 'synced' : 'offline');
+  }
+
+  // 4. Inicia processamento da fila de sincronização pendente
+  if (window.syncEngine) {
+    window.syncEngine.processQueue();
+  }
+
+  // 5. Ativa escutas de conectividade e Service Worker
+  initSyncAndPwaHandlers();
 
   if (appData.raffles && appData.raffles.length > 0) {
     const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
@@ -132,11 +180,260 @@ async function initAppState() {
   }
 }
 
-async function saveState() {
+async function saveState(syncOperation = null) {
+  const orgId = window.authManager ? window.authManager.getOrganizationId() : '00000000-0000-0000-0000-000000000001';
+
+  // 1. Salva no IndexedDB (Dexie)
+  if (window.localDB) {
+    try {
+      await window.localDB.saveFullAppData(appData, orgId);
+    } catch (e) {
+      console.warn('[Dexie] Falha ao persistir snapshot no IndexedDB:', e);
+    }
+
+    // 2. Se houver operação atômica de sincronização, adiciona na fila outbox
+    if (syncOperation) {
+      try {
+        await window.localDB.enqueueOperation({
+          ...syncOperation,
+          orgId: orgId
+        });
+      } catch (e) {
+        console.warn('[Outbox] Falha ao enfileirar operação:', e);
+      }
+      if (window.syncEngine) {
+        window.syncEngine.processQueue();
+      }
+    }
+  }
+
+  // 3. Fallback adicional no localStorage
   try {
     localStorage.setItem("ELDORADO_PESCA_STORE_DATA", JSON.stringify(appData));
   } catch (e) {}
+
   updateGlobalStats();
+}
+
+function initSyncAndPwaHandlers() {
+  // Service Worker Registration & Update Notification
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      console.log('[PWA] Service Worker registrado com sucesso:', reg.scope);
+      
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              const banner = document.getElementById('pwaUpdateBanner');
+              if (banner) banner.style.display = 'block';
+            }
+          });
+        }
+      });
+    }).catch(err => {
+      console.warn('[PWA] Falha ao registrar Service Worker:', err);
+    });
+
+    const btnUpdate = document.getElementById('btnApplyPwaUpdate');
+    if (btnUpdate) {
+      btnUpdate.addEventListener('click', () => {
+        navigator.serviceWorker.getRegistration().then(reg => {
+          if (reg && reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          window.location.reload();
+        });
+      });
+    }
+  }
+
+  // Escuta mudanças de status no SyncEngine
+  if (window.syncEngine) {
+    window.syncEngine.onStatusChange((status, conflicts) => {
+      updateDbStatusBadge(status);
+      updateSyncCenterModal(status, conflicts);
+    });
+  }
+
+  // Escuta mudanças no AuthManager
+  if (window.authManager) {
+    window.authManager.onAuthStateChange(async (event, session) => {
+      updateAuthUi();
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await initAppState();
+        renderAll();
+      }
+    });
+  }
+}
+
+function updateAuthUi() {
+  const label = document.getElementById('headerAuthLabel');
+  const loggedView = document.getElementById('authLoggedInView');
+  const formView = document.getElementById('authFormView');
+  const emailDisplay = document.getElementById('authUserEmailDisplay');
+  const orgSelect = document.getElementById('selectUserOrganization');
+
+  const user = window.authManager ? window.authManager.user : null;
+  const currentOrg = window.authManager ? window.authManager.currentOrg : null;
+
+  if (user) {
+    if (label) label.textContent = currentOrg ? currentOrg.name : 'Logado';
+    if (loggedView) loggedView.style.display = 'block';
+    if (formView) formView.style.display = 'none';
+    if (emailDisplay) emailDisplay.textContent = user.email || 'Usuário';
+
+    if (orgSelect && window.authManager.organizations.length > 0) {
+      orgSelect.innerHTML = '';
+      window.authManager.organizations.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.id;
+        opt.textContent = `${o.name} (${o.role || 'membro'})`;
+        if (o.id === currentOrg?.id) opt.selected = true;
+        orgSelect.appendChild(opt);
+      });
+    }
+  } else {
+    if (label) label.textContent = 'Entrar';
+    if (loggedView) loggedView.style.display = 'none';
+    if (formView) formView.style.display = 'block';
+  }
+}
+
+let currentAuthTab = 'login';
+function switchAuthTab(tab) {
+  currentAuthTab = tab;
+  ['tabAuthLogin', 'tabAuthRegister', 'tabAuthRecover'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+
+  const activeBtn = document.getElementById(tab === 'login' ? 'tabAuthLogin' : (tab === 'register' ? 'tabAuthRegister' : 'tabAuthRecover'));
+  if (activeBtn) activeBtn.classList.add('active');
+
+  const orgGroup = document.getElementById('groupAuthOrgName');
+  const passGroup = document.getElementById('groupAuthPassword');
+  const btnSubmit = document.getElementById('btnSubmitAuth');
+  const errDiv = document.getElementById('authErrorMessage');
+  if (errDiv) errDiv.style.display = 'none';
+
+  if (tab === 'login') {
+    if (orgGroup) orgGroup.style.display = 'none';
+    if (passGroup) passGroup.style.display = 'block';
+    if (btnSubmit) btnSubmit.textContent = 'Entrar';
+  } else if (tab === 'register') {
+    if (orgGroup) orgGroup.style.display = 'block';
+    if (passGroup) passGroup.style.display = 'block';
+    if (btnSubmit) btnSubmit.textContent = 'Criar Minha Conta';
+  } else {
+    if (orgGroup) orgGroup.style.display = 'none';
+    if (passGroup) passGroup.style.display = 'none';
+    if (btnSubmit) btnSubmit.textContent = 'Enviar Link de Recuperação';
+  }
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('authEmailInput').value.trim();
+  const password = document.getElementById('authPasswordInput').value;
+  const orgName = document.getElementById('authOrgNameInput') ? document.getElementById('authOrgNameInput').value.trim() : '';
+  const errDiv = document.getElementById('authErrorMessage');
+  const btnSubmit = document.getElementById('btnSubmitAuth');
+
+  if (errDiv) errDiv.style.display = 'none';
+  if (btnSubmit) btnSubmit.disabled = true;
+
+  try {
+    if (currentAuthTab === 'login') {
+      await window.authManager.login(email, password);
+      showToast('Login realizado com sucesso!', 'success');
+      closeModal('modalAuth');
+    } else if (currentAuthTab === 'register') {
+      await window.authManager.register(email, password, orgName);
+      showToast('Conta criada com sucesso! Verifique seu e-mail se necessário.', 'success');
+      closeModal('modalAuth');
+    } else {
+      await window.authManager.recoverPassword(email);
+      showToast('Instruções de recuperação enviadas para seu e-mail!', 'info');
+      closeModal('modalAuth');
+    }
+  } catch (err) {
+    console.error('[Auth Error]', err);
+    if (errDiv) {
+      errDiv.textContent = err.message || 'Erro na autenticação. Verifique os dados.';
+      errDiv.style.display = 'block';
+    }
+  } finally {
+    if (btnSubmit) btnSubmit.disabled = false;
+  }
+}
+
+async function handleUserLogout() {
+  if (window.authManager) {
+    await window.authManager.logout();
+    showToast('Você saiu da sua conta.', 'info');
+    updateAuthUi();
+    closeModal('modalAuth');
+    await initAppState();
+    renderAll();
+  }
+}
+
+async function onSwitchOrganization(orgId) {
+  if (window.authManager) {
+    const match = window.authManager.organizations.find(o => o.id === orgId);
+    if (match) {
+      window.authManager.currentOrg = match;
+      localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', match.id);
+      showToast(`Organização alterada para: ${match.name}`, 'success');
+      updateAuthUi();
+      await initAppState();
+      renderAll();
+    }
+  }
+}
+
+async function updateSyncCenterModal(status, conflicts) {
+  const statusText = document.getElementById('syncCenterStatusText');
+  const queueContainer = document.getElementById('syncQueueListContainer');
+  const conflictsSection = document.getElementById('syncConflictsSection');
+  const conflictsList = document.getElementById('syncConflictsList');
+
+  if (statusText) {
+    statusText.textContent = status === 'synced' ? '🟢 Sincronizado' : (status === 'syncing' ? '🔵 Sincronizando...' : (status === 'conflict' ? '🔴 Conflito Detectado' : '🟡 Offline'));
+  }
+
+  if (queueContainer && window.localDB) {
+    const pendingOps = await window.localDB.getPendingOperations();
+    if (pendingOps.length === 0) {
+      queueContainer.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 1rem;">Nenhuma operação pendente. Todos os dados estão salvos na nuvem!</div>';
+    } else {
+      queueContainer.innerHTML = pendingOps.map(op => `
+        <div class="sync-queue-item">
+          <div>
+            <span class="sync-queue-type">${escapeHtml(op.type)}</span>
+            <div style="font-size: 0.72rem; color: var(--text-dim);">${new Date(op.timestamp).toLocaleTimeString()} • ${escapeHtml(op.tableName)}</div>
+          </div>
+          <span class="sync-queue-status ${op.status}">${op.status.toUpperCase()}</span>
+        </div>
+      `).join('');
+    }
+  }
+
+  if (conflictsSection && conflictsList) {
+    if (Array.isArray(conflicts) && conflicts.length > 0) {
+      conflictsSection.style.display = 'block';
+      conflictsList.innerHTML = conflicts.map(c => `
+        <div style="font-size: 0.82rem; margin-bottom: 0.5rem;">
+          <strong>Rifa ${escapeHtml(c.raffleId)}:</strong> Cotas <em>${(c.conflictingNumbers || []).map(cn => `#${cn.num} (${cn.current_owner || 'outro comprador'})`).join(', ')}</em> já foram vendidas no servidor.
+        </div>
+      `).join('');
+    } else {
+      conflictsSection.style.display = 'none';
+    }
+  }
 }
 
 function getActiveRaffle() {
@@ -785,37 +1082,22 @@ async function saveNumberModal() {
     }
   });
 
-  if (isConnectedToBackend && updatedItems.length > 0) {
-    try {
-      if (updatedItems.length === 1) {
-        await fetch("/api/raffles/number", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            raffleId: raffle.id,
-            num: updatedItems[0].num,
-            name: updatedItems[0].name,
-            status: updatedItems[0].status,
-            reservedAt: updatedItems[0].reservedAt,
-            paidAt: updatedItems[0].paidAt
-          })
-        });
-      } else {
-        await fetch("/api/raffles/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            raffleId: raffle.id,
-            numbers: updatedItems
-          })
-        });
-      }
-    } catch (e) {
-      console.warn("Backend sync failed, saved locally", e);
+  // Salva no IndexedDB e enfileira na Outbox Sync Queue com RPC atômica
+  await saveState({
+    type: "SELL_NUMBERS",
+    tableName: "raffle_numbers",
+    recordId: raffle.id,
+    payload: {
+      raffleId: raffle.id,
+      numbers: selectedNums,
+      status: currentEditStatus,
+      buyerName: (currentEditStatus === "available") ? "" : name,
+      reservedAt: (currentEditStatus === "reserved") ? (nowIso) : null,
+      paidAt: (currentEditStatus === "paid") ? (nowIso) : null,
+      allowOverride: false
     }
-  }
+  });
 
-  saveState();
   renderRaffleNumbersGrid();
   updateGlobalStats();
   closeModal("modalEditNumber");
@@ -964,26 +1246,13 @@ async function assignPrizeWinner() {
     notes: entryNotes
   };
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/raffles/winner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          raffleId: raffle.id,
-          num: item.num,
-          position: position,
-          prizeDescription: prizeDesc,
-          winnerName: winnerName
-        })
-      });
-    } catch (e) {
-      console.warn("Backend assign winner failed", e);
-    }
-  }
-
   appData.valesAndPrizes.unshift(newValeEntry);
-  saveState();
+  await saveState({
+    type: "UPDATE_VALE",
+    tableName: "vales_prizes",
+    recordId: newValeEntry.id,
+    payload: newValeEntry
+  });
   renderRaffleView();
   renderValesView();
   renderFishingAgendaView();
@@ -1050,22 +1319,7 @@ async function processWhatsAppImport() {
     }
   });
 
-  if (isConnectedToBackend && updatedList.length > 0) {
-    try {
-      await fetch("/api/raffles/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          raffleId: raffle.id,
-          numbers: updatedList
-        })
-      });
-    } catch (e) {
-      console.warn("Backend batch update failed, saved locally", e);
-    }
-  }
-
-  saveState();
+  await saveState();
   renderRaffleNumbersGrid();
   closeModal("modalImportWhatsApp");
   showToast(`Importação concluída! ${updatedList.length} números atualizados no banco de dados.`, "success");
@@ -1651,34 +1905,12 @@ async function saveEditedValePrize() {
     }
   }
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/vales/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: id,
-          customerName: item.customerName,
-          customerPhone: item.customerPhone,
-          description: item.description,
-          notes: item.notes,
-          type: item.type,
-          status: item.status,
-          currentBalance: item.currentBalance || 0,
-          initialAmount: item.initialAmount || 0,
-          deliveredAt: item.deliveredAt,
-          exchangedItem: item.exchangedItem || null,
-          differencePaid: item.differencePaid || 0,
-          exchangeNotes: item.exchangeNotes || null,
-          exchangedAt: item.exchangedAt || null
-        })
-      });
-    } catch (e) {
-      console.warn("Backend update failed", e);
-    }
-  }
-
-  saveState();
+  await saveState({
+    type: "UPDATE_VALE",
+    tableName: "vales_prizes",
+    recordId: item.id,
+    payload: item
+  });
   renderValesView();
   renderFishingAgendaView();
   updateGlobalStats();
@@ -1702,19 +1934,12 @@ async function choosePrizeOption(valeId, choice) {
     // Remove automaticamente qualquer agendamento vinculado do calendário de pesca
     removeLinkedFishingBookings(valeId, oldName);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/vales/choose-option", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ valeId: valeId, choice: "vale", amount: amount })
-        });
-      } catch (e) {
-        console.warn("Backend sync failed", e);
-      }
-    }
-
-    saveState();
+    await saveState({
+      type: "UPDATE_VALE",
+      tableName: "vales_prizes",
+      recordId: item.id,
+      payload: item
+    });
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
@@ -1727,19 +1952,12 @@ async function choosePrizeOption(valeId, choice) {
     // Remove agendamento anterior para escolha limpa de novas datas
     removeLinkedFishingBookings(valeId, oldName);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/vales/choose-option", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ valeId: valeId, choice: "diaria" })
-        });
-      } catch (e) {
-        console.warn("Backend sync failed", e);
-      }
-    }
-
-    saveState();
+    await saveState({
+      type: "UPDATE_VALE",
+      tableName: "vales_prizes",
+      recordId: item.id,
+      payload: item
+    });
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
@@ -1751,19 +1969,12 @@ async function choosePrizeOption(valeId, choice) {
     item.notes = "Ganhador retirou o prêmio físico na loja (Entregue)";
     removeLinkedFishingBookings(valeId, oldName);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/vales/choose-option", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ valeId: valeId, choice: "premio_entregue" })
-        });
-      } catch (e) {
-        console.warn("Backend sync failed", e);
-      }
-    }
-
-    saveState();
+    await saveState({
+      type: "UPDATE_VALE",
+      tableName: "vales_prizes",
+      recordId: item.id,
+      payload: item
+    });
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
@@ -1774,19 +1985,12 @@ async function choosePrizeOption(valeId, choice) {
     item.notes = "Ganhador optou pelo Prêmio Físico (Aguardando Retirada)";
     removeLinkedFishingBookings(valeId, oldName);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/vales/choose-option", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ valeId: valeId, choice: "premio_fisico" })
-        });
-      } catch (e) {
-        console.warn("Backend sync failed", e);
-      }
-    }
-
-    saveState();
+    await saveState({
+      type: "UPDATE_VALE",
+      tableName: "vales_prizes",
+      recordId: item.id,
+      payload: item
+    });
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
@@ -1799,19 +2003,12 @@ async function choosePrizeOption(valeId, choice) {
     // Remove agendamento anterior para sair do calendário
     removeLinkedFishingBookings(valeId, oldName);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/vales/choose-option", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ valeId: valeId, choice: "pending_choice" })
-        });
-      } catch (e) {
-        console.warn("Backend sync failed", e);
-      }
-    }
-
-    saveState();
+    await saveState({
+      type: "UPDATE_VALE",
+      tableName: "vales_prizes",
+      recordId: item.id,
+      payload: item
+    });
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
@@ -1879,22 +2076,13 @@ async function saveNewVale() {
     notes: ""
   };
 
-  if (isConnectedToBackend) {
-    try {
-      const res = await fetch("/api/vales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newEntry)
-      });
-      const data = await res.json();
-      if (data.valeId) newEntry.id = data.valeId;
-    } catch (e) {
-      console.warn("Backend save vale failed", e);
-    }
-  }
-
   appData.valesAndPrizes.unshift(newEntry);
-  saveState();
+  await saveState({
+    type: "UPDATE_VALE",
+    tableName: "vales_prizes",
+    recordId: newEntry.id,
+    payload: newEntry
+  });
   renderValesView();
   closeModal("modalNewVale");
   showToast("Cadastro salvo no banco de dados!", "success");
@@ -1963,25 +2151,29 @@ async function confirmAbaterProduto() {
   if (!item.transactions) item.transactions = [];
   item.transactions.unshift(txEntry);
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/vales/abater", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          valeId: valeId,
-          date: dateVal,
-          item: itemName,
-          amount: abaterVal,
-          registeredBy: "Loja"
-        })
-      });
-    } catch (e) {
-      console.warn("Backend abater failed", e);
+  await saveState({
+    type: "ADD_VALE_TRANSACTION",
+    tableName: "vale_transactions",
+    recordId: txEntry.id,
+    payload: {
+      id: txEntry.id,
+      valeId: valeId,
+      date: dateVal,
+      item: itemName,
+      amount: abaterVal,
+      remainingBalance: newBalance,
+      registeredBy: "Loja"
     }
-  }
+  });
 
-  saveState();
+  // Atualiza também o saldo do vale pai
+  await saveState({
+    type: "UPDATE_VALE",
+    tableName: "vales_prizes",
+    recordId: item.id,
+    payload: item
+  });
+
   renderValesView();
   closeModal("modalAbaterProduto");
   showToast(`Baixa realizada! Novo saldo de ${item.customerName}: ${formatCurrency(newBalance)}`, "success");
@@ -3340,20 +3532,6 @@ async function saveFishingBooking() {
       }
     }
 
-    if (isConnectedToBackend) {
-      try {
-        const res = await fetch("/api/fishing/booking", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bookingData)
-        });
-        const data = await res.json();
-        if (data.bookingId) bookingData.id = data.bookingId;
-      } catch (e) {
-        console.warn("Backend save fishing booking failed", e);
-      }
-    }
-
     if (!appData.fishingBookings) appData.fishingBookings = [];
     const existingIdx = appData.fishingBookings.findIndex(b => b.id === bookingData.id || (prizeId && b.prizeId === prizeId));
     if (existingIdx >= 0) {
@@ -3362,7 +3540,12 @@ async function saveFishingBooking() {
       appData.fishingBookings.push(bookingData);
     }
 
-    saveState();
+    await saveState({
+      type: "BOOK_FISHING",
+      tableName: "fishing_bookings",
+      recordId: bookingData.id,
+      payload: bookingData
+    });
     renderFishingAgendaView();
     renderValesView();
     updateGlobalStats();
@@ -3465,24 +3648,12 @@ async function confirmFishingPayment() {
       b.notes = (b.notes ? b.notes + " | " : "") + `Quitação ${formatCurrency(payVal)}: ${notes}`;
     }
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/fishing/payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: id,
-            addAmount: payVal,
-            paymentMethod: "Pix",
-            notes: b.notes
-          })
-        });
-      } catch (e) {
-        console.warn("Backend payment update failed", e);
-      }
-    }
-
-    saveState();
+    await saveState({
+      type: "BOOK_FISHING",
+      tableName: "fishing_bookings",
+      recordId: b.id,
+      payload: b
+    });
     renderFishingAgendaView();
     updateGlobalStats();
     closeModal("modalFishingPayment");
@@ -4107,21 +4278,12 @@ async function saveRanchoBooking() {
     appData.ranchoBookings.push(bookingData);
   }
 
-  if (isConnectedToBackend) {
-    try {
-      const res = await fetch("/api/rancho/booking", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookingData)
-      });
-      const data = await res.json();
-      if (data.bookingId) bookingData.id = data.bookingId;
-    } catch (e) {
-      console.warn("Backend save rancho booking failed", e);
-    }
-  }
-
-  saveState();
+  await saveState({
+    type: "BOOK_RANCHO",
+    tableName: "rancho_bookings",
+    recordId: bookingData.id,
+    payload: bookingData
+  });
   renderRanchoView();
   closeModal("modalRanchoBooking");
   showToast(`Locação de ${clientName} salva com sucesso!`, "success");
@@ -4199,24 +4361,12 @@ async function submitRanchoPayment() {
     b.notes = (b.notes ? b.notes + " | " : "") + `Quitação ${formatCurrency(payVal)}: ${notes}`;
   }
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/rancho/payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: id,
-          addAmount: payVal,
-          paymentMethod: "Pix",
-          notes: b.notes
-        })
-      });
-    } catch (e) {
-      console.warn("Backend rancho payment update failed", e);
-    }
-  }
-
-  saveState();
+  await saveState({
+    type: "BOOK_RANCHO",
+    tableName: "rancho_bookings",
+    recordId: b.id,
+    payload: b
+  });
   renderRanchoView();
   closeModal("modalRanchoPayment");
   showToast(`Pagamento do rancho registrado com sucesso! Saldo restante: ${formatCurrency(newRemaining)}`, "success");
@@ -4808,23 +4958,14 @@ async function saveRaffleForm() {
     numbers: numbersArray
   };
 
-  if (isConnectedToBackend) {
-    try {
-      const res = await fetch("/api/raffles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newRaffle)
-      });
-      const data = await res.json();
-      if (data.raffleId) newRaffle.id = data.raffleId;
-    } catch (e) {
-      console.warn("Backend save raffle failed", e);
-    }
-  }
-
   appData.raffles.unshift(newRaffle);
   activeRaffleId = newRaffle.id;
-  saveState();
+  await saveState({
+    type: "CREATE_RAFFLE",
+    tableName: "raffles",
+    recordId: newRaffle.id,
+    payload: newRaffle
+  });
   renderRaffleDropdown();
   renderRaffleView();
   closeModal("modalRaffleForm");

@@ -24,6 +24,9 @@
 
   <!-- Styles -->
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -66,16 +69,27 @@
 
       <!-- Header Actions -->
       <div class="header-status-indicator">
-        <div id="dbStatusBadge" class="db-status-badge online" title="Status de persistência no Banco de Dados">
+        <div id="dbStatusBadge" class="db-status-badge online" title="Clique para ver o status da fila de sincronização" onclick="openModal('modalSyncCenter')">
           <span class="status-dot"></span>
-          <span id="dbStatusText">SQLite Conectado</span>
+          <span id="dbStatusText">Sincronizado</span>
         </div>
-        <button class="btn btn-gold btn-sm" id="btnQuickBackup" title="Baixar Backup Completo em Arquivo JSON">
-          Salvar Backup
+        <button class="btn btn-gold btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
+          👤 <span id="headerAuthLabel">Conta</span>
         </button>
       </div>
     </div>
   </header>
+
+  <!-- PWA Update Banner -->
+  <div id="pwaUpdateBanner" class="pwa-update-banner" style="display: none;">
+    <div class="pwa-update-content">
+      <span>🚀 <strong>Nova versão disponível!</strong> Atualize para carregar as melhorias mais recentes.</span>
+      <div class="pwa-update-actions">
+        <button class="btn btn-gold btn-xs" id="btnApplyPwaUpdate">Atualizar Agora</button>
+        <button class="btn btn-secondary btn-xs" onclick="document.getElementById('pwaUpdateBanner').style.display='none'">Depois</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Main Container -->
   <main class="main-content">
@@ -1665,10 +1679,114 @@
     </div>
   </div>
 
+  <!-- Modal: Autenticação & Multi-Tenant (Supabase Auth) -->
+  <div class="modal-overlay" id="modalAuth" style="display: none;">
+    <div class="modal-container" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="authModalTitle">👤 Acesso ao Sistema</h3>
+        <button class="modal-close" onclick="closeModal('modalAuth')">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Logged In State View -->
+        <div id="authLoggedInView" style="display: none;">
+          <div style="background: rgba(255, 215, 0, 0.08); border: 1px solid var(--border-gold); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem;">
+            <div style="font-size: 0.8rem; color: var(--text-dim);">Usuário Autenticado:</div>
+            <div style="font-size: 1rem; font-weight: 700; color: var(--text-light);" id="authUserEmailDisplay">—</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">🏢 Organização Ativa (Multi-Tenant)</label>
+            <select id="selectUserOrganization" class="form-select" onchange="onSwitchOrganization(this.value)">
+              <option value="00000000-0000-0000-0000-000000000001">Eldorado Pesca & Lake</option>
+            </select>
+            <small style="color: var(--text-dim); font-size: 0.75rem; margin-top: 0.35rem; display: block;">
+              Seus dados e tabelas são isolados por segurança (RLS) dentro desta organização.
+            </small>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+            <button class="btn btn-secondary" style="flex: 1;" onclick="handleUserLogout()">Sair da Conta</button>
+            <button class="btn btn-gold" style="flex: 1;" onclick="closeModal('modalAuth')">Fechar</button>
+          </div>
+        </div>
+
+        <!-- Auth Form View (Login / Register / Recover) -->
+        <div id="authFormView">
+          <div class="auth-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-light); padding-bottom: 0.5rem;">
+            <button class="auth-tab-btn active" id="tabAuthLogin" onclick="switchAuthTab('login')">Entrar</button>
+            <button class="auth-tab-btn" id="tabAuthRegister" onclick="switchAuthTab('register')">Criar Conta</button>
+            <button class="auth-tab-btn" id="tabAuthRecover" onclick="switchAuthTab('recover')">Recuperar</button>
+          </div>
+
+          <form id="authForm" onsubmit="handleAuthSubmit(event)">
+            <div class="form-group" id="groupAuthOrgName" style="display: none;">
+              <label class="form-label">Nome da sua Empresa / Organização *</label>
+              <input type="text" id="authOrgNameInput" class="form-input" placeholder="Ex: Minha Loja de Pesca">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">E-mail *</label>
+              <input type="email" id="authEmailInput" class="form-input" placeholder="seuemail@exemplo.com" required>
+            </div>
+
+            <div class="form-group" id="groupAuthPassword">
+              <label class="form-label">Senha *</label>
+              <input type="password" id="authPasswordInput" class="form-input" placeholder="••••••••" minlength="6">
+            </div>
+
+            <div id="authErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(255, 107, 107, 0.1); border-radius: var(--radius-sm);"></div>
+
+            <button type="submit" class="btn btn-gold" style="width: 100%; margin-top: 0.5rem;" id="btnSubmitAuth">
+              Entrar
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Central de Sincronização e Resolução de Conflitos -->
+  <div class="modal-overlay" id="modalSyncCenter" style="display: none;">
+    <div class="modal-container" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔄 Central de Sincronização & Fila Offline</h3>
+        <button class="modal-close" onclick="closeModal('modalSyncCenter')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border-light); margin-bottom: 1rem;">
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-dim);">Estado da Conexão:</div>
+            <div style="font-weight: 700; color: var(--text-light);" id="syncCenterStatusText">🟢 Sincronizado</div>
+          </div>
+          <button class="btn btn-gold btn-xs" onclick="window.syncEngine && window.syncEngine.processQueue()">Forçar Sincronização</button>
+        </div>
+
+        <h4 style="font-size: 0.9rem; color: var(--primary-gold); margin-bottom: 0.5rem;">Fila de Operações Locais (Outbox)</h4>
+        <div id="syncQueueListContainer" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: var(--radius-sm); padding: 0.5rem; border: 1px solid var(--border-light);">
+          <div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 1rem;">Nenhuma operação pendente. Todos os dados estão salvos na nuvem!</div>
+        </div>
+
+        <!-- Seção de Conflitos Detectados -->
+        <div id="syncConflictsSection" style="display: none; margin-top: 1rem;">
+          <h4 style="font-size: 0.9rem; color: #ff6b6b; margin-bottom: 0.5rem;">⚠️ Conflitos Detectados no Servidor</h4>
+          <div id="syncConflictsList" style="background: rgba(255, 107, 107, 0.08); border: 1px solid rgba(255, 107, 107, 0.3); border-radius: var(--radius-sm); padding: 0.75rem;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalSyncCenter')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- Scripts -->
+  <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
+  <script src="supabase_config.js"></script>
+  <script src="db_dexie.js"></script>
+  <script src="auth_manager.js"></script>
+  <script src="sync_engine.js"></script>
   <script src="sample-data.js"></script>
   <script src="app.js"></script>
 </body>

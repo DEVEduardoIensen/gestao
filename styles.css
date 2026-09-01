@@ -2375,3 +2375,190 @@ body {
   transform: scale(1.04);
 }
 
+/* ==========================================================================
+   PWA & SUPABASE REALTIME / OFFLINE STYLES
+   ========================================================================== */
+
+/* PWA Update Notification Banner */
+.pwa-update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100000;
+  background: linear-gradient(90deg, #1e3a8a, #0284c7);
+  color: #ffffff;
+  padding: 0.65rem 1.25rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+.pwa-update-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.pwa-update-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-xs {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border-radius: 4px;
+}
+
+/* DB / Sync Status Badges */
+.db-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.db-status-badge.online {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.db-status-badge.online .status-dot {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.db-status-badge.offline {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.db-status-badge.offline .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.db-status-badge.syncing {
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #38bdf8;
+}
+
+.db-status-badge.syncing .status-dot {
+  background: #0ea5e9;
+  box-shadow: 0 0 8px #0ea5e9;
+  animation: pulseDot 1s infinite alternate;
+}
+
+.db-status-badge.conflict {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.db-status-badge.conflict .status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+@keyframes pulseDot {
+  from { opacity: 0.4; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+/* Auth Modal Tabs */
+.auth-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.auth-tab-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.auth-tab-btn.active {
+  color: var(--primary-gold);
+  background: rgba(229, 193, 88, 0.12);
+  border-bottom: 2px solid var(--primary-gold);
+}
+
+/* Outbox Queue Items */
+.sync-queue-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.65rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.sync-queue-item:last-child {
+  margin-bottom: 0;
+}
+
+.sync-queue-type {
+  font-weight: 700;
+  color: var(--primary-gold);
+}
+
+.sync-queue-status {
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.sync-queue-status.pending {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.sync-queue-status.syncing {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+}
+
+.sync-queue-status.conflict {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+

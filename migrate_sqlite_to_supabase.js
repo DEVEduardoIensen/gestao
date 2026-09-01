@@ -1,34 +1,54 @@
 /**
- * Eldorado Pesca & Lake - Script de Migração SQLite -> Supabase
+ * Eldorado Pesca & Lake - Script de Migração SQLite -> Supabase (Multi-Tenant)
  * Executa a carga inicial de todos os dados locais do SQLite para a nuvem do Supabase
- * 
- * Uso:
- * 1. Preencha o arquivo supabase_config.js com as suas credenciais do Supabase
- * 2. Execute o schema no SQL Editor do Supabase (arquivo supabase_schema.sql)
- * 3. Execute este script com: node migrate_sqlite_to_supabase.js
+ * associando todas as entidades à organização padrão.
  */
+
+const fs = require('fs');
+const path = require('path');
+
+// Parser nativo do .env sem dependência externa
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    envContent.split('\n').forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        let key = match[1];
+        let val = (match[2] || '').trim().replace(/^['"]|['"]$/g, '');
+        if (!process.env[key]) process.env[key] = val;
+      }
+    });
+  }
+} catch (e) {}
 
 const { db, getAllData } = require('./database.js');
 const SUPABASE_CONFIG = require('./supabase_config.js');
+
+const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 async function migrateData() {
   console.log('============================================================');
   console.log('  ELDORADO PESCA & LAKE - MIGRAÇÃO SQLITE -> SUPABASE');
   console.log('============================================================\n');
 
-  if (!SUPABASE_CONFIG.SUPABASE_URL || SUPABASE_CONFIG.SUPABASE_URL.includes('SEU_PROJETO')) {
-    console.error('ERRO: Configure a SUPABASE_URL no arquivo supabase_config.js antes de rodar.');
+  const supabaseUrl = process.env.SUPABASE_URL || SUPABASE_CONFIG.SUPABASE_URL;
+  // Use Secret Key if available for administrative CLI migration, otherwise Publishable Key
+  const apiKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_CONFIG.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || supabaseUrl.includes('SEU_PROJETO')) {
+    console.error('ERRO: Configure a SUPABASE_URL no arquivo .env antes de rodar.');
     process.exit(1);
   }
 
-  const baseUrl = SUPABASE_CONFIG.SUPABASE_URL.replace(/\/$/, '');
-  const apiKey = SUPABASE_CONFIG.SUPABASE_ANON_KEY;
+  const baseUrl = supabaseUrl.replace(/\/$/, '');
 
-  async function supabasePost(tableName, rows) {
+  async function supabasePost(tableName, rows, onConflict = null) {
     if (!rows || rows.length === 0) return;
-    const url = `${baseUrl}/rest/v1/${tableName}?on_conflict=id`;
+    const conflictQuery = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
+    const url = `${baseUrl}/rest/v1/${tableName}${conflictQuery}`;
     
-    // Chunking to avoid large payloads
     const chunkSize = 200;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
@@ -38,7 +58,7 @@ async function migrateData() {
           'Content-Type': 'application/json',
           'apikey': apiKey,
           'Authorization': `Bearer ${apiKey}`,
-          'Prefer': 'resolution=merge-duplicates'
+          'Prefer': onConflict ? 'resolution=merge-duplicates' : 'return=minimal'
         },
         body: JSON.stringify(chunk)
       });
@@ -59,20 +79,29 @@ async function migrateData() {
   console.log(`- Locações do Rancho: ${localData.ranchoBookings?.length || 0}`);
   console.log(`- Folha do Eduardo: ${Object.keys(localData.eduardoWorkDays || {}).length} dias`);
 
-  console.log('\n2. Enviando dados para o Supabase...');
+  console.log('\n2. Garantindo existência da Organização no Supabase...');
+  await supabasePost('organizations', [{
+    id: DEFAULT_ORG_ID,
+    name: 'Eldorado Pesca & Lake',
+    slug: 'eldorado-pesca-principal'
+  }], 'id');
+  console.log('✓ Organização padrão verificada');
+
+  console.log('\n3. Enviando dados para o Supabase...');
 
   // 1. Settings
   const settingsRows = [
-    { key: 'eduardoDailyRate', value: localData.settings?.eduardoDailyRate || '62.00' },
-    { key: 'eduardoHalfDayRate', value: localData.settings?.eduardoHalfDayRate || '31.00' },
-    { key: 'ranchoDailyRate', value: localData.settings?.ranchoDailyRate || '250.00' }
+    { organization_id: DEFAULT_ORG_ID, key: 'eduardoDailyRate', value: JSON.stringify({ rate: localData.settings?.eduardoDailyRate || 62.00 }) },
+    { organization_id: DEFAULT_ORG_ID, key: 'eduardoHalfRate', value: JSON.stringify({ rate: localData.settings?.eduardoHalfRate || 31.00 }) },
+    { organization_id: DEFAULT_ORG_ID, key: 'ranchoDailyRate', value: JSON.stringify({ rate: localData.settings?.ranchoDailyRate || 250.00 }) }
   ];
-  await supabasePost('settings', settingsRows);
+  await supabasePost('settings', settingsRows, 'organization_id,key');
   console.log('✓ Configurações migradas');
 
-  // 2. Raffles & Numbers
+  // 2. Raffles, Numbers & Prizes
   if (localData.raffles && localData.raffles.length > 0) {
     const rafflesRows = localData.raffles.map(r => ({
+      organization_id: DEFAULT_ORG_ID,
       id: r.id,
       number: r.number || '',
       title: r.title,
@@ -88,11 +117,12 @@ async function migrateData() {
       status: r.status || 'active',
       created_at: r.createdAt || new Date().toISOString()
     }));
-    await supabasePost('raffles', rafflesRows);
+    await supabasePost('raffles', rafflesRows, 'organization_id,id');
 
     for (const r of localData.raffles) {
       if (r.numbers && r.numbers.length > 0) {
         const numRows = r.numbers.map(n => ({
+          organization_id: DEFAULT_ORG_ID,
           raffle_id: r.id,
           num: n.num,
           name: n.name || '',
@@ -100,13 +130,14 @@ async function migrateData() {
           reserved_at: n.reservedAt || null,
           paid_at: n.paidAt || null
         }));
-        await supabasePost('raffle_numbers', numRows);
+        await supabasePost('raffle_numbers', numRows, 'organization_id,raffle_id,num');
       }
 
       if (r.prizes && r.prizes.length > 0) {
-        const prizeRows = r.prizes.map(p => ({
+        const prizeRows = r.prizes.map((p, idx) => ({
+          organization_id: DEFAULT_ORG_ID,
           raffle_id: r.id,
-          position: p.position || 1,
+          position: p.position || (idx + 1),
           description: p.description || '',
           winner_number: p.winnerNumber || null,
           winner_name: p.winnerName || ''
@@ -120,6 +151,7 @@ async function migrateData() {
   // 3. Vales & Prêmios
   if (localData.valesAndPrizes && localData.valesAndPrizes.length > 0) {
     const valesRows = localData.valesAndPrizes.map(v => ({
+      organization_id: DEFAULT_ORG_ID,
       id: v.id,
       customer_name: v.customerName,
       customer_phone: v.customerPhone || '',
@@ -137,12 +169,13 @@ async function migrateData() {
       exchange_notes: v.exchangeNotes || '',
       exchanged_at: v.exchangedAt || null
     }));
-    await supabasePost('vales_prizes', valesRows);
+    await supabasePost('vales_prizes', valesRows, 'organization_id,id');
 
     for (const v of localData.valesAndPrizes) {
       if (v.transactions && v.transactions.length > 0) {
         const txRows = v.transactions.map((tx, idx) => ({
-          id: `${v.id}-tx-${idx}-${Date.now()}`,
+          organization_id: DEFAULT_ORG_ID,
+          id: tx.id || `${v.id}-tx-${idx}-${Date.now()}`,
           vale_id: v.id,
           date: tx.date || new Date().toISOString().slice(0, 10),
           item: tx.item || '',
@@ -150,7 +183,7 @@ async function migrateData() {
           remaining_balance: tx.remainingBalance || 0,
           registered_by: tx.registeredBy || 'Eldorado Pesca'
         }));
-        await supabasePost('vale_transactions', txRows);
+        await supabasePost('vale_transactions', txRows, 'organization_id,id');
       }
     }
     console.log('✓ Vales, prêmios e histórico de baixas migrados');
@@ -159,6 +192,7 @@ async function migrateData() {
   // 4. Fishing Bookings
   if (localData.fishingBookings && localData.fishingBookings.length > 0) {
     const fishRows = localData.fishingBookings.map(b => ({
+      organization_id: DEFAULT_ORG_ID,
       id: b.id,
       client_name: b.clientName,
       client_phone: b.clientPhone || '',
@@ -167,7 +201,7 @@ async function migrateData() {
       prize_id: b.prizeId || null,
       start_date: b.startDate,
       end_date: b.endDate || b.startDate,
-      dates: JSON.stringify(b.dates || [b.startDate]),
+      dates: b.dates || [b.startDate],
       total_days: b.totalDays || 1,
       raffle_days: b.raffleDays || 1,
       extra_days: b.extraDays || 0,
@@ -186,13 +220,14 @@ async function migrateData() {
       guide_name: b.guideName || 'Thiago Witeck',
       status: b.status || 'scheduled'
     }));
-    await supabasePost('fishing_bookings', fishRows);
+    await supabasePost('fishing_bookings', fishRows, 'organization_id,id');
     console.log('✓ Agenda de Pescaria migrada');
   }
 
   // 5. Rancho Bookings
   if (localData.ranchoBookings && localData.ranchoBookings.length > 0) {
     const ranchoRows = localData.ranchoBookings.map(r => ({
+      organization_id: DEFAULT_ORG_ID,
       id: r.id,
       client_name: r.clientName,
       client_phone: r.clientPhone || '',
@@ -208,21 +243,34 @@ async function migrateData() {
       notes: r.notes || '',
       status: r.status || 'scheduled'
     }));
-    await supabasePost('rancho_bookings', ranchoRows);
+    await supabasePost('rancho_bookings', ranchoRows, 'organization_id,id');
     console.log('✓ Locações do Rancho migradas');
   }
 
   // 6. Eduardo Work Days
-  if (localData.eduardoWorkDays && Object.keys(localData.eduardoWorkDays).length > 0) {
-    const eduardoRows = Object.entries(localData.eduardoWorkDays).map(([date, data]) => ({
-      date: date,
-      type: typeof data === 'string' ? data : (data.type || 'off'),
-      hours_weight: data.hoursWeight || 1.0,
-      amount_due: data.amountDue || 0,
-      notes: data.notes || ''
-    }));
-    await supabasePost('eduardo_work_days', eduardoRows);
-    console.log('✓ Folha e Ponto do Eduardo migrados');
+  if (localData.eduardoWorkDays) {
+    const entries = Array.isArray(localData.eduardoWorkDays) 
+      ? localData.eduardoWorkDays 
+      : Object.entries(localData.eduardoWorkDays).map(([date, data]) => ({
+          date: date,
+          type: typeof data === 'string' ? data : (data.type || 'off'),
+          hoursWeight: data.hoursWeight || 1.0,
+          amountDue: data.amountDue || 0,
+          notes: data.notes || ''
+        }));
+
+    if (entries.length > 0) {
+      const eduardoRows = entries.map(d => ({
+        organization_id: DEFAULT_ORG_ID,
+        date: d.date,
+        type: d.type || 'off',
+        hours_weight: d.hoursWeight || 1.0,
+        amount_due: d.amountDue || 0,
+        notes: d.notes || ''
+      }));
+      await supabasePost('eduardo_work_days', eduardoRows, 'organization_id,date');
+      console.log('✓ Folha e Ponto do Eduardo migrados');
+    }
   }
 
   console.log('\n============================================================');

@@ -1,13 +1,25 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.env
+
 # Dependencies
 node_modules/
 .npm/
 
-# SQLite WAL temporary files
+# SQLite files & local database backups
+*.db
 *.db-wal
 *.db-shm
+backups/
 
 # Logs & temp
 *.log
 .DS_Store
 Thumbs.db
+
+# IDE & OS
+.vscode/
+
 

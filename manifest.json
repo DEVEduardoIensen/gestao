@@ -1,12 +1,15 @@
 {
-  "name": "Eldorado Pesca & Lake",
-  "short_name": "Eldorado Pesca",
-  "description": "Sistema de Gestão de Rifas, Vales, Prêmios e Ponto",
-  "start_url": "/",
+  "id": "eldorado-pesca-pwa",
+  "name": "Eldorado Pesca & Lake - Gestão PRO",
+  "short_name": "Eldorado PRO",
+  "description": "Sistema de Gestão de Rifas WhatsApp, Vales e Prêmios, Agenda de Pescaria e Ponto",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#060a13",
   "theme_color": "#060a13",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
       "src": "logo.webp",
@@ -18,6 +21,29 @@
       "src": "app_icon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
       "type": "image/x-icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Rifas WhatsApp",
+      "short_name": "Rifas",
+      "description": "Abrir grade de rifas",
+      "url": "./#rifas",
+      "icons": [{ "src": "logo.webp", "sizes": "192x192" }]
+    },
+    {
+      "name": "Vales e Prêmios",
+      "short_name": "Vales",
+      "description": "Controle de saldo e entregas",
+      "url": "./#vales",
+      "icons": [{ "src": "logo.webp", "sizes": "192x192" }]
+    },
+    {
+      "name": "Agenda de Pesca",
+      "short_name": "Pesca",
+      "description": "Calendário de reservas",
+      "url": "./#agenda",
+      "icons": [{ "src": "logo.webp", "sizes": "192x192" }]
     }
   ]
 }
