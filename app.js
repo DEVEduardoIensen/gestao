@@ -843,6 +843,34 @@ function onSelectActiveRaffle(raffleId) {
 /* ==========================================================================
    Render Orchestration
    ========================================================================== */
+function renderBackupView() {
+  const statRaffles = document.getElementById('statBackupRafflesCount');
+  const statCotas = document.getElementById('statBackupCotasCount');
+  const statVales = document.getElementById('statBackupValesCount');
+  const statBookings = document.getElementById('statBackupBookingsCount');
+
+  if (statRaffles) {
+    const rafflesCount = appData.raffles?.length || 0;
+    statRaffles.textContent = `${rafflesCount} ação(ões)`;
+  }
+  if (statCotas) {
+    let totalCotas = 0;
+    (appData.raffles || []).forEach(r => {
+      totalCotas += (r.numbers || []).length;
+    });
+    statCotas.textContent = `${totalCotas} cotas no sistema`;
+  }
+  if (statVales) {
+    const valesCount = appData.valesAndPrizes?.length || 0;
+    statVales.textContent = `${valesCount} registros`;
+  }
+  if (statBookings) {
+    const bookingsCount = (appData.fishingBookings?.length || 0) + (appData.ranchoBookings?.length || 0);
+    statBookings.textContent = `${bookingsCount} agendamentos`;
+  }
+}
+window.renderBackupView = renderBackupView;
+
 function renderAll() {
   updateGlobalStats();
   renderRaffleDropdown();
@@ -851,6 +879,7 @@ function renderAll() {
   renderFishingAgendaView();
   renderRanchoView();
   renderEduardoView();
+  renderBackupView();
 }
 
 /* ==========================================================================
@@ -1101,7 +1130,7 @@ function renderRaffleNumbersGrid() {
     if (wonPrize) {
       statusTag = `<span class="num-status-tag" style="color: var(--primary-gold); font-weight: 800;">${wonPrize.position}º Lugar</span>`;
     } else if (item.status === "paid") {
-      statusTag = `<span class="num-status-tag" style="color: var(--status-paid-text);">✅ Pago</span>`;
+      statusTag = `<span class="num-status-tag" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {
       statusTag = `<span class="num-status-tag" style="color: var(--primary-gold);">Reservado</span>`;
     }
@@ -5126,7 +5155,7 @@ async function markAllReservedAsPaid() {
     });
 
     renderRaffleView();
-    showToast(`${updatedList.length} números marcados como Pagos ✅!`, "success");
+    showToast(`${updatedList.length} números marcados como Pagos!`, "success");
   } else {
     showToast("Nenhum número reservado encontrado.", "warning");
   }

@@ -68,6 +68,9 @@
         <button class="nav-tab-btn" data-tab="tab-eduardo" id="tabBtnEduardo">
           Ponto do Eduardo
         </button>
+        <button class="nav-tab-btn" data-tab="tab-backup" id="tabBtnBackup">
+          Backup JSON
+        </button>
       </nav>
 
       <!-- Header Actions -->
@@ -77,7 +80,7 @@
           <span id="dbStatusText">Sincronizado</span>
         </div>
         <button class="btn btn-gold btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
-          👤 <span id="headerAuthLabel">Conta</span>
+          <span id="headerAuthLabel">Conta</span>
         </button>
       </div>
     </div>
@@ -86,7 +89,7 @@
   <!-- PWA Update Banner -->
   <div id="pwaUpdateBanner" class="pwa-update-banner" style="display: none;">
     <div class="pwa-update-content">
-      <span>🚀 <strong>Nova versão disponível!</strong> Atualize para carregar as melhorias mais recentes.</span>
+      <span><strong>Nova versão disponível!</strong> Atualize para carregar as melhorias mais recentes.</span>
       <div class="pwa-update-actions">
         <button class="btn btn-gold btn-xs" id="btnApplyPwaUpdate">Atualizar Agora</button>
         <button class="btn btn-secondary btn-xs" onclick="document.getElementById('pwaUpdateBanner').style.display='none'">Depois</button>
@@ -147,7 +150,7 @@
           <!-- Botão Excluir Rifa -->
           <button class="btn btn-danger" id="btnDeleteRaffle" title="Excluir Rifa Selecionada"
             style="font-size: 0.85rem; padding: 0.65rem 1rem;">
-            🗑️ Excluir Rifa
+            Excluir Rifa
           </button>
         </div>
       </div>
@@ -184,11 +187,11 @@
               </div>
               <div class="legend-item">
                 <span class="legend-dot paid"></span>
-                <span>Pago Pix (✅)</span>
+                <span>Pago</span>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="btnToggleMultiSelectGrid"
                 onclick="toggleGridMultiSelectMode()" title="Ativar seleção de várias cotas ao mesmo tempo na grade">
-                <span id="multiSelectToggleIcon">☑</span> <span id="multiSelectToggleLabel">Seleção Múltipla</span>
+                <span id="multiSelectToggleLabel">Seleção Múltipla</span>
               </button>
             </div>
 
@@ -254,7 +257,7 @@
               </button>
               <button class="btn btn-danger btn-sm"
                 style="width: 100%; justify-content: flex-start; margin-top: 0.25rem;" id="btnDeleteRaffleSide">
-                🗑️ Excluir esta Rifa / Ação
+                Excluir esta Rifa
               </button>
             </div>
           </div>
@@ -717,6 +720,83 @@
 
     </section>
 
+    <!-- ====================================================================
+         TAB 6: CENTRAL DE BACKUP E RESTAURAÇÃO JSON
+         ==================================================================== -->
+    <section class="tab-pane" id="tab-backup">
+      <div class="section-header">
+        <div class="section-title">
+          <h2>Backup e Restauração de Dados</h2>
+          <p>Exportação e importação de arquivo JSON com todas as rifas, cotas, vales, agendamentos e cadastros</p>
+        </div>
+      </div>
+
+      <!-- Stats do Backup -->
+      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+          <div class="stat-box-label">Ações / Rifas</div>
+          <div class="stat-box-value gold" id="statBackupRafflesCount">0 ações</div>
+          <div class="stat-box-sub" id="statBackupCotasCount">0 cotas no sistema</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Vales e Prêmios</div>
+          <div class="stat-box-value" id="statBackupValesCount">0 registros</div>
+          <div class="stat-box-sub">Créditos e trocas ativas</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Agenda & Rancho</div>
+          <div class="stat-box-value gold" id="statBackupBookingsCount">0 diárias</div>
+          <div class="stat-box-sub">Pesca e locações cadastradas</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+        <!-- Card Fazer Backup -->
+        <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <h3 style="color: var(--primary-gold); font-size: 1.25rem; margin-bottom: 0.75rem; font-weight: 700;">Fazer Backup Completo (Download JSON)</h3>
+            <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
+              Gera e salva no seu dispositivo um arquivo JSON seguro contendo todas as rifas ativas e finalizadas, lista completa de cotas com nomes e status de pagamento, carteira de vales, diárias do Eldorado Lake, locações do Rancho e folhas do Eduardo.
+            </p>
+          </div>
+          <button type="button" class="btn btn-gold" onclick="exportFullBackup()" style="width: 100%; padding: 0.9rem; font-weight: 700;">
+            Baixar Backup JSON
+          </button>
+        </div>
+
+        <!-- Card Restaurar Backup -->
+        <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <h3 style="color: var(--text-light); font-size: 1.25rem; margin-bottom: 0.75rem; font-weight: 700;">Restaurar Dados (Importar JSON)</h3>
+            <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
+              Selecione um arquivo de backup (.json) salvo anteriormente para restaurar os dados no aplicativo e sincronizar diretamente na nuvem.
+            </p>
+          </div>
+          <div>
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('inputTabRestoreFile').click()" style="width: 100%; padding: 0.9rem; font-weight: 700; border-color: var(--primary-gold); color: var(--primary-gold);">
+              Selecionar Arquivo JSON para Restaurar
+            </button>
+            <input type="file" id="inputTabRestoreFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Informativo -->
+      <div style="background: rgba(229, 193, 88, 0.05); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: var(--radius-md); padding: 1.25rem;">
+        <h4 style="color: var(--primary-gold); font-size: 0.95rem; margin-bottom: 0.5rem; font-weight: 700;">O que está incluso no arquivo de backup?</h4>
+        <ul style="color: var(--text-muted); font-size: 0.82rem; line-height: 1.6; margin: 0; padding-left: 1.2rem;">
+          <li>Todas as ações de rifas cadastradas, preços, regras e mensagens WhatsApp.</li>
+          <li>Todas as cotas de cada ação com nomes de compradores e status (Pago ou Reservado).</li>
+          <li>Ganhadores, premiações e posições sorteadas.</li>
+          <li>Carteira de vales-compras, saldos e histórico de retiradas.</li>
+          <li>Agendamentos de pesca do Eldorado Lake e locações do Rancho.</li>
+          <li>Registros de diárias e ponto de trabalho do Eduardo.</li>
+        </ul>
+      </div>
+    </section>
+
   </main>
 
   <!-- ====================================================================
@@ -806,7 +886,7 @@
               Reservado
             </button>
             <button type="button" class="status-toggle-btn" id="btnStatusPaid" onclick="selectEditStatus('paid')">
-              Pago Pix (✅)
+              Pago
             </button>
           </div>
         </div>
@@ -1752,7 +1832,7 @@
         
         <!-- Opção 1: Celular -->
         <div class="hub-option-card" onclick="triggerInstallApp('mobile')">
-          <div class="hub-option-icon">📱</div>
+          <div class="hub-option-icon">App</div>
           <div class="hub-option-info">
             <div class="hub-option-title-row">
               <h3 class="hub-option-title">Instalar no Celular</h3>
@@ -1765,12 +1845,12 @@
 
         <!-- Guia iOS retrátil -->
         <div id="iosInstallGuide" style="display: none; margin-top: -0.5rem; margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(255,215,0,0.1); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); font-size: 0.8rem; color: #ffffff; line-height: 1.45;">
-          📲 <strong>No iPhone / Safari:</strong> Toque no botão de <strong>Compartilhar (⎋)</strong> na barra inferior e escolha <strong>"Adicionar à Tela de Início" (+)</strong>.
+          <strong>No iPhone / Safari:</strong> Toque no botão de <strong>Compartilhar</strong> na barra inferior e escolha <strong>"Adicionar à Tela de Início"</strong>.
         </div>
 
         <!-- Opção 2: Computador -->
         <div class="hub-option-card" onclick="triggerInstallApp('desktop')">
-          <div class="hub-option-icon">💻</div>
+          <div class="hub-option-icon">PC</div>
           <div class="hub-option-info">
             <div class="hub-option-title-row">
               <h3 class="hub-option-title">Instalar no Computador</h3>
@@ -1783,7 +1863,7 @@
 
         <!-- Opção 3: Continuar na Web -->
         <div class="hub-option-card" onclick="proceedToDashboard()">
-          <div class="hub-option-icon">🌐</div>
+          <div class="hub-option-icon">Web</div>
           <div class="hub-option-info">
             <div class="hub-option-title-row">
               <h3 class="hub-option-title">Continuar no Navegador</h3>
@@ -1796,16 +1876,6 @@
 
       </div>
 
-      <!-- Backup JSON Rápido -->
-      <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-        <span style="font-size: 0.75rem; color: var(--text-muted);">💾 Sincronização em nuvem ativa.</span>
-        <div style="display: flex; gap: 0.5rem;">
-          <button type="button" class="btn-text-gold" style="font-size: 0.75rem;" onclick="triggerQuickBackupDownload()">📥 Baixar Backup JSON</button>
-          <button type="button" class="btn-text-gold" style="font-size: 0.75rem;" onclick="document.getElementById('inputRestorePostHubFile').click()">📤 Restaurar JSON</button>
-          <input type="file" id="inputRestorePostHubFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event)">
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -1813,7 +1883,7 @@
   <div class="modal-overlay" id="modalAuth" style="display: none;">
     <div class="modal-container" style="max-width: 440px;">
       <div class="modal-header">
-        <h3 class="modal-title" id="authModalTitle">👤 Acesso ao Sistema</h3>
+        <h3 class="modal-title" id="authModalTitle">Acesso ao Sistema</h3>
         <button class="modal-close" onclick="closeModal('modalAuth')">✕</button>
       </div>
       <div class="modal-body">
@@ -1825,7 +1895,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">🏢 Organização Ativa (Multi-Tenant)</label>
+            <label class="form-label">Organização Ativa (Multi-Tenant)</label>
             <select id="selectUserOrganization" class="form-select" onchange="onSwitchOrganization(this.value)">
               <!-- Renderizado dinamicamente pelo JS -->
             </select>
@@ -1836,27 +1906,8 @@
 
           <div style="margin-top: 1rem; margin-bottom: 1rem;">
             <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="openInviteMemberModal()">
-              👥 Convidar Funcionário / Membro
+              Convidar Funcionário / Membro
             </button>
-          </div>
-
-          <!-- Backup & Restauração JSON -->
-          <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-light);">
-            <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
-              💾 Backup e Restauração de Dados
-            </div>
-            <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem;">
-              Salve uma cópia completa de segurança em arquivo JSON ou restaure dados anteriores.
-            </p>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-              <button type="button" class="btn btn-gold btn-sm" onclick="exportFullBackup()" style="width: 100%;">
-                📥 Baixar Backup JSON
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inputAuthModalRestoreFile').click()" style="width: 100%; border-color: var(--border-gold);">
-                📤 Restaurar JSON
-              </button>
-              <input type="file" id="inputAuthModalRestoreFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event); closeModal('modalAuth');">
-            </div>
           </div>
 
           <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
@@ -1891,7 +1942,12 @@
 
             <div class="form-group" id="groupAuthPassword">
               <label class="form-label">Senha *</label>
-              <input type="password" id="authPasswordInput" class="form-input" placeholder="••••••••" minlength="6">
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="authPasswordInput" class="form-input" placeholder="••••••••" minlength="6" style="padding-right: 44px;">
+                <button type="button" onclick="togglePasswordVisibility('authPasswordInput', this)" style="position: absolute; right: 10px; background: transparent; border: none; cursor: pointer; color: var(--text-dim); font-size: 1.15rem; padding: 4px; display: flex; align-items: center; justify-content: center; touch-action: manipulation;" title="Mostrar / Ocultar Senha">
+                  👁️
+                </button>
+              </div>
             </div>
 
             <div id="authErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(255, 107, 107, 0.1); border-radius: var(--radius-sm);"></div>
