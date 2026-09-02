@@ -1699,7 +1699,12 @@
 
         <div class="form-group" id="groupGatePassword">
           <label class="form-label">Senha *</label>
-          <input type="password" id="gatePasswordInput" class="form-input" placeholder="••••••••" minlength="6" autocomplete="current-password" required>
+          <div style="position: relative; display: flex; align-items: center;">
+            <input type="password" id="gatePasswordInput" class="form-input" placeholder="••••••••" minlength="6" autocomplete="current-password" required style="padding-right: 44px;">
+            <button type="button" id="btnTogglePasswordVis" onclick="togglePasswordVisibility('gatePasswordInput', this)" style="position: absolute; right: 10px; background: transparent; border: none; cursor: pointer; color: var(--text-dim); font-size: 1.15rem; padding: 4px; display: flex; align-items: center; justify-content: center; touch-action: manipulation;" title="Mostrar / Ocultar Senha">
+              👁️
+            </button>
+          </div>
         </div>
 
         <div id="gateErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.6rem; background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); border-radius: var(--radius-sm);"></div>

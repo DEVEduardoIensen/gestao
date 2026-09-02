@@ -138,7 +138,7 @@ async function initAppState() {
   if (gateScreen) gateScreen.style.display = "none";
   const orgId = window.authManager.getOrganizationId();
 
-  // 3. Carrega primeiro do cache local IndexedDB exclusivo deste tenant
+  // 3. Renderiza IMEDIATAMENTE do cache local IndexedDB exclusivo deste tenant (< 30ms)
   let loadedFromLocal = false;
   if (window.localDB) {
     try {
@@ -146,7 +146,6 @@ async function initAppState() {
       if (localData && (localData.raffles || localData.valesAndPrizes || localData.fishingBookings || localData.ranchoBookings)) {
         appData = sanitizeAppData(localData);
         loadedFromLocal = true;
-        console.log(`[Offline-First] Dados do tenant ${orgId} carregados do IndexedDB com sucesso.`);
       }
     } catch (err) {
       console.warn('[Offline-First] Erro ao ler IndexedDB:', err);
@@ -174,23 +173,34 @@ async function initAppState() {
     });
   }
 
-  // 4. Se estiver online e com Supabase conectado, sincroniza em segundo plano
+  // Define rifa ativa imediatamente para renderização rápida
+  if (appData.raffles && appData.raffles.length > 0) {
+    const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
+    activeRaffleId = active.id;
+  } else {
+    activeRaffleId = null;
+  }
+
+  // 4. Sincronização em background transparente (não bloqueia a renderização em 4G)
   if (navigator.onLine && window.syncEngine && window.supabaseClient) {
-    try {
-      updateDbStatusBadge('syncing');
-      const remoteData = await window.syncEngine.fetchRemoteData(orgId);
+    updateDbStatusBadge('syncing');
+    window.syncEngine.fetchRemoteData(orgId).then(async (remoteData) => {
       if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays)) {
         appData = sanitizeAppData(remoteData);
+        if (appData.raffles && appData.raffles.length > 0) {
+          const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
+          activeRaffleId = active.id;
+        }
         if (window.localDB) {
           await window.localDB.saveFullAppData(appData, orgId);
         }
-        console.log('[Supabase] Dados sincronizados da nuvem com sucesso!');
+        renderAll();
       }
       updateDbStatusBadge('synced');
-    } catch (err) {
-      console.warn('[Supabase] Falha ao sincronizar com nuvem:', err);
+    }).catch(err => {
+      console.warn('[Supabase] Falha no background sync:', err);
       updateDbStatusBadge('offline');
-    }
+    });
   } else {
     updateDbStatusBadge(navigator.onLine ? 'synced' : 'offline');
   }
@@ -206,13 +216,6 @@ async function initAppState() {
   // Verifica se há pedido de recuperação de senha ativo
   if (window.authManager && window.authManager.isPasswordRecovery) {
     openModal('modalResetPassword');
-  }
-
-  if (appData.raffles && appData.raffles.length > 0) {
-    const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
-    activeRaffleId = active.id;
-  } else {
-    activeRaffleId = null;
   }
 }
 
@@ -439,6 +442,19 @@ function triggerInstallApp(type) {
     showToast('Para instalar: clique no ícone (+) ou (Instalar) na barra de endereços do seu navegador.', 'info');
   }
 }
+
+// Controle de Visibilidade de Senha
+window.togglePasswordVisibility = function(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (btn) btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    if (btn) btn.textContent = '👁️';
+  }
+};
 
 // Controle do Login e Recuperação de Senha
 let isGateRecoverMode = false;
