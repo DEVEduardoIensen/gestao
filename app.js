@@ -5425,16 +5425,18 @@ function setupEventListeners() {
    Helper Utilities
    ========================================================================= */
 function openModal(id) {
-  // Fecha e remove a classe 'open' de absolutamente todos os outros modais para isolamento total
-  document.querySelectorAll(".modal-backdrop").forEach(m => {
+  // Fecha e esconde todos os outros modais para isolamento total
+  document.querySelectorAll(".modal-backdrop, .modal-overlay").forEach(m => {
     if (m.id !== id) {
       m.classList.remove("open");
+      m.style.display = "none";
     }
   });
 
   const modal = document.getElementById(id);
   if (modal) {
     modal.classList.add("open");
+    modal.style.display = "flex";
 
     // Foca automaticamente no primeiro campo editável de forma confiável
     setTimeout(() => {
@@ -5452,9 +5454,15 @@ function openModal(id) {
 function closeModal(id) {
   if (id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.remove("open");
+    if (modal) {
+      modal.classList.remove("open");
+      modal.style.display = "none";
+    }
   } else {
-    document.querySelectorAll(".modal-backdrop").forEach(m => m.classList.remove("open"));
+    document.querySelectorAll(".modal-backdrop, .modal-overlay").forEach(m => {
+      m.classList.remove("open");
+      m.style.display = "none";
+    });
   }
 }
 
@@ -5463,17 +5471,19 @@ document.addEventListener("click", (e) => {
   if (!e.target) return;
 
   // 1. Clicou no backdrop escuro fora da janela
-  if (e.target.classList && e.target.classList.contains("modal-backdrop")) {
+  if (e.target.classList && (e.target.classList.contains("modal-backdrop") || e.target.classList.contains("modal-overlay"))) {
     e.target.classList.remove("open");
+    e.target.style.display = "none";
     return;
   }
 
   // 2. Clicou no botão de fechar (X)
-  const closeBtn = e.target.closest(".modal-close-btn");
+  const closeBtn = e.target.closest(".modal-close-btn, .modal-close");
   if (closeBtn) {
-    const parentModal = closeBtn.closest(".modal-backdrop");
+    const parentModal = closeBtn.closest(".modal-backdrop, .modal-overlay");
     if (parentModal) {
       parentModal.classList.remove("open");
+      parentModal.style.display = "none";
     } else {
       closeModal();
     }
@@ -5483,7 +5493,7 @@ document.addEventListener("click", (e) => {
 // Fechar modais ao pressionar a tecla ESC
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    document.querySelectorAll(".modal-backdrop").forEach(m => m.classList.remove("open"));
+    closeModal();
   }
 });
 

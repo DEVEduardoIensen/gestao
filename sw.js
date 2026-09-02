@@ -1,9 +1,10 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.0.0 — Cache do App Shell com atualização resiliente (Offline-First)
+ * Versão 2.2.0 — Cache do App Shell com atualização resiliente (Offline-First)
+ * NUNCA apaga IndexedDB, dados locais ou Outbox durante atualizações.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.1.0';
+const CACHE_NAME = 'eldorado-pwa-v2.2.0';
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
@@ -19,6 +20,9 @@ const APP_SHELL_ASSETS = [
   './sample-data.js',
   './manifest.json',
   './logo.webp',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png',
   './app_icon.ico',
   './gremio_bg.jpg'
 ];
@@ -36,7 +40,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Ativação: limpa apenas versões antigas do Cache Storage (NUNCA toca no IndexedDB)
+// Ativação: limpa apenas versões antigas do Cache Storage (NUNCA toca no IndexedDB / Outbox)
 self.addEventListener('activate', (event) => {
   console.log('[Service Worker] Ativando versão:', CACHE_NAME);
   event.waitUntil(
@@ -78,7 +82,7 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // Se offline e requisição falhar, tenta responder com a página principal
+        // Se offline e requisição falhar, responde com a página principal
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html') || caches.match('./');
         }

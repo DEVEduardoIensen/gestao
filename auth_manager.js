@@ -1,6 +1,6 @@
 /**
- * Eldorado Pesca & Lake - Supabase Auth & Multi-Tenant Manager (v2.1)
- * Gerencia autenticação de usuários, persistência de sessão, tokens e isolamento estrito de organizações.
+ * Eldorado Pesca & Lake - Supabase Auth & Multi-Tenant Manager (v2.2)
+ * Gerencia autenticação de usuários, persistência de sessão, tokens, isolamento estrito e operação 100% offline.
  */
 
 class AuthManager {
@@ -9,7 +9,7 @@ class AuthManager {
     this.session = null;
     this.user = null;
     this.organizations = [];
-    this.currentOrg = null; // Sem fallback para UUID hardcoded
+    this.currentOrg = null;
     this.listeners = [];
     this.isPasswordRecovery = false;
     this.init();
@@ -49,6 +49,7 @@ class AuthManager {
           this.currentOrg = null;
           this.organizations = [];
           localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
+          localStorage.removeItem('ELDORADO_CACHED_ORGS');
         }
 
         this.notifyListeners(event, session);
@@ -77,9 +78,32 @@ class AuthManager {
       }
       return this.session;
     } catch (e) {
-      console.warn('[AuthManager] Falha ao recuperar sessão inicial:', e);
-      return null;
+      console.warn('[AuthManager] Falha ao recuperar sessão inicial via rede. Tentando cache offline:', e);
+      // Fallback offline se já existe usuário ou sessão local
+      if (this.user) {
+        this.restoreCachedOrganizations();
+      }
+      return this.session;
     }
+  }
+
+  restoreCachedOrganizations() {
+    try {
+      const cachedOrgsStr = localStorage.getItem('ELDORADO_CACHED_ORGS');
+      if (cachedOrgsStr) {
+        const cachedOrgs = JSON.parse(cachedOrgsStr);
+        if (Array.isArray(cachedOrgs) && cachedOrgs.length > 0) {
+          this.organizations = cachedOrgs;
+          const savedOrgId = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+          this.currentOrg = this.organizations.find(o => o.id === savedOrgId) || this.organizations[0];
+          console.log('[AuthManager] Organização recuperada do cache offline com sucesso:', this.currentOrg.name);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('[AuthManager] Erro ao restaurar cache offline de organização:', err);
+    }
+    return false;
   }
 
   async loadUserOrganizations() {
@@ -100,7 +124,8 @@ class AuthManager {
         .eq('user_id', this.user.id);
 
       if (error) {
-        console.warn('[AuthManager] Erro ao carregar organizações:', error);
+        console.warn('[AuthManager] Erro ao carregar organizações remotas. Tentando cache:', error);
+        if (this.restoreCachedOrganizations()) return;
         return;
       }
 
@@ -115,15 +140,22 @@ class AuthManager {
         const savedOrgId = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
         const match = this.organizations.find(o => o.id === savedOrgId) || this.organizations[0];
         this.currentOrg = match;
+        
+        // Persiste cache para abertura offline no celular
         localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
+        localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
       } else {
-        this.organizations = [];
-        this.currentOrg = null;
-        localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
+        // Se usuário autenticado mas tabela remota vazia, tenta cache antes de zerar
+        if (!this.restoreCachedOrganizations()) {
+          this.organizations = [];
+          this.currentOrg = null;
+          localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
+          localStorage.removeItem('ELDORADO_CACHED_ORGS');
+        }
       }
     } catch (err) {
-      console.warn('[AuthManager] Erro ao buscar tenants:', err);
-      this.currentOrg = null;
+      console.warn('[AuthManager] Falha de conexão ao buscar organizações. Acionando cache offline:', err);
+      this.restoreCachedOrganizations();
     }
   }
 
@@ -203,6 +235,7 @@ class AuthManager {
     this.currentOrg = null;
     this.isPasswordRecovery = false;
     localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
+    localStorage.removeItem('ELDORADO_CACHED_ORGS');
   }
 
   getOrganizationId() {
