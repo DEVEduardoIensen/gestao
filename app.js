@@ -132,10 +132,19 @@ async function initAppState() {
       openModal('modalResetPassword');
     }
     return;
+  // Usuário autenticado: esconde tela de bloqueio inicial
+  if (gateScreen) gateScreen.style.display = "none";
+
+  // Se estiver acessando pelo navegador comum e ainda não tiver clicado para entrar no painel nesta sessão, abre a tela de direcionamento com os 3 botões
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isPostLoginDone = sessionStorage.getItem('ELDORADO_POST_LOGIN_DONE') === 'true';
+
+  if (!isStandalone && !isPostLoginDone) {
+    openAccessHub();
+  } else {
+    proceedToDashboard();
   }
 
-  // Usuário autenticado: libera tela principal
-  if (gateScreen) gateScreen.style.display = "none";
   const orgId = window.authManager.getOrganizationId();
 
   // 3. Renderiza IMEDIATAMENTE do cache local IndexedDB exclusivo deste tenant (< 30ms)
@@ -414,6 +423,7 @@ function triggerInstallApp(type) {
 
   if (isStandalone) {
     showToast('Você já está utilizando a versão instalada!', 'info');
+    proceedToDashboard();
     return;
   }
 
@@ -433,15 +443,19 @@ function triggerInstallApp(type) {
     deferredPwaPrompt.userChoice.then((choiceResult) => {
       if (choiceResult.outcome === 'accepted') {
         showToast('Instalando Eldorado Pesca no seu dispositivo...', 'success');
-        closeModal('modalAccessHub');
+        proceedToDashboard();
       }
       deferredPwaPrompt = null;
     });
   } else {
-    // Se o navegador não disparou o prompt automático ainda (ex: desktop Chrome/Edge)
-    showToast('Para instalar: clique no ícone (+) ou (Instalar) na barra de endereços do seu navegador.', 'info');
+    if (type === 'mobile') {
+      showToast('No Chrome do celular: Toque nos 3 pontinhos (⋮) no topo e escolha "Instalar aplicativo" ou "Adicionar à tela inicial".', 'info', 8000);
+    } else {
+      showToast('No computador: Clique no ícone de instalar (computador com seta ou +) na barra de endereços do Chrome/Edge.', 'info', 8000);
+    }
   }
 }
+window.triggerInstallApp = triggerInstallApp;
 
 // Controle de Visibilidade de Senha
 window.togglePasswordVisibility = function(inputId, btn) {
@@ -482,12 +496,27 @@ function toggleGateRecover() {
     if (linkToggle) linkToggle.textContent = 'Esqueceu sua senha? Clique aqui';
   }
 }
+window.toggleGateRecover = toggleGateRecover;
+
+function openAccessHub() {
+  const postHub = document.getElementById('postLoginHubScreen');
+  if (postHub) {
+    const org = window.authManager ? window.authManager.getCurrentOrganization() : null;
+    const orgNameEl = document.getElementById('hubWelcomeOrgName');
+    if (orgNameEl && org) {
+      orgNameEl.innerHTML = `${escapeHtml(org.name || 'ELDORADO PESCA')} <span class="brand-gold-tag">PRO</span>`;
+    }
+    postHub.style.display = 'flex';
+  }
+}
+window.openAccessHub = openAccessHub;
 
 function proceedToDashboard() {
   const postHub = document.getElementById('postLoginHubScreen');
   if (postHub) postHub.style.display = 'none';
   sessionStorage.setItem('ELDORADO_POST_LOGIN_DONE', 'true');
 }
+window.proceedToDashboard = proceedToDashboard;
 
 async function handleGateAuthSubmit(e) {
   e.preventDefault();
