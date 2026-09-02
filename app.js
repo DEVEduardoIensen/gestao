@@ -389,48 +389,88 @@ function switchAuthTab(tab) {
   }
 }
 
-let currentGateTab = 'login';
-function switchGateTab(tab) {
-  currentGateTab = tab;
-  ['tabGateLogin', 'tabGateRegister', 'tabGateRecover'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('active');
-  });
+// ============================================================================
+// PWA Installation Prompt Manager & Multidevice Access
+// ============================================================================
+let deferredPwaPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPwaPrompt = e;
+  console.log('[PWA] Evento beforeinstallprompt capturado com sucesso.');
+});
 
-  const activeBtn = document.getElementById(tab === 'login' ? 'tabGateLogin' : (tab === 'register' ? 'tabGateRegister' : 'tabGateRecover'));
-  if (activeBtn) activeBtn.classList.add('active');
+window.addEventListener('appinstalled', () => {
+  deferredPwaPrompt = null;
+  console.log('[PWA] Aplicativo instalado com sucesso no dispositivo!');
+  showToast('🎉 Eldorado Pesca instalado com sucesso!', 'success');
+});
 
-  const orgGroup = document.getElementById('groupGateOrgName');
-  const inviteGroup = document.getElementById('groupGateInviteToken');
+function triggerInstallApp(type) {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  if (isStandalone) {
+    showToast('Você já está utilizando a versão instalada!', 'info');
+    return;
+  }
+
+  if (isIOS) {
+    const guide = document.getElementById('iosInstallGuide');
+    if (guide) {
+      guide.style.display = guide.style.display === 'none' ? 'block' : 'none';
+      if (guide.style.display === 'block') {
+        guide.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+    return;
+  }
+
+  if (deferredPwaPrompt) {
+    deferredPwaPrompt.prompt();
+    deferredPwaPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        showToast('Instalando Eldorado Pesca no seu dispositivo...', 'success');
+        closeModal('modalAccessHub');
+      }
+      deferredPwaPrompt = null;
+    });
+  } else {
+    // Se o navegador não disparou o prompt automático ainda (ex: desktop Chrome/Edge)
+    showToast('Para instalar: clique no ícone (+) ou (Instalar) na barra de endereços do seu navegador.', 'info');
+  }
+}
+
+// Controle do Login e Recuperação de Senha
+let isGateRecoverMode = false;
+function toggleGateRecover() {
+  isGateRecoverMode = !isGateRecoverMode;
   const passGroup = document.getElementById('groupGatePassword');
+  const passInput = document.getElementById('gatePasswordInput');
   const btnSubmit = document.getElementById('btnSubmitGateAuth');
+  const subtitle = document.getElementById('gateSubtitleText');
+  const linkToggle = document.getElementById('linkToggleRecover');
   const errDiv = document.getElementById('gateErrorMessage');
   if (errDiv) errDiv.style.display = 'none';
 
-  if (tab === 'login') {
-    if (orgGroup) orgGroup.style.display = 'none';
-    if (inviteGroup) inviteGroup.style.display = 'none';
-    if (passGroup) passGroup.style.display = 'block';
-    if (btnSubmit) btnSubmit.textContent = 'Entrar no Sistema';
-  } else if (tab === 'register') {
-    if (orgGroup) orgGroup.style.display = 'block';
-    if (inviteGroup) inviteGroup.style.display = 'block';
-    if (passGroup) passGroup.style.display = 'block';
-    if (btnSubmit) btnSubmit.textContent = 'Criar Minha Conta';
-  } else {
-    if (orgGroup) orgGroup.style.display = 'none';
-    if (inviteGroup) inviteGroup.style.display = 'none';
+  if (isGateRecoverMode) {
     if (passGroup) passGroup.style.display = 'none';
-    if (btnSubmit) btnSubmit.textContent = 'Enviar Link de Recuperação';
+    if (passInput) passInput.removeAttribute('required');
+    if (btnSubmit) btnSubmit.textContent = 'Enviar Link de Recuperação ➔';
+    if (subtitle) subtitle.textContent = 'Digite seu e-mail para receber as instruções de recuperação';
+    if (linkToggle) linkToggle.textContent = 'Voltar para a tela de login';
+  } else {
+    if (passGroup) passGroup.style.display = 'block';
+    if (passInput) passInput.setAttribute('required', 'required');
+    if (btnSubmit) btnSubmit.textContent = 'Entrar no Sistema ➔';
+    if (subtitle) subtitle.textContent = 'Acesse o sistema de gestão com suas credenciais';
+    if (linkToggle) linkToggle.textContent = 'Esqueceu sua senha? Clique aqui';
   }
 }
 
 async function handleGateAuthSubmit(e) {
   e.preventDefault();
   const email = document.getElementById('gateEmailInput').value.trim();
-  const password = document.getElementById('gatePasswordInput').value;
-  const orgName = document.getElementById('gateOrgNameInput') ? document.getElementById('gateOrgNameInput').value.trim() : '';
-  const inviteToken = document.getElementById('gateInviteTokenInput') ? document.getElementById('gateInviteTokenInput').value.trim() : '';
+  const password = document.getElementById('gatePasswordInput') ? document.getElementById('gatePasswordInput').value : '';
   const errDiv = document.getElementById('gateErrorMessage');
   const btnSubmit = document.getElementById('btnSubmitGateAuth');
 
@@ -438,15 +478,20 @@ async function handleGateAuthSubmit(e) {
   if (btnSubmit) btnSubmit.disabled = true;
 
   try {
-    if (currentGateTab === 'login') {
+    if (!isGateRecoverMode) {
       await window.authManager.login(email, password);
       showToast('Login realizado com sucesso!', 'success');
-    } else if (currentGateTab === 'register') {
-      await window.authManager.register(email, password, orgName, inviteToken);
-      showToast('Conta criada com sucesso! Acesse sua conta.', 'success');
+      
+      // Se não estiver em modo standalone (PWA instalado), abre opcionalmente a Central de Acessos
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (!isStandalone && !sessionStorage.getItem('ELDORADO_HUB_SHOWN')) {
+        sessionStorage.setItem('ELDORADO_HUB_SHOWN', 'true');
+        setTimeout(() => openModal('modalAccessHub'), 400);
+      }
     } else {
       await window.authManager.recoverPassword(email);
-      showToast('Link de recuperação enviado para seu e-mail!', 'info');
+      showToast('Link de recuperação enviado! Verifique seu e-mail.', 'info');
+      toggleGateRecover();
     }
     await initAppState();
     renderAll();

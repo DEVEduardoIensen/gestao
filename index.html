@@ -76,7 +76,10 @@
           <span class="status-dot"></span>
           <span id="dbStatusText">Sincronizado</span>
         </div>
-        <button class="btn btn-gold btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
+        <button class="btn btn-gold btn-sm" id="btnHeaderInstallHub" onclick="openModal('modalAccessHub')" title="Instalar no Celular, Computador ou Fazer Backup">
+          📲 <span id="headerInstallLabel">Instalar</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
           👤 <span id="headerAuthLabel">Conta</span>
         </button>
       </div>
@@ -1688,26 +1691,10 @@
       <div class="auth-gate-header">
         <img src="logo.webp" alt="Eldorado Pesca" class="auth-gate-logo">
         <h2 class="auth-gate-title">ELDORADO PESCA <span class="brand-gold-tag">PRO</span></h2>
-        <p class="auth-gate-subtitle">Faça login para acessar o sistema de gestão</p>
-      </div>
-
-      <div class="auth-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-light); padding-bottom: 0.5rem;">
-        <button type="button" class="auth-tab-btn active" id="tabGateLogin" onclick="switchGateTab('login')">Entrar</button>
-        <button type="button" class="auth-tab-btn" id="tabGateRegister" onclick="switchGateTab('register')">Criar Conta</button>
-        <button type="button" class="auth-tab-btn" id="tabGateRecover" onclick="switchGateTab('recover')">Recuperar</button>
+        <p class="auth-gate-subtitle" id="gateSubtitleText">Acesse o sistema de gestão com suas credenciais</p>
       </div>
 
       <form id="gateAuthForm" onsubmit="handleGateAuthSubmit(event)">
-        <div class="form-group" id="groupGateOrgName" style="display: none;">
-          <label class="form-label">Nome da sua Empresa / Organização *</label>
-          <input type="text" id="gateOrgNameInput" class="form-input" placeholder="Ex: Minha Loja de Pesca">
-        </div>
-
-        <div class="form-group" id="groupGateInviteToken" style="display: none;">
-          <label class="form-label">Código de Convite (Opcional - se recebeu da sua empresa)</label>
-          <input type="text" id="gateInviteTokenInput" class="form-input" placeholder="Ex: a1b2c3d4...">
-        </div>
-
         <div class="form-group">
           <label class="form-label">E-mail *</label>
           <input type="email" id="gateEmailInput" class="form-input" placeholder="seuemail@exemplo.com" required autocomplete="email">
@@ -1715,15 +1702,121 @@
 
         <div class="form-group" id="groupGatePassword">
           <label class="form-label">Senha *</label>
-          <input type="password" id="gatePasswordInput" class="form-input" placeholder="••••••••" minlength="6" autocomplete="current-password">
+          <input type="password" id="gatePasswordInput" class="form-input" placeholder="••••••••" minlength="6" autocomplete="current-password" required>
         </div>
 
         <div id="gateErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.6rem; background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); border-radius: var(--radius-sm);"></div>
 
-        <button type="submit" class="btn btn-gold" style="width: 100%; margin-top: 0.5rem;" id="btnSubmitGateAuth">
-          Entrar no Sistema
+        <button type="submit" class="btn btn-gold" style="width: 100%; margin-top: 0.25rem; font-weight: 700; padding: 0.85rem;" id="btnSubmitGateAuth">
+          Entrar no Sistema ➔
         </button>
+
+        <div style="margin-top: 1.25rem; text-align: center; font-size: 0.82rem;">
+          <a href="javascript:void(0)" id="linkToggleRecover" onclick="toggleGateRecover()" style="color: var(--primary-gold); text-decoration: none; font-weight: 600;">
+            Esqueceu sua senha? Clique aqui
+          </a>
+        </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Central de Instalação & Acesso Multidispositivo (PWA Mobile, Desktop, Web & Backup) -->
+  <div class="modal-overlay" id="modalAccessHub" style="display: none;">
+    <div class="modal-container" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📲 Central de Instalação & Acessos</h3>
+        <button class="modal-close" onclick="closeModal('modalAccessHub')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-dim); font-size: 0.88rem; margin-top: 0; margin-bottom: 1.25rem;">
+          Utilize o sistema no seu celular, computador ou direto pelo navegador. Seus dados sincronizam na nuvem automaticamente.
+        </p>
+
+        <!-- Grid de Opções de Acesso -->
+        <div class="access-hub-grid">
+          
+          <!-- Card 1: Celular / Mobile PWA -->
+          <div class="access-card">
+            <div class="access-card-header">
+              <div class="access-card-icon">📱</div>
+              <div>
+                <h4 class="access-card-title">Instalar no Celular</h4>
+                <span class="access-badge badge-mobile">Android & iPhone</span>
+              </div>
+            </div>
+            <p class="access-card-desc">
+              Instale o aplicativo na sua tela de início. Abre em tela cheia sem barra de navegador e funciona 100% offline.
+            </p>
+            <button class="btn btn-gold btn-sm" style="width: 100%; margin-top: auto;" id="btnTriggerInstallMobile" onclick="triggerInstallApp('mobile')">
+              📲 Instalar no Celular
+            </button>
+            <div id="iosInstallGuide" style="display: none; margin-top: 0.6rem; padding: 0.6rem; background: rgba(255,215,0,0.08); border-radius: var(--radius-sm); font-size: 0.75rem; color: var(--text-light); line-height: 1.4;">
+              <strong>No iPhone / Safari:</strong> Toque no botão de Compartilhar (⎋) na barra inferior do Safari e selecione <strong>"Adicionar à Tela de Início" (+)</strong>.
+            </div>
+          </div>
+
+          <!-- Card 2: Computador / Desktop App -->
+          <div class="access-card">
+            <div class="access-card-header">
+              <div class="access-card-icon">💻</div>
+              <div>
+                <h4 class="access-card-title">Instalar no Computador</h4>
+                <span class="access-badge badge-desktop">Windows & Mac</span>
+              </div>
+            </div>
+            <p class="access-card-desc">
+              Instale na barra de tarefas do Windows. Abre em janela limpa e ultra rápida, ideal para uso diário no escritório.
+            </p>
+            <button class="btn btn-gold btn-sm" style="width: 100%; margin-top: auto;" id="btnTriggerInstallDesktop" onclick="triggerInstallApp('desktop')">
+              💻 Instalar no Computador
+            </button>
+          </div>
+
+          <!-- Card 3: Navegador Web Imediato -->
+          <div class="access-card">
+            <div class="access-card-header">
+              <div class="access-card-icon">🌐</div>
+              <div>
+                <h4 class="access-card-title">Continuar na Web</h4>
+                <span class="access-badge badge-web">Qualquer Dispositivo</span>
+              </div>
+            </div>
+            <p class="access-card-desc">
+              Acesso instantâneo em qualquer navegador. Ideal para emergências caso precise usar o celular de outra pessoa.
+            </p>
+            <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: auto;" onclick="closeModal('modalAccessHub')">
+              🌐 Acessar Painel Agora
+            </button>
+          </div>
+
+          <!-- Card 4: Backup de Segurança JSON -->
+          <div class="access-card">
+            <div class="access-card-header">
+              <div class="access-card-icon">💾</div>
+              <div>
+                <h4 class="access-card-title">Backup & Restauração</h4>
+                <span class="access-badge badge-backup">Arquivo JSON</span>
+              </div>
+            </div>
+            <p class="access-card-desc">
+              Baixe uma cópia completa de segurança em arquivo JSON para guardar no celular ou restaurar em outro aparelho.
+            </p>
+            <div style="display: flex; gap: 0.4rem; margin-top: auto;">
+              <button class="btn btn-secondary btn-xs" style="flex: 1;" onclick="triggerQuickBackupDownload()">
+                📥 Baixar JSON
+              </button>
+              <button class="btn btn-secondary btn-xs" style="flex: 1;" onclick="document.getElementById('inputRestoreHubFile').click()">
+                📤 Restaurar JSON
+              </button>
+              <input type="file" id="inputRestoreHubFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event)">
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button class="btn btn-gold" onclick="closeModal('modalAccessHub')">Concluir / Acessar Sistema</button>
+      </div>
     </div>
   </div>
 

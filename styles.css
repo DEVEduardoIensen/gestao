@@ -2751,4 +2751,107 @@ body {
   justify-content: flex-end;
 }
 
+/* ==========================================================================
+   Access & Installation Hub (PWA Mobile, Desktop, Web & Backup)
+   ========================================================================== */
+.access-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.access-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+.access-card:hover {
+  border-color: var(--border-gold);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.access-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.access-card-icon {
+  font-size: 1.65rem;
+  line-height: 1;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.access-card-title {
+  margin: 0 0 0.2rem 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.access-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-mobile {
+  background: rgba(46, 213, 115, 0.15);
+  color: #2ed573;
+  border: 1px solid rgba(46, 213, 115, 0.35);
+}
+
+.badge-desktop {
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+  border: 1px solid rgba(52, 152, 219, 0.35);
+}
+
+.badge-web {
+  background: rgba(255, 177, 66, 0.15);
+  color: #ffb142;
+  border: 1px solid rgba(255, 177, 66, 0.35);
+}
+
+.badge-backup {
+  background: rgba(155, 89, 182, 0.15);
+  color: #9b59b6;
+  border: 1px solid rgba(155, 89, 182, 0.35);
+}
+
+.access-card-desc {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 0 0 1rem 0;
+}
+
+@media (max-width: 640px) {
+  .access-hub-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .access-card {
+    padding: 0.95rem;
+  }
+}
+
+
 
