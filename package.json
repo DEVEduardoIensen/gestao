@@ -1,10 +1,9 @@
 {
   "name": "eldorado-pesca-manager",
   "version": "2.0.0",
-  "description": "Sistema de Gestao Eldorado Pesca e Eldorado Lake",
-  "main": "main.js",
+  "description": "Sistema de Gestao Eldorado Pesca e Eldorado Lake (Web PWA + Supabase)",
   "scripts": {
-    "start": "electron .",
+    "start": "electron main.js",
     "server": "node server.js",
     "migrate": "node migrate_sqlite_to_supabase.js"
   },

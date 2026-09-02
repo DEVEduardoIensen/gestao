@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "cleanUrls": true,
+  "public": true,
   "headers": [
     {
       "source": "/sw.js",
@@ -28,9 +28,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/(.*)", "destination": "/$1" }
   ]
 }
