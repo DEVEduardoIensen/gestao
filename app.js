@@ -467,6 +467,12 @@ function toggleGateRecover() {
   }
 }
 
+function proceedToDashboard() {
+  const postHub = document.getElementById('postLoginHubScreen');
+  if (postHub) postHub.style.display = 'none';
+  sessionStorage.setItem('ELDORADO_POST_LOGIN_DONE', 'true');
+}
+
 async function handleGateAuthSubmit(e) {
   e.preventDefault();
   const email = document.getElementById('gateEmailInput').value.trim();
@@ -481,20 +487,31 @@ async function handleGateAuthSubmit(e) {
     if (!isGateRecoverMode) {
       await window.authManager.login(email, password);
       showToast('Login realizado com sucesso!', 'success');
-      
-      // Se não estiver em modo standalone (PWA instalado), abre opcionalmente a Central de Acessos
+
+      const gateScreen = document.getElementById('authGateScreen');
+      if (gateScreen) gateScreen.style.display = 'none';
+
+      await initAppState();
+      renderAll();
+
+      // Tela pós-login dedicada com os 3 botões (Mobile, Desktop, Web)
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-      if (!isStandalone && !sessionStorage.getItem('ELDORADO_HUB_SHOWN')) {
-        sessionStorage.setItem('ELDORADO_HUB_SHOWN', 'true');
-        setTimeout(() => openModal('modalAccessHub'), 400);
+      const postHub = document.getElementById('postLoginHubScreen');
+      if (!isStandalone && postHub) {
+        const org = window.authManager.getCurrentOrganization();
+        const orgNameEl = document.getElementById('hubWelcomeOrgName');
+        if (orgNameEl && org) {
+          orgNameEl.innerHTML = `${escapeHtml(org.name || 'ELDORADO PESCA')} <span class="brand-gold-tag">PRO</span>`;
+        }
+        postHub.style.display = 'flex';
+      } else {
+        proceedToDashboard();
       }
     } else {
       await window.authManager.recoverPassword(email);
       showToast('Link de recuperação enviado! Verifique seu e-mail.', 'info');
       toggleGateRecover();
     }
-    await initAppState();
-    renderAll();
   } catch (err) {
     console.error('[Auth Error]', err);
     if (errDiv) {
@@ -1548,12 +1565,38 @@ async function assignPrizeWinner() {
   };
 
   appData.valesAndPrizes.unshift(newValeEntry);
+  
+  // 1. Persiste o novo vale / prêmio na aba de Vales & Prêmios
   await saveState({
     type: "UPDATE_VALE",
     tableName: "vales_prizes",
     recordId: newValeEntry.id,
     payload: newValeEntry
   });
+
+  // 2. Persiste a cota premiada como Paga com o nome do ganhador
+  await saveState({
+    type: "SELL_NUMBERS",
+    tableName: "raffle_numbers",
+    recordId: raffle.id,
+    payload: {
+      raffleId: raffle.id,
+      numbers: [item.num],
+      status: "paid",
+      buyerName: winnerName,
+      paidAt: item.paidAt,
+      allowOverride: true
+    }
+  });
+
+  // 3. Persiste a estrutura da rifa com o ganhador vinculado ao prêmio
+  await saveState({
+    type: "UPDATE_RAFFLE",
+    tableName: "raffles",
+    recordId: raffle.id,
+    payload: raffle
+  });
+
   renderRaffleView();
   renderValesView();
   renderFishingAgendaView();

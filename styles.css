@@ -2752,59 +2752,74 @@ body {
 }
 
 /* ==========================================================================
-   Access & Installation Hub (PWA Mobile, Desktop, Web & Backup)
+   Post-Login Onboarding Hub Screen (3 Opções Principais de Acesso)
    ========================================================================== */
-.access-hub-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-}
-
-.access-card {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  padding: 1.15rem;
+.post-login-options {
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
+  gap: 0.85rem;
 }
 
-.access-card:hover {
-  border-color: var(--border-gold);
+.hub-option-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  position: relative;
+  touch-action: manipulation;
+}
+
+.hub-option-card:hover {
+  border-color: var(--primary-gold);
+  background: rgba(229, 193, 88, 0.08);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
-.access-card-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.65rem;
+.hub-option-card:active {
+  transform: scale(0.98);
 }
 
-.access-card-icon {
-  font-size: 1.65rem;
+.hub-option-icon {
+  font-size: 2rem;
   line-height: 1;
   background: rgba(255, 215, 0, 0.1);
   border: 1px solid var(--border-gold);
   border-radius: var(--radius-sm);
-  padding: 0.45rem;
+  padding: 0.6rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.access-card-title {
-  margin: 0 0 0.2rem 0;
-  font-size: 0.95rem;
+.hub-option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hub-option-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.hub-option-title {
+  font-size: 1rem;
   font-weight: 700;
   color: #ffffff;
+  margin: 0;
 }
 
-.access-badge {
-  display: inline-block;
-  font-size: 0.68rem;
+.hub-option-badge {
+  font-size: 0.65rem;
   font-weight: 700;
   padding: 0.15rem 0.45rem;
   border-radius: 20px;
@@ -2812,46 +2827,72 @@ body {
   letter-spacing: 0.5px;
 }
 
-.badge-mobile {
-  background: rgba(46, 213, 115, 0.15);
-  color: #2ed573;
-  border: 1px solid rgba(46, 213, 115, 0.35);
-}
-
-.badge-desktop {
-  background: rgba(52, 152, 219, 0.15);
-  color: #3498db;
-  border: 1px solid rgba(52, 152, 219, 0.35);
-}
-
-.badge-web {
-  background: rgba(255, 177, 66, 0.15);
-  color: #ffb142;
-  border: 1px solid rgba(255, 177, 66, 0.35);
-}
-
-.badge-backup {
-  background: rgba(155, 89, 182, 0.15);
-  color: #9b59b6;
-  border: 1px solid rgba(155, 89, 182, 0.35);
-}
-
-.access-card-desc {
+.hub-option-desc {
   color: var(--text-dim);
-  font-size: 0.8rem;
-  line-height: 1.45;
-  margin: 0 0 1rem 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0;
 }
 
-@media (max-width: 640px) {
-  .access-hub-grid {
-    grid-template-columns: 1fr;
+.hub-btn-action {
+  flex-shrink: 0;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .hub-option-card {
+    padding: 0.85rem;
     gap: 0.75rem;
   }
-  .access-card {
-    padding: 0.95rem;
+  .hub-option-icon {
+    font-size: 1.5rem;
+    padding: 0.45rem;
+  }
+  .hub-btn-action {
+    display: none;
   }
 }
+
+/* ==========================================================================
+   Fluid Layout & Universal Scaling (High DPI 702, Tablet & Mobile)
+   ========================================================================== */
+.raffle-numbers-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 82px), 1fr)) !important;
+  gap: 0.5rem !important;
+}
+
+.num-tile {
+  min-height: 64px !important;
+  padding: 0.5rem !important;
+}
+
+.num-badge {
+  font-size: 1.1rem !important;
+}
+
+@media (max-width: 768px) {
+  .raffle-numbers-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 70px), 1fr)) !important;
+    gap: 0.4rem !important;
+  }
+  .num-tile {
+    min-height: 60px !important;
+    padding: 0.4rem !important;
+  }
+  .num-badge {
+    font-size: 1rem !important;
+  }
+  .app-header-container {
+    padding: 0.4rem 0.6rem !important;
+  }
+  .modal-container, .modal-dialog {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    margin: auto !important;
+  }
+}
+
 
 
 

@@ -76,10 +76,7 @@
           <span class="status-dot"></span>
           <span id="dbStatusText">Sincronizado</span>
         </div>
-        <button class="btn btn-gold btn-sm" id="btnHeaderInstallHub" onclick="openModal('modalAccessHub')" title="Instalar no Celular, Computador ou Fazer Backup">
-          📲 <span id="headerInstallLabel">Instalar</span>
-        </button>
-        <button class="btn btn-secondary btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
+        <button class="btn btn-gold btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
           👤 <span id="headerAuthLabel">Conta</span>
         </button>
       </div>
@@ -1685,8 +1682,8 @@
     </div>
   </div>
 
-  <!-- Fullscreen Auth Guard (Bloqueio Obrigatório para Usuários Não Autenticados) -->
-  <div id="authGateScreen" class="auth-gate-screen" style="display: none;">
+  <!-- Fullscreen Auth Guard (Bloqueio Padrão na Inicialização - Sem Flicker do App) -->
+  <div id="authGateScreen" class="auth-gate-screen" style="display: flex;">
     <div class="auth-gate-card">
       <div class="auth-gate-header">
         <img src="logo.webp" alt="Eldorado Pesca" class="auth-gate-logo">
@@ -1720,103 +1717,74 @@
     </div>
   </div>
 
-  <!-- Modal: Central de Instalação & Acesso Multidispositivo (PWA Mobile, Desktop, Web & Backup) -->
-  <div class="modal-overlay" id="modalAccessHub" style="display: none;">
-    <div class="modal-container" style="max-width: 680px;">
-      <div class="modal-header">
-        <h3 class="modal-title">📲 Central de Instalação & Acessos</h3>
-        <button class="modal-close" onclick="closeModal('modalAccessHub')">✕</button>
+  <!-- Fullscreen Post-Login Hub Screen (Tela Dedicada com os 3 Modos de Acesso) -->
+  <div id="postLoginHubScreen" class="auth-gate-screen" style="display: none;">
+    <div class="auth-gate-card" style="max-width: 640px; width: 95%;">
+      <div class="auth-gate-header" style="margin-bottom: 1.5rem;">
+        <img src="logo.webp" alt="Eldorado Pesca" class="auth-gate-logo" style="width: 64px; height: 64px;">
+        <h2 class="auth-gate-title" id="hubWelcomeOrgName">ELDORADO PESCA <span class="brand-gold-tag">PRO</span></h2>
+        <p class="auth-gate-subtitle">Seja bem-vindo! Escolha como deseja acessar o sistema:</p>
       </div>
-      <div class="modal-body">
-        <p style="color: var(--text-dim); font-size: 0.88rem; margin-top: 0; margin-bottom: 1.25rem;">
-          Utilize o sistema no seu celular, computador ou direto pelo navegador. Seus dados sincronizam na nuvem automaticamente.
-        </p>
 
-        <!-- Grid de Opções de Acesso -->
-        <div class="access-hub-grid">
-          
-          <!-- Card 1: Celular / Mobile PWA -->
-          <div class="access-card">
-            <div class="access-card-header">
-              <div class="access-card-icon">📱</div>
-              <div>
-                <h4 class="access-card-title">Instalar no Celular</h4>
-                <span class="access-badge badge-mobile">Android & iPhone</span>
-              </div>
+      <!-- 3 Opções Principais de Acesso -->
+      <div class="post-login-options">
+        
+        <!-- Opção 1: Celular -->
+        <div class="hub-option-card" onclick="triggerInstallApp('mobile')">
+          <div class="hub-option-icon">📱</div>
+          <div class="hub-option-info">
+            <div class="hub-option-title-row">
+              <h3 class="hub-option-title">Instalar no Celular</h3>
+              <span class="hub-option-badge badge-mobile">App Mobile</span>
             </div>
-            <p class="access-card-desc">
-              Instale o aplicativo na sua tela de início. Abre em tela cheia sem barra de navegador e funciona 100% offline.
-            </p>
-            <button class="btn btn-gold btn-sm" style="width: 100%; margin-top: auto;" id="btnTriggerInstallMobile" onclick="triggerInstallApp('mobile')">
-              📲 Instalar no Celular
-            </button>
-            <div id="iosInstallGuide" style="display: none; margin-top: 0.6rem; padding: 0.6rem; background: rgba(255,215,0,0.08); border-radius: var(--radius-sm); font-size: 0.75rem; color: var(--text-light); line-height: 1.4;">
-              <strong>No iPhone / Safari:</strong> Toque no botão de Compartilhar (⎋) na barra inferior do Safari e selecione <strong>"Adicionar à Tela de Início" (+)</strong>.
-            </div>
+            <p class="hub-option-desc">Cria o ícone na tela inicial do celular, abre em tela cheia e funciona 100% offline.</p>
           </div>
+          <button type="button" class="btn btn-gold btn-sm hub-btn-action">Instalar</button>
+        </div>
 
-          <!-- Card 2: Computador / Desktop App -->
-          <div class="access-card">
-            <div class="access-card-header">
-              <div class="access-card-icon">💻</div>
-              <div>
-                <h4 class="access-card-title">Instalar no Computador</h4>
-                <span class="access-badge badge-desktop">Windows & Mac</span>
-              </div>
+        <!-- Guia iOS retrátil -->
+        <div id="iosInstallGuide" style="display: none; margin-top: -0.5rem; margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(255,215,0,0.1); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); font-size: 0.8rem; color: #ffffff; line-height: 1.45;">
+          📲 <strong>No iPhone / Safari:</strong> Toque no botão de <strong>Compartilhar (⎋)</strong> na barra inferior e escolha <strong>"Adicionar à Tela de Início" (+)</strong>.
+        </div>
+
+        <!-- Opção 2: Computador -->
+        <div class="hub-option-card" onclick="triggerInstallApp('desktop')">
+          <div class="hub-option-icon">💻</div>
+          <div class="hub-option-info">
+            <div class="hub-option-title-row">
+              <h3 class="hub-option-title">Instalar no Computador</h3>
+              <span class="hub-option-badge badge-desktop">App Desktop</span>
             </div>
-            <p class="access-card-desc">
-              Instale na barra de tarefas do Windows. Abre em janela limpa e ultra rápida, ideal para uso diário no escritório.
-            </p>
-            <button class="btn btn-gold btn-sm" style="width: 100%; margin-top: auto;" id="btnTriggerInstallDesktop" onclick="triggerInstallApp('desktop')">
-              💻 Instalar no Computador
-            </button>
+            <p class="hub-option-desc">Instala o aplicativo na barra de tarefas do Windows/Mac, abrindo em janela limpa e rápida.</p>
           </div>
+          <button type="button" class="btn btn-gold btn-sm hub-btn-action">Instalar</button>
+        </div>
 
-          <!-- Card 3: Navegador Web Imediato -->
-          <div class="access-card">
-            <div class="access-card-header">
-              <div class="access-card-icon">🌐</div>
-              <div>
-                <h4 class="access-card-title">Continuar na Web</h4>
-                <span class="access-badge badge-web">Qualquer Dispositivo</span>
-              </div>
+        <!-- Opção 3: Continuar na Web -->
+        <div class="hub-option-card" onclick="proceedToDashboard()">
+          <div class="hub-option-icon">🌐</div>
+          <div class="hub-option-info">
+            <div class="hub-option-title-row">
+              <h3 class="hub-option-title">Continuar no Navegador</h3>
+              <span class="hub-option-badge badge-web">Acesso Web</span>
             </div>
-            <p class="access-card-desc">
-              Acesso instantâneo em qualquer navegador. Ideal para emergências caso precise usar o celular de outra pessoa.
-            </p>
-            <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: auto;" onclick="closeModal('modalAccessHub')">
-              🌐 Acessar Painel Agora
-            </button>
+            <p class="hub-option-desc">Acesse direto pelo navegador sem instalar nada (ideal para emergências ou outro aparelho).</p>
           </div>
+          <button type="button" class="btn btn-secondary btn-sm hub-btn-action">Entrar ➔</button>
+        </div>
 
-          <!-- Card 4: Backup de Segurança JSON -->
-          <div class="access-card">
-            <div class="access-card-header">
-              <div class="access-card-icon">💾</div>
-              <div>
-                <h4 class="access-card-title">Backup & Restauração</h4>
-                <span class="access-badge badge-backup">Arquivo JSON</span>
-              </div>
-            </div>
-            <p class="access-card-desc">
-              Baixe uma cópia completa de segurança em arquivo JSON para guardar no celular ou restaurar em outro aparelho.
-            </p>
-            <div style="display: flex; gap: 0.4rem; margin-top: auto;">
-              <button class="btn btn-secondary btn-xs" style="flex: 1;" onclick="triggerQuickBackupDownload()">
-                📥 Baixar JSON
-              </button>
-              <button class="btn btn-secondary btn-xs" style="flex: 1;" onclick="document.getElementById('inputRestoreHubFile').click()">
-                📤 Restaurar JSON
-              </button>
-              <input type="file" id="inputRestoreHubFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event)">
-            </div>
-          </div>
+      </div>
 
+      <!-- Backup JSON Rápido -->
+      <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">💾 Sincronização em nuvem ativa.</span>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn-text-gold" style="font-size: 0.75rem;" onclick="triggerQuickBackupDownload()">📥 Baixar Backup JSON</button>
+          <button type="button" class="btn-text-gold" style="font-size: 0.75rem;" onclick="document.getElementById('inputRestorePostHubFile').click()">📤 Restaurar JSON</button>
+          <input type="file" id="inputRestorePostHubFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event)">
         </div>
       </div>
-      <div class="modal-footer" style="justify-content: flex-end;">
-        <button class="btn btn-gold" onclick="closeModal('modalAccessHub')">Concluir / Acessar Sistema</button>
-      </div>
+
     </div>
   </div>
 
