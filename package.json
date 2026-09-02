@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Sistema de Gestao Eldorado Pesca e Eldorado Lake (Web PWA + Supabase)",
   "scripts": {
+    "build": "echo 'Static build ready'",
     "start": "electron main.js",
     "server": "node server.js",
     "migrate": "node migrate_sqlite_to_supabase.js"
@@ -15,7 +16,6 @@
   "author": "Eldorado Pesca",
   "license": "ISC",
   "dependencies": {
-    "@supabase/server": "^1.5.2",
     "@supabase/supabase-js": "^2.112.4"
   },
   "devDependencies": {
