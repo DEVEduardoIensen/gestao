@@ -4,7 +4,7 @@
  * NUNCA apaga IndexedDB, dados locais ou Outbox durante atualizações.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.4.7'; // Atualização compatível eldorado-pwa-v2.2.0
+const CACHE_NAME = 'eldorado-pwa-v2.5.0'; // Atualização compatível eldorado-pwa-v2.2.0
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
@@ -30,7 +30,7 @@ const APP_SHELL_ASSETS = [
   './icon-web.svg'
 ];
 
-// Instalação: baixa os arquivos essenciais
+// Instalação: baixa os arquivos essenciais e ativa imediatamente
 self.addEventListener('install', (event) => {
   console.log('[Service Worker] Instalando versão:', CACHE_NAME);
   event.waitUntil(
@@ -43,7 +43,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Ativação: limpa apenas versões antigas do Cache Storage (NUNCA toca no IndexedDB / Outbox)
+// Ativação: limpa versões antigas do Cache Storage e assume o controle dos clientes
 self.addEventListener('activate', (event) => {
   console.log('[Service Worker] Ativando versão:', CACHE_NAME);
   event.waitUntil(
@@ -56,15 +56,27 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => {
+      return self.clients.claim();
+    }).then(() => {
+      // Notifica todas as janelas/PWA abertas de que a nova versão assumiu o controle
+      return self.clients.matchAll({ type: 'window' }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'SW_ACTIVATED', version: CACHE_NAME });
+        });
+      });
+    })
   );
 });
 
-// Fetch Interceptor: Stale-While-Revalidate para o App Shell, Bypass para APIs
+// Fetch Interceptor:
+// - Network-First com Timeout (1.8s) para arquivos centrais (HTML, JS, CSS) garantindo que atualizações entrem direto no mobile
+// - Cache-First para imagens e ícones estáticos
+// - Bypass total para APIs do Supabase e chamadas REST
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Ignora chamadas ao Supabase ou requisições POST/PUT (tratadas pelo SyncEngine / Dexie)
+  // Ignora chamadas ao Supabase ou requisições de mutação
   if (
     url.hostname.includes('supabase.co') ||
     url.pathname.startsWith('/auth/v1') ||
@@ -74,22 +86,57 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isCoreAsset = event.request.mode === 'navigate' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname === '/' ||
+    url.pathname === '';
+
+  // Network-First para código da aplicação (garante atualizações instantâneas online sem desinstalar)
+  if (isCoreAsset) {
+    event.respondWith(
+      new Promise((resolve) => {
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          caches.match(event.request).then((cached) => {
+            if (cached) resolve(cached);
+          });
+        }, 1800);
+
+        fetch(event.request).then((networkResponse) => {
+          clearTimeout(timer);
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          if (!timedOut) resolve(networkResponse);
+        }).catch(() => {
+          clearTimeout(timer);
+          caches.match(event.request).then((cached) => {
+            if (cached) {
+              resolve(cached);
+            } else if (event.request.mode === 'navigate') {
+              caches.match('./index.html').then((indexCached) => resolve(indexCached || caches.match('./')));
+            }
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // Cache-First com atualização em segundo plano para imagens e assets estáticos
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
         }
         return networkResponse;
-      }).catch(() => {
-        // Se offline e requisição falhar, responde com a página principal
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html') || caches.match('./');
-        }
-      });
+      }).catch(() => {});
 
       return cachedResponse || fetchPromise;
     })

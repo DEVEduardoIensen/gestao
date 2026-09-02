@@ -281,12 +281,54 @@ async function saveState(syncOperation = null) {
 }
 
 function initSyncAndPwaHandlers() {
-  // Service Worker Registration
+  // Service Worker Registration com auto-update imediato
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then(reg => {
       console.log('[PWA] Service Worker registrado com sucesso:', reg.scope);
+
+      // Força verificação imediata de atualizações no servidor/Vercel
+      reg.update().catch(() => {});
+
+      // Escuta novas versões sendo baixadas
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('[PWA] Nova versão instalada. Ativando imediatamente...');
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        }
+      });
     }).catch(err => {
       console.warn('[PWA] Falha ao registrar Service Worker:', err);
+    });
+
+    // Quando o novo Service Worker assumir controle, recarrega para aplicar na hora
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        console.log('[PWA] Atualização aplicada. Recarregando aplicação...');
+        window.location.reload();
+      }
+    });
+
+    // Mensagens diretas do SW
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'SW_ACTIVATED') {
+        console.log('[PWA] Versão ativada:', event.data.version);
+      }
+    });
+
+    // Checa atualizações toda vez que o usuário voltar ao app no celular
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        navigator.serviceWorker.getRegistration().then(reg => {
+          if (reg) reg.update().catch(() => {});
+        });
+      }
     });
   }
 
@@ -947,8 +989,7 @@ function renderRaffleDropdown() {
   (appData.raffles || []).forEach(r => {
     const opt = document.createElement("option");
     opt.value = r.id;
-    const statusLabel = r.status === "completed" ? " (Finalizada)" : " (Ativa)";
-    opt.textContent = `${r.title} - ${r.totalNumbers} Cotas${statusLabel}`;
+    opt.textContent = `${r.title} - ${r.totalNumbers} Cotas`;
     if (String(r.id) === String(activeRaffleId)) {
       opt.selected = true;
     }
