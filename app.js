@@ -104,6 +104,8 @@ function updateDbStatusBadge(status) {
 }
 
 async function initAppState() {
+  const isMobileInstalled = window.authManager && typeof window.authManager.isMobileInstalledApp === 'function' && window.authManager.isMobileInstalledApp();
+
   // 1. Recupera sessão do usuário se houver
   if (window.authManager) {
     try {
@@ -116,8 +118,8 @@ async function initAppState() {
 
   const gateScreen = document.getElementById("authGateScreen");
 
-  // 2. AUTH GUARD: Se o usuário não estiver autenticado e com organização válida, bloqueia o acesso
-  if (!window.authManager || !window.authManager.isAuthenticated()) {
+  // 2. AUTH GUARD: Se o usuário não estiver autenticado e não for app instalado no mobile, bloqueia o acesso
+  if (!isMobileInstalled && (!window.authManager || !window.authManager.isAuthenticated())) {
     if (gateScreen) gateScreen.style.display = "flex";
     appData = {
       settings: {},
@@ -134,14 +136,14 @@ async function initAppState() {
     return;
   }
 
-  // Usuário autenticado: esconde tela de bloqueio inicial
+  // Usuário autenticado ou app instalado no celular: esconde tela de bloqueio inicial
   if (gateScreen) gateScreen.style.display = "none";
 
   // Se estiver acessando pelo navegador comum e ainda não tiver clicado para entrar no painel nesta sessão, abre a tela de direcionamento com os 3 botões
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isPostLoginDone = sessionStorage.getItem('ELDORADO_POST_LOGIN_DONE') === 'true';
 
-  if (!isStandalone && !isPostLoginDone) {
+  if (!isStandalone && !isMobileInstalled && !isPostLoginDone) {
     openAccessHub();
   } else {
     proceedToDashboard();
@@ -325,10 +327,11 @@ function updateAuthUi() {
 
   const user = window.authManager ? window.authManager.user : null;
   const currentOrg = window.authManager ? window.authManager.currentOrg : null;
-  const isAuth = window.authManager ? window.authManager.isAuthenticated() : false;
+  const isMobileInstalled = window.authManager && typeof window.authManager.isMobileInstalledApp === 'function' && window.authManager.isMobileInstalledApp();
+  const isAuth = (window.authManager ? window.authManager.isAuthenticated() : false) || isMobileInstalled;
 
   if (gateScreen) {
-    gateScreen.style.display = isAuth ? 'none' : 'flex';
+    gateScreen.style.display = (isAuth || isMobileInstalled) ? 'none' : 'flex';
   }
 
   if (isAuth && user) {
@@ -434,6 +437,20 @@ window.addEventListener('appinstalled', () => {
 function triggerInstallApp(type) {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  if (type === 'mobile') {
+    try {
+      localStorage.setItem('ELDORADO_MOBILE_INSTALLED', 'true');
+      localStorage.setItem('ELDORADO_PWA_INSTALLED', 'true');
+      if (window.authManager) {
+        const orgId = window.authManager.getOrganizationId();
+        if (orgId) {
+          localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', orgId);
+          window.history.replaceState({}, '', './?source=pwa&mode=standalone&platform=mobile&orgId=' + encodeURIComponent(orgId));
+        }
+      }
+    } catch (e) {}
+  }
 
   if (isStandalone) {
     showToast('Você já está utilizando a versão instalada!', 'info');

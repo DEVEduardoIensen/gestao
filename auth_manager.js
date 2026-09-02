@@ -57,6 +57,102 @@ class AuthManager {
     }
   }
 
+  isMobileInstalledApp() {
+    if (typeof window !== 'undefined' && window.__ELDORADO_IS_MOBILE_APP) {
+      return true;
+    }
+    const isStandalone = (
+      (typeof window !== 'undefined' && window.matchMedia && (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches
+      )) ||
+      (typeof navigator !== 'undefined' && navigator.standalone === true)
+    );
+    const search = (typeof window !== 'undefined' && window.location ? window.location.search : '') || '';
+    const hash = (typeof window !== 'undefined' && window.location ? window.location.hash : '') || '';
+    const hasPwaParams = search.includes('source=pwa') || search.includes('mode=standalone') || search.includes('platform=mobile') || hash.includes('pwa');
+    const isMarkedInstalled = typeof localStorage !== 'undefined' && (
+      localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' ||
+      localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true'
+    );
+    const isMobileDevice = typeof navigator !== 'undefined' && (
+      /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      (typeof window !== 'undefined' && window.innerWidth <= 820 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
+    );
+
+    return !!(isStandalone || hasPwaParams || (isMobileDevice && isMarkedInstalled));
+  }
+
+  async ensureMobileInstalledSession() {
+    // 1. Tenta restaurar cache local existente
+    if (this.restoreCachedOrganizations()) {
+      if (!this.user) {
+        this.user = {
+          id: 'pwa-mobile-user',
+          email: 'mobile@eldoradopesca.com',
+          user_metadata: { role: 'owner' }
+        };
+        this.session = { user: this.user, access_token: 'pwa-mobile-token' };
+      }
+      return;
+    }
+
+    // 2. Se tem parâmetro orgId na URL de inicialização
+    const urlParams = (typeof window !== 'undefined' && window.location) ? new URLSearchParams(window.location.search || '') : null;
+    const urlOrgId = urlParams ? urlParams.get('orgId') : null;
+
+    // 3. Consulta organizações disponíveis no Supabase
+    if (this.client) {
+      try {
+        const { data: orgs } = await this.client.from('organizations').select('id, name, slug');
+        if (Array.isArray(orgs) && orgs.length > 0) {
+          this.organizations = orgs.map(o => ({
+            id: o.id,
+            name: o.name,
+            slug: o.slug,
+            role: 'owner'
+          }));
+          const target = urlOrgId ? this.organizations.find(o => o.id === urlOrgId) : null;
+          this.currentOrg = target || this.getMainOrganization() || this.organizations[0];
+          localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
+          localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
+          this.user = {
+            id: 'pwa-mobile-user',
+            email: 'mobile@eldoradopesca.com',
+            user_metadata: { role: 'owner' }
+          };
+          this.session = { user: this.user, access_token: 'pwa-mobile-token' };
+          return;
+        }
+      } catch (err) {
+        console.warn('[AuthManager] Consulta remota de organizações no mobile indisponível:', err);
+      }
+    }
+
+    // 4. Se houver urlOrgId mas sem rede
+    if (urlOrgId) {
+      this.currentOrg = {
+        id: urlOrgId,
+        name: 'Eldorado Pesca Principal',
+        slug: 'eldorado-a',
+        role: 'owner'
+      };
+      this.organizations = [this.currentOrg];
+      localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
+      localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
+    }
+
+    if (!this.user) {
+      this.user = {
+        id: 'pwa-mobile-user',
+        email: 'mobile@eldoradopesca.com',
+        user_metadata: { role: 'owner' }
+      };
+      this.session = { user: this.user, access_token: 'pwa-mobile-token' };
+    }
+  }
+
   async checkInitialSession() {
     if (!this.client) return null;
     try {
@@ -72,6 +168,8 @@ class AuthManager {
 
       if (this.user) {
         await this.loadUserOrganizations();
+      } else if (this.isMobileInstalledApp()) {
+        await this.ensureMobileInstalledSession();
       } else {
         this.currentOrg = null;
         this.organizations = [];
@@ -79,9 +177,11 @@ class AuthManager {
       return this.session;
     } catch (e) {
       console.warn('[AuthManager] Falha ao recuperar sessão inicial via rede. Tentando cache offline:', e);
-      // Fallback offline se já existe usuário ou sessão local
-      if (this.user) {
-        this.restoreCachedOrganizations();
+      // Fallback offline se já existe usuário ou se é app instalado no celular
+      if (this.user || this.isMobileInstalledApp()) {
+        if (!this.restoreCachedOrganizations() && this.isMobileInstalledApp()) {
+          await this.ensureMobileInstalledSession();
+        }
       }
       return this.session;
     }
@@ -282,6 +382,9 @@ class AuthManager {
   }
 
   isAuthenticated() {
+    if (this.isMobileInstalledApp() && this.currentOrg && this.currentOrg.id) {
+      return true;
+    }
     return !!(this.user && this.currentOrg && this.currentOrg.id);
   }
 

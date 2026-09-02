@@ -28,6 +28,25 @@
   <!-- Styles -->
   <link rel="stylesheet" href="styles.css">
 
+  <!-- Detecção Precoce de App Mobile Instalado (Zero Flicker de Login) -->
+  <script>
+    (function() {
+      try {
+        var isStandalone = (window.matchMedia && (
+          window.matchMedia('(display-mode: standalone)').matches ||
+          window.matchMedia('(display-mode: fullscreen)').matches ||
+          window.matchMedia('(display-mode: minimal-ui)').matches
+        )) || window.navigator.standalone === true;
+        var search = window.location.search || '';
+        var hasPwaParam = search.indexOf('source=pwa') !== -1 || search.indexOf('mode=standalone') !== -1 || search.indexOf('platform=mobile') !== -1;
+        var isMarked = localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true';
+        if (isStandalone || hasPwaParam || isMarked) {
+          window.__ELDORADO_IS_MOBILE_APP = true;
+        }
+      } catch (e) {}
+    })();
+  </script>
+
   <!-- Supabase JS Client (Empacotado Localmente para 100% Offline-First) -->
   <script src="lib/supabase.js"></script>
 </head>
@@ -1821,7 +1840,7 @@
   </div>
 
   <!-- Fullscreen Auth Guard (Bloqueio Padrão na Inicialização - Sem Flicker do App) -->
-  <div id="authGateScreen" class="auth-gate-screen" style="display: flex;">
+  <div id="authGateScreen" class="auth-gate-screen" style="display: none;">
     <div class="auth-gate-card">
       <div class="auth-gate-header">
         <img src="logo.webp" alt="Eldorado Pesca" class="auth-gate-logo">
