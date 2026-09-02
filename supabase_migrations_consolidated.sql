@@ -369,7 +369,10 @@ BEGIN
             WHERE organization_id = p_org_id
               AND raffle_id = p_raffle_id
               AND num = ANY(p_numbers)
-              AND status IN ('reserved', 'paid')
+              AND (
+                  (p_status = 'reserved' AND status IN ('reserved', 'paid') AND name <> p_buyer_name)
+                  OR (p_status = 'paid' AND status = 'paid' AND name <> p_buyer_name)
+              )
             FOR UPDATE
         LOOP
             conflicts := conflicts || jsonb_build_object(
@@ -400,14 +403,18 @@ BEGIN
             p_org_id, p_raffle_id, target_num,
             CASE WHEN p_status = 'available' THEN '' ELSE p_buyer_name END,
             p_status,
-            CASE WHEN p_status = 'reserved' THEN res_time ELSE NULL END,
+            CASE WHEN p_status = 'reserved' THEN res_time WHEN p_status = 'paid' THEN COALESCE(res_time, pay_time) ELSE NULL END,
             CASE WHEN p_status = 'paid' THEN pay_time ELSE NULL END,
             1
         )
         ON CONFLICT (organization_id, raffle_id, num) DO UPDATE SET
             name = CASE WHEN p_status = 'available' THEN '' ELSE p_buyer_name END,
             status = p_status,
-            reserved_at = CASE WHEN p_status = 'reserved' THEN res_time ELSE NULL END,
+            reserved_at = CASE 
+                WHEN p_status = 'reserved' THEN res_time 
+                WHEN p_status = 'paid' THEN COALESCE(public.raffle_numbers.reserved_at, res_time, pay_time) 
+                ELSE NULL 
+            END,
             paid_at = CASE WHEN p_status = 'paid' THEN pay_time ELSE NULL END,
             version = public.raffle_numbers.version + 1;
     END LOOP;

@@ -72,7 +72,7 @@ class SyncEngine {
       ] = await Promise.all([
         window.supabaseClient.from('settings').select('*').eq('organization_id', orgId),
         window.supabaseClient.from('raffles').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
-        window.supabaseClient.from('raffle_numbers').select('*').eq('organization_id', orgId),
+        window.supabaseClient.from('raffle_numbers').select('*').eq('organization_id', orgId).limit(10000),
         window.supabaseClient.from('raffle_prizes').select('*').eq('organization_id', orgId).order('position', { ascending: true }),
         window.supabaseClient.from('vales_prizes').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
         window.supabaseClient.from('vale_transactions').select('*').eq('organization_id', orgId).order('date', { ascending: false }),
@@ -93,13 +93,13 @@ class SyncEngine {
 
       // Reconstrói as rifas com seus números e prêmios aninhados
       const raffles = (rafflesData || []).map(r => {
-        const numbersForThisRaffle = (raffleNumbersData || []).filter(n => n.raffle_id === r.id);
-        const prizesForThisRaffle = (rafflePrizesData || []).filter(p => p.raffle_id === r.id);
+        const numbersForThisRaffle = (raffleNumbersData || []).filter(n => String(n.raffle_id) === String(r.id));
+        const prizesForThisRaffle = (rafflePrizesData || []).filter(p => String(p.raffle_id) === String(r.id));
 
         let numbersArray = [];
         const total = r.total_numbers || 60;
         for (let i = 1; i <= total; i++) {
-          const found = numbersForThisRaffle.find(n => n.num === i);
+          const found = numbersForThisRaffle.find(n => parseInt(n.num, 10) === i);
           numbersArray.push(found ? {
             num: found.num,
             name: found.name || '',
@@ -301,7 +301,13 @@ class SyncEngine {
     this.isSyncing = false;
     const remaining = await window.localDB.getPendingOperations(orgId);
     const hasConflicts = remaining.some(o => o.status === 'conflict');
-    this.updateStatus(hasConflicts ? 'conflict' : (remaining.length > 0 ? 'offline' : 'synced'));
+    if (!this.isOnline) {
+      this.updateStatus('offline');
+    } else if (hasConflicts) {
+      this.updateStatus('conflict');
+    } else {
+      this.updateStatus('synced');
+    }
   }
 
   async executeOperation(op) {
@@ -311,18 +317,19 @@ class SyncEngine {
     }
 
     switch (op.type) {
-      // 1. Venda de Cotas (Atômica Anti-Conflito)
+      // 1. Venda de Cotas (Atômica Anti-Conflito com Suporte a Override Administrativo)
       case 'SELL_NUMBERS': {
         const { raffleId, numbers, status, buyerName, reservedAt, paidAt, allowOverride } = op.payload;
+        const shouldOverride = (allowOverride !== undefined) ? !!allowOverride : true;
         const { data, error } = await window.supabaseClient.rpc('sell_raffle_numbers_atomic', {
           p_org_id: orgId,
           p_raffle_id: raffleId,
           p_numbers: numbers,
           p_status: status,
-          p_buyer_name: buyerName || '',
-          p_reserved_at: reservedAt || null,
-          p_paid_at: paidAt || null,
-          p_allow_override: !!allowOverride
+          p_buyer_name: (status === 'available') ? '' : (buyerName || ''),
+          p_reserved_at: (status === 'available') ? null : (reservedAt || null),
+          p_paid_at: (status === 'available') ? null : (paidAt || null),
+          p_allow_override: shouldOverride
         });
 
         if (error) throw error;
@@ -373,11 +380,11 @@ class SyncEngine {
         const rows = numbersList.map(n => ({
           organization_id: orgId,
           raffle_id: raffleId,
-          num: n.num,
-          name: n.name || '',
+          num: parseInt(n.num, 10) || n.num,
+          name: (n.status === 'available') ? '' : (n.name || ''),
           status: n.status || 'available',
-          reserved_at: n.reservedAt || null,
-          paid_at: n.paidAt || null
+          reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
+          paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
         }));
 
         const { error } = await window.supabaseClient
@@ -395,20 +402,20 @@ class SyncEngine {
         const { error: rError } = await window.supabaseClient.from('raffles').upsert({
           organization_id: orgId,
           id: r.id,
-          number: r.number,
+          number: String(r.number || ''),
           title: r.title,
-          subtitle: r.subtitle,
-          price_per_number: r.pricePerNumber,
-          total_numbers: r.totalNumbers,
-          reservation_timeout_hours: r.reservationTimeoutHours,
-          pix_key: r.pixKey,
-          pix_owner: r.pixOwner,
-          shipping_note: r.shippingNote,
-          live_draw_note: r.liveDrawNote,
-          private_contact: r.privateContact,
-          rules: r.rules,
-          status: r.status
-        });
+          subtitle: r.subtitle || '',
+          price_per_number: parseFloat(r.pricePerNumber) || 0,
+          total_numbers: parseInt(r.totalNumbers, 10) || 60,
+          reservation_timeout_hours: parseInt(r.reservationTimeoutHours, 10) || 24,
+          pix_key: r.pixKey || '',
+          pix_owner: r.pixOwner || '',
+          shipping_note: r.shippingNote || '',
+          live_draw_note: r.liveDrawNote || '',
+          private_contact: r.privateContact || '',
+          rules: r.rules || '',
+          status: r.status || 'active'
+        }, { onConflict: 'organization_id,id' });
         if (rError) throw rError;
 
         if (r.prizes && r.prizes.length > 0) {
@@ -416,7 +423,7 @@ class SyncEngine {
             organization_id: orgId,
             raffle_id: r.id,
             position: p.position || (idx + 1),
-            description: p.description,
+            description: p.description || `${idx + 1}º Prêmio`,
             winner_number: p.winnerNumber || null,
             winner_name: p.winnerName || ''
           }));
@@ -424,6 +431,23 @@ class SyncEngine {
             .from('raffle_prizes')
             .upsert(prizeRecords, { onConflict: 'organization_id,raffle_id,position' });
           if (pError) throw pError;
+        }
+
+        // Persiste as cotas 1 a N na criação ou atualização
+        if (Array.isArray(r.numbers) && r.numbers.length > 0) {
+          const numbersRows = r.numbers.map(n => ({
+            organization_id: orgId,
+            raffle_id: r.id,
+            num: parseInt(n.num, 10) || n.num,
+            name: (n.status === 'available') ? '' : (n.name || ''),
+            status: n.status || 'available',
+            reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
+            paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
+          }));
+          const { error: nError } = await window.supabaseClient
+            .from('raffle_numbers')
+            .upsert(numbersRows, { onConflict: 'organization_id,raffle_id,num' });
+          if (nError) throw nError;
         }
         return true;
       }

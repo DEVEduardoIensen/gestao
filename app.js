@@ -184,10 +184,13 @@ async function initAppState() {
     });
   }
 
-  // Define rifa ativa imediatamente para renderização rápida
+  // Define rifa ativa imediatamente para renderização rápida se ainda não estiver definida
   if (appData.raffles && appData.raffles.length > 0) {
-    const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
-    activeRaffleId = active.id;
+    const stillExists = activeRaffleId && appData.raffles.some(r => String(r.id) === String(activeRaffleId));
+    if (!stillExists) {
+      const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
+      activeRaffleId = active.id;
+    }
   } else {
     activeRaffleId = null;
   }
@@ -195,33 +198,39 @@ async function initAppState() {
   // 4. Sincronização em background transparente (não bloqueia a renderização em 4G)
   if (navigator.onLine && window.syncEngine && window.supabaseClient) {
     updateDbStatusBadge('syncing');
-    window.syncEngine.fetchRemoteData(orgId).then(async (remoteData) => {
-      if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays)) {
-        appData = sanitizeAppData(remoteData);
-        if (appData.raffles && appData.raffles.length > 0) {
-          const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
-          activeRaffleId = active.id;
+
+    // Executa a fila de pendências locais primeiro antes de carregar dados remotos
+    (async () => {
+      try {
+        if (window.syncEngine) {
+          await window.syncEngine.processQueue();
         }
-        if (window.localDB) {
-          await window.localDB.saveFullAppData(appData, orgId);
+        const remoteData = await window.syncEngine.fetchRemoteData(orgId);
+        if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays)) {
+          appData = sanitizeAppData(remoteData);
+          if (appData.raffles && appData.raffles.length > 0) {
+            const stillExists = activeRaffleId && appData.raffles.some(r => String(r.id) === String(activeRaffleId));
+            if (!stillExists) {
+              const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
+              activeRaffleId = active.id;
+            }
+          }
+          if (window.localDB) {
+            await window.localDB.saveFullAppData(appData, orgId);
+          }
+          renderAll();
         }
-        renderAll();
+        updateDbStatusBadge('synced');
+      } catch (err) {
+        console.warn('[Supabase] Falha no background sync:', err);
+        updateDbStatusBadge(navigator.onLine ? 'synced' : 'offline');
       }
-      updateDbStatusBadge('synced');
-    }).catch(err => {
-      console.warn('[Supabase] Falha no background sync:', err);
-      updateDbStatusBadge('offline');
-    });
+    })();
   } else {
     updateDbStatusBadge(navigator.onLine ? 'synced' : 'offline');
   }
 
-  // 5. Inicia processamento da fila de sincronização pendente do tenant
-  if (window.syncEngine) {
-    window.syncEngine.processQueue();
-  }
-
-  // 6. Ativa escutas de conectividade e Service Worker
+  // 5. Ativa escutas de conectividade e Service Worker
   initSyncAndPwaHandlers();
 
   // Verifica se há pedido de recuperação de senha ativo
@@ -1463,7 +1472,7 @@ async function saveNumberModal() {
     }
   });
 
-  // Salva no IndexedDB e enfileira na Outbox Sync Queue com RPC atômica
+  // Salva no IndexedDB e enfileira na Outbox Sync Queue com RPC atômica (com allowOverride: true para edições administrativas)
   await saveState({
     type: "SELL_NUMBERS",
     tableName: "raffle_numbers",
@@ -1475,7 +1484,7 @@ async function saveNumberModal() {
       buyerName: (currentEditStatus === "available") ? "" : name,
       reservedAt: (currentEditStatus === "reserved") ? (nowIso) : null,
       paidAt: (currentEditStatus === "paid") ? (nowIso) : null,
-      allowOverride: false
+      allowOverride: true
     }
   });
 

@@ -87,6 +87,14 @@ class AuthManager {
     }
   }
 
+  getMainOrganization() {
+    if (!this.organizations || this.organizations.length === 0) return null;
+    return this.organizations.find(o => o.slug === 'eldorado-a' || (o.name || '').toLowerCase() === 'eldorado pesca principal')
+      || this.organizations.find(o => (o.name || '').toLowerCase().includes('principal') && !o.slug?.startsWith('org-'))
+      || this.organizations.find(o => (o.name || '').toLowerCase().includes('eldorado') && !o.slug?.startsWith('org-'))
+      || this.organizations[0];
+  }
+
   restoreCachedOrganizations() {
     try {
       const cachedOrgsStr = localStorage.getItem('ELDORADO_CACHED_ORGS');
@@ -95,7 +103,12 @@ class AuthManager {
         if (Array.isArray(cachedOrgs) && cachedOrgs.length > 0) {
           this.organizations = cachedOrgs;
           const savedOrgId = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
-          this.currentOrg = this.organizations.find(o => o.id === savedOrgId) || this.organizations[0];
+          const savedMatch = savedOrgId ? this.organizations.find(o => o.id === savedOrgId) : null;
+          const mainOrg = this.getMainOrganization();
+          this.currentOrg = (savedMatch && !savedMatch.slug?.startsWith('org-'))
+            ? savedMatch
+            : (mainOrg || savedMatch || this.organizations[0]);
+
           console.log('[AuthManager] Organização recuperada do cache offline com sucesso:', this.currentOrg.name);
           return true;
         }
@@ -138,7 +151,12 @@ class AuthManager {
         }));
 
         const savedOrgId = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
-        const match = this.organizations.find(o => o.id === savedOrgId) || this.organizations[0];
+        const savedMatch = savedOrgId ? this.organizations.find(o => o.id === savedOrgId) : null;
+        const mainOrg = this.getMainOrganization();
+        const match = (savedMatch && !savedMatch.slug?.startsWith('org-'))
+          ? savedMatch
+          : (mainOrg || savedMatch || this.organizations[0]);
+
         this.currentOrg = match;
         
         // Persiste cache para abertura offline no celular
