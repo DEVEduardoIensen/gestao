@@ -25,8 +25,8 @@
   <!-- Styles -->
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Supabase JS Client -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase JS Client (Empacotado Localmente para 100% Offline-First) -->
+  <script src="lib/supabase.js"></script>
 </head>
 
 <body>
@@ -1679,6 +1679,51 @@
     </div>
   </div>
 
+  <!-- Fullscreen Auth Guard (Bloqueio Obrigatório para Usuários Não Autenticados) -->
+  <div id="authGateScreen" class="auth-gate-screen" style="display: none;">
+    <div class="auth-gate-card">
+      <div class="auth-gate-header">
+        <img src="logo.webp" alt="Eldorado Pesca" class="auth-gate-logo">
+        <h2 class="auth-gate-title">ELDORADO PESCA <span class="brand-gold-tag">PRO</span></h2>
+        <p class="auth-gate-subtitle">Faça login para acessar o sistema de gestão</p>
+      </div>
+
+      <div class="auth-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-light); padding-bottom: 0.5rem;">
+        <button type="button" class="auth-tab-btn active" id="tabGateLogin" onclick="switchGateTab('login')">Entrar</button>
+        <button type="button" class="auth-tab-btn" id="tabGateRegister" onclick="switchGateTab('register')">Criar Conta</button>
+        <button type="button" class="auth-tab-btn" id="tabGateRecover" onclick="switchGateTab('recover')">Recuperar</button>
+      </div>
+
+      <form id="gateAuthForm" onsubmit="handleGateAuthSubmit(event)">
+        <div class="form-group" id="groupGateOrgName" style="display: none;">
+          <label class="form-label">Nome da sua Empresa / Organização *</label>
+          <input type="text" id="gateOrgNameInput" class="form-input" placeholder="Ex: Minha Loja de Pesca">
+        </div>
+
+        <div class="form-group" id="groupGateInviteToken" style="display: none;">
+          <label class="form-label">Código de Convite (Opcional - se recebeu da sua empresa)</label>
+          <input type="text" id="gateInviteTokenInput" class="form-input" placeholder="Ex: a1b2c3d4...">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">E-mail *</label>
+          <input type="email" id="gateEmailInput" class="form-input" placeholder="seuemail@exemplo.com" required autocomplete="email">
+        </div>
+
+        <div class="form-group" id="groupGatePassword">
+          <label class="form-label">Senha *</label>
+          <input type="password" id="gatePasswordInput" class="form-input" placeholder="••••••••" minlength="6" autocomplete="current-password">
+        </div>
+
+        <div id="gateErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.6rem; background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); border-radius: var(--radius-sm);"></div>
+
+        <button type="submit" class="btn btn-gold" style="width: 100%; margin-top: 0.5rem;" id="btnSubmitGateAuth">
+          Entrar no Sistema
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: Autenticação & Multi-Tenant (Supabase Auth) -->
   <div class="modal-overlay" id="modalAuth" style="display: none;">
     <div class="modal-container" style="max-width: 440px;">
@@ -1697,11 +1742,17 @@
           <div class="form-group">
             <label class="form-label">🏢 Organização Ativa (Multi-Tenant)</label>
             <select id="selectUserOrganization" class="form-select" onchange="onSwitchOrganization(this.value)">
-              <option value="00000000-0000-0000-0000-000000000001">Eldorado Pesca & Lake</option>
+              <!-- Renderizado dinamicamente pelo JS -->
             </select>
             <small style="color: var(--text-dim); font-size: 0.75rem; margin-top: 0.35rem; display: block;">
               Seus dados e tabelas são isolados por segurança (RLS) dentro desta organização.
             </small>
+          </div>
+
+          <div style="margin-top: 1rem; margin-bottom: 1rem;">
+            <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="openInviteMemberModal()">
+              👥 Convidar Funcionário / Membro
+            </button>
           </div>
 
           <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
@@ -1724,6 +1775,11 @@
               <input type="text" id="authOrgNameInput" class="form-input" placeholder="Ex: Minha Loja de Pesca">
             </div>
 
+            <div class="form-group" id="groupAuthInviteToken" style="display: none;">
+              <label class="form-label">Código de Convite (Opcional)</label>
+              <input type="text" id="authInviteTokenInput" class="form-input" placeholder="Ex: a1b2c3d4...">
+            </div>
+
             <div class="form-group">
               <label class="form-label">E-mail *</label>
               <input type="email" id="authEmailInput" class="form-input" placeholder="seuemail@exemplo.com" required>
@@ -1741,6 +1797,74 @@
             </button>
           </form>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Convidar Membro / Funcionário -->
+  <div class="modal-overlay" id="modalInviteMember" style="display: none;">
+    <div class="modal-container" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title">👥 Convidar Membro para a Organização</h3>
+        <button class="modal-close" onclick="closeModal('modalInviteMember')">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="formInviteMember" onsubmit="handleCreateInviteSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">E-mail do Funcionário / Convidado *</label>
+            <input type="email" id="inviteMemberEmail" class="form-input" placeholder="funcionario@exemplo.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Função / Nível de Acesso</label>
+            <select id="inviteMemberRole" class="form-select">
+              <option value="member">Membro (Operador)</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <div id="inviteErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(255, 107, 107, 0.1); border-radius: var(--radius-sm);"></div>
+          <button type="submit" class="btn btn-gold" style="width: 100%;" id="btnSubmitInvite">
+            Gerar Código de Convite
+          </button>
+        </form>
+        <div id="inviteResultContainer" style="display: none; margin-top: 1.25rem; background: rgba(0,0,0,0.3); border: 1px dashed var(--border-gold); padding: 0.75rem; border-radius: var(--radius-sm);">
+          <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.25rem;">Código de Convite Gerado:</div>
+          <div style="font-family: monospace; font-size: 0.95rem; font-weight: 700; color: var(--primary-gold); word-break: break-all;" id="inviteTokenDisplay"></div>
+          <button class="btn btn-whatsapp btn-sm" style="width: 100%; margin-top: 0.75rem;" onclick="copyInviteToClipboard()">
+            Copiar Código de Convite
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modalInviteMember')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Definir Nova Senha (Recuperação de Acesso) -->
+  <div class="modal-overlay" id="modalResetPassword" style="display: none;">
+    <div class="modal-container" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔑 Redefinir Senha</h3>
+        <button class="modal-close" onclick="closeModal('modalResetPassword')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 1.25rem;">
+          Digite sua nova senha abaixo para redefinir o acesso à sua conta.
+        </p>
+        <form id="formResetPassword" onsubmit="handleResetPasswordSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">Nova Senha *</label>
+            <input type="password" id="inputNewPassword" class="form-input" placeholder="Mínimo 6 caracteres" minlength="6" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirmar Nova Senha *</label>
+            <input type="password" id="inputConfirmNewPassword" class="form-input" placeholder="Confirme a nova senha" minlength="6" required>
+          </div>
+          <div id="resetPassErrorMessage" style="display: none; color: #ff6b6b; font-size: 0.8rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(255, 107, 107, 0.1); border-radius: var(--radius-sm);"></div>
+          <button type="submit" class="btn btn-gold" style="width: 100%;" id="btnSubmitResetPass">
+            Salvar Nova Senha
+          </button>
+        </form>
       </div>
     </div>
   </div>

@@ -104,8 +104,6 @@ function updateDbStatusBadge(status) {
 }
 
 async function initAppState() {
-  const orgId = window.authManager ? window.authManager.getOrganizationId() : '00000000-0000-0000-0000-000000000001';
-
   // 1. Recupera sessão do usuário se houver
   if (window.authManager) {
     try {
@@ -116,7 +114,31 @@ async function initAppState() {
     }
   }
 
-  // 2. Carrega primeiro do cache local IndexedDB (Abertura instantânea mesmo offline)
+  const gateScreen = document.getElementById("authGateScreen");
+
+  // 2. AUTH GUARD: Se o usuário não estiver autenticado e com organização válida, bloqueia o acesso
+  if (!window.authManager || !window.authManager.isAuthenticated()) {
+    if (gateScreen) gateScreen.style.display = "flex";
+    appData = {
+      settings: {},
+      raffles: [],
+      valesAndPrizes: [],
+      eduardoWorkDays: [],
+      fishingBookings: [],
+      ranchoBookings: []
+    };
+    updateDbStatusBadge('offline');
+    if (window.authManager && window.authManager.isPasswordRecovery) {
+      openModal('modalResetPassword');
+    }
+    return;
+  }
+
+  // Usuário autenticado: libera tela principal
+  if (gateScreen) gateScreen.style.display = "none";
+  const orgId = window.authManager.getOrganizationId();
+
+  // 3. Carrega primeiro do cache local IndexedDB exclusivo deste tenant
   let loadedFromLocal = false;
   if (window.localDB) {
     try {
@@ -124,7 +146,7 @@ async function initAppState() {
       if (localData && (localData.raffles || localData.valesAndPrizes || localData.fishingBookings || localData.ranchoBookings)) {
         appData = sanitizeAppData(localData);
         loadedFromLocal = true;
-        console.log('[Offline-First] Dados carregados do IndexedDB local com sucesso.');
+        console.log(`[Offline-First] Dados do tenant ${orgId} carregados do IndexedDB com sucesso.`);
       }
     } catch (err) {
       console.warn('[Offline-First] Erro ao ler IndexedDB:', err);
@@ -132,7 +154,7 @@ async function initAppState() {
   }
 
   if (!loadedFromLocal) {
-    const saved = localStorage.getItem("ELDORADO_PESCA_STORE_DATA");
+    const saved = localStorage.getItem("ELDORADO_PESCA_STORE_DATA_" + orgId);
     if (saved) {
       try {
         appData = sanitizeAppData(JSON.parse(saved));
@@ -142,15 +164,22 @@ async function initAppState() {
   }
 
   if (!loadedFromLocal) {
-    appData = sanitizeAppData(JSON.parse(JSON.stringify(INITIAL_SAMPLE_DATA)));
+    appData = sanitizeAppData({
+      settings: { eduardoDailyRate: 62.00, eduardoHalfRate: 31.00 },
+      raffles: [],
+      valesAndPrizes: [],
+      eduardoWorkDays: [],
+      fishingBookings: [],
+      ranchoBookings: []
+    });
   }
 
-  // 3. Se estiver online e com Supabase conectado, sincroniza em segundo plano
+  // 4. Se estiver online e com Supabase conectado, sincroniza em segundo plano
   if (navigator.onLine && window.syncEngine && window.supabaseClient) {
     try {
       updateDbStatusBadge('syncing');
       const remoteData = await window.syncEngine.fetchRemoteData(orgId);
-      if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings)) {
+      if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays)) {
         appData = sanitizeAppData(remoteData);
         if (window.localDB) {
           await window.localDB.saveFullAppData(appData, orgId);
@@ -166,24 +195,35 @@ async function initAppState() {
     updateDbStatusBadge(navigator.onLine ? 'synced' : 'offline');
   }
 
-  // 4. Inicia processamento da fila de sincronização pendente
+  // 5. Inicia processamento da fila de sincronização pendente do tenant
   if (window.syncEngine) {
     window.syncEngine.processQueue();
   }
 
-  // 5. Ativa escutas de conectividade e Service Worker
+  // 6. Ativa escutas de conectividade e Service Worker
   initSyncAndPwaHandlers();
+
+  // Verifica se há pedido de recuperação de senha ativo
+  if (window.authManager && window.authManager.isPasswordRecovery) {
+    openModal('modalResetPassword');
+  }
 
   if (appData.raffles && appData.raffles.length > 0) {
     const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
     activeRaffleId = active.id;
+  } else {
+    activeRaffleId = null;
   }
 }
 
 async function saveState(syncOperation = null) {
-  const orgId = window.authManager ? window.authManager.getOrganizationId() : '00000000-0000-0000-0000-000000000001';
+  const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
+  if (!orgId) {
+    console.warn('[Persistence] Operação não gravada: nenhum tenant ativo autenticado.');
+    return;
+  }
 
-  // 1. Salva no IndexedDB (Dexie)
+  // 1. Salva no IndexedDB (Dexie) indexado pelo organization_id
   if (window.localDB) {
     try {
       await window.localDB.saveFullAppData(appData, orgId);
@@ -207,9 +247,9 @@ async function saveState(syncOperation = null) {
     }
   }
 
-  // 3. Fallback adicional no localStorage
+  // 3. Cache de sessão adicional por tenant
   try {
-    localStorage.setItem("ELDORADO_PESCA_STORE_DATA", JSON.stringify(appData));
+    localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
   } catch (e) {}
 
   updateGlobalStats();
@@ -261,7 +301,12 @@ function initSyncAndPwaHandlers() {
   if (window.authManager) {
     window.authManager.onAuthStateChange(async (event, session) => {
       updateAuthUi();
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'PASSWORD_RECOVERY') {
+        openModal('modalResetPassword');
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await initAppState();
+        renderAll();
+      } else if (event === 'SIGNED_OUT') {
         await initAppState();
         renderAll();
       }
@@ -275,11 +320,17 @@ function updateAuthUi() {
   const formView = document.getElementById('authFormView');
   const emailDisplay = document.getElementById('authUserEmailDisplay');
   const orgSelect = document.getElementById('selectUserOrganization');
+  const gateScreen = document.getElementById('authGateScreen');
 
   const user = window.authManager ? window.authManager.user : null;
   const currentOrg = window.authManager ? window.authManager.currentOrg : null;
+  const isAuth = window.authManager ? window.authManager.isAuthenticated() : false;
 
-  if (user) {
+  if (gateScreen) {
+    gateScreen.style.display = isAuth ? 'none' : 'flex';
+  }
+
+  if (isAuth && user) {
     if (label) label.textContent = currentOrg ? currentOrg.name : 'Logado';
     if (loggedView) loggedView.style.display = 'block';
     if (formView) formView.style.display = 'none';
@@ -314,6 +365,7 @@ function switchAuthTab(tab) {
   if (activeBtn) activeBtn.classList.add('active');
 
   const orgGroup = document.getElementById('groupAuthOrgName');
+  const inviteGroup = document.getElementById('groupAuthInviteToken');
   const passGroup = document.getElementById('groupAuthPassword');
   const btnSubmit = document.getElementById('btnSubmitAuth');
   const errDiv = document.getElementById('authErrorMessage');
@@ -321,16 +373,91 @@ function switchAuthTab(tab) {
 
   if (tab === 'login') {
     if (orgGroup) orgGroup.style.display = 'none';
+    if (inviteGroup) inviteGroup.style.display = 'none';
     if (passGroup) passGroup.style.display = 'block';
     if (btnSubmit) btnSubmit.textContent = 'Entrar';
   } else if (tab === 'register') {
     if (orgGroup) orgGroup.style.display = 'block';
+    if (inviteGroup) inviteGroup.style.display = 'block';
     if (passGroup) passGroup.style.display = 'block';
     if (btnSubmit) btnSubmit.textContent = 'Criar Minha Conta';
   } else {
     if (orgGroup) orgGroup.style.display = 'none';
+    if (inviteGroup) inviteGroup.style.display = 'none';
     if (passGroup) passGroup.style.display = 'none';
     if (btnSubmit) btnSubmit.textContent = 'Enviar Link de Recuperação';
+  }
+}
+
+let currentGateTab = 'login';
+function switchGateTab(tab) {
+  currentGateTab = tab;
+  ['tabGateLogin', 'tabGateRegister', 'tabGateRecover'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+
+  const activeBtn = document.getElementById(tab === 'login' ? 'tabGateLogin' : (tab === 'register' ? 'tabGateRegister' : 'tabGateRecover'));
+  if (activeBtn) activeBtn.classList.add('active');
+
+  const orgGroup = document.getElementById('groupGateOrgName');
+  const inviteGroup = document.getElementById('groupGateInviteToken');
+  const passGroup = document.getElementById('groupGatePassword');
+  const btnSubmit = document.getElementById('btnSubmitGateAuth');
+  const errDiv = document.getElementById('gateErrorMessage');
+  if (errDiv) errDiv.style.display = 'none';
+
+  if (tab === 'login') {
+    if (orgGroup) orgGroup.style.display = 'none';
+    if (inviteGroup) inviteGroup.style.display = 'none';
+    if (passGroup) passGroup.style.display = 'block';
+    if (btnSubmit) btnSubmit.textContent = 'Entrar no Sistema';
+  } else if (tab === 'register') {
+    if (orgGroup) orgGroup.style.display = 'block';
+    if (inviteGroup) inviteGroup.style.display = 'block';
+    if (passGroup) passGroup.style.display = 'block';
+    if (btnSubmit) btnSubmit.textContent = 'Criar Minha Conta';
+  } else {
+    if (orgGroup) orgGroup.style.display = 'none';
+    if (inviteGroup) inviteGroup.style.display = 'none';
+    if (passGroup) passGroup.style.display = 'none';
+    if (btnSubmit) btnSubmit.textContent = 'Enviar Link de Recuperação';
+  }
+}
+
+async function handleGateAuthSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('gateEmailInput').value.trim();
+  const password = document.getElementById('gatePasswordInput').value;
+  const orgName = document.getElementById('gateOrgNameInput') ? document.getElementById('gateOrgNameInput').value.trim() : '';
+  const inviteToken = document.getElementById('gateInviteTokenInput') ? document.getElementById('gateInviteTokenInput').value.trim() : '';
+  const errDiv = document.getElementById('gateErrorMessage');
+  const btnSubmit = document.getElementById('btnSubmitGateAuth');
+
+  if (errDiv) errDiv.style.display = 'none';
+  if (btnSubmit) btnSubmit.disabled = true;
+
+  try {
+    if (currentGateTab === 'login') {
+      await window.authManager.login(email, password);
+      showToast('Login realizado com sucesso!', 'success');
+    } else if (currentGateTab === 'register') {
+      await window.authManager.register(email, password, orgName, inviteToken);
+      showToast('Conta criada com sucesso! Acesse sua conta.', 'success');
+    } else {
+      await window.authManager.recoverPassword(email);
+      showToast('Link de recuperação enviado para seu e-mail!', 'info');
+    }
+    await initAppState();
+    renderAll();
+  } catch (err) {
+    console.error('[Auth Error]', err);
+    if (errDiv) {
+      errDiv.textContent = err.message || 'Erro na autenticação. Verifique seus dados.';
+      errDiv.style.display = 'block';
+    }
+  } finally {
+    if (btnSubmit) btnSubmit.disabled = false;
   }
 }
 
@@ -339,6 +466,7 @@ async function handleAuthSubmit(e) {
   const email = document.getElementById('authEmailInput').value.trim();
   const password = document.getElementById('authPasswordInput').value;
   const orgName = document.getElementById('authOrgNameInput') ? document.getElementById('authOrgNameInput').value.trim() : '';
+  const inviteToken = document.getElementById('authInviteTokenInput') ? document.getElementById('authInviteTokenInput').value.trim() : '';
   const errDiv = document.getElementById('authErrorMessage');
   const btnSubmit = document.getElementById('btnSubmitAuth');
 
@@ -351,14 +479,16 @@ async function handleAuthSubmit(e) {
       showToast('Login realizado com sucesso!', 'success');
       closeModal('modalAuth');
     } else if (currentAuthTab === 'register') {
-      await window.authManager.register(email, password, orgName);
-      showToast('Conta criada com sucesso! Verifique seu e-mail se necessário.', 'success');
+      await window.authManager.register(email, password, orgName, inviteToken);
+      showToast('Conta criada com sucesso!', 'success');
       closeModal('modalAuth');
     } else {
       await window.authManager.recoverPassword(email);
       showToast('Instruções de recuperação enviadas para seu e-mail!', 'info');
       closeModal('modalAuth');
     }
+    await initAppState();
+    renderAll();
   } catch (err) {
     console.error('[Auth Error]', err);
     if (errDiv) {
@@ -368,6 +498,111 @@ async function handleAuthSubmit(e) {
   } finally {
     if (btnSubmit) btnSubmit.disabled = false;
   }
+}
+
+async function handleResetPasswordSubmit(e) {
+  e.preventDefault();
+  const newPass = document.getElementById('inputNewPassword').value;
+  const confirmPass = document.getElementById('inputConfirmNewPassword').value;
+  const errDiv = document.getElementById('resetPassErrorMessage');
+  const btnSubmit = document.getElementById('btnSubmitResetPass');
+
+  if (errDiv) errDiv.style.display = 'none';
+
+  if (newPass !== confirmPass) {
+    if (errDiv) {
+      errDiv.textContent = 'As senhas não coincidem. Digite novamente.';
+      errDiv.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btnSubmit) btnSubmit.disabled = true;
+
+  try {
+    await window.authManager.updatePassword(newPass);
+    showToast('Senha redefinida com sucesso! Você já está conectado.', 'success');
+    closeModal('modalResetPassword');
+    await initAppState();
+    renderAll();
+  } catch (err) {
+    console.error('[Reset Password Error]', err);
+    if (errDiv) {
+      errDiv.textContent = err.message || 'Falha ao redefinir a senha.';
+      errDiv.style.display = 'block';
+    }
+  } finally {
+    if (btnSubmit) btnSubmit.disabled = false;
+  }
+}
+
+function openInviteMemberModal() {
+  document.getElementById('inviteMemberEmail').value = '';
+  const resultBox = document.getElementById('inviteResultContainer');
+  if (resultBox) resultBox.style.display = 'none';
+  const errDiv = document.getElementById('inviteErrorMessage');
+  if (errDiv) errDiv.style.display = 'none';
+  openModal('modalInviteMember');
+}
+
+async function handleCreateInviteSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('inviteMemberEmail').value.trim();
+  const role = document.getElementById('inviteMemberRole').value;
+  const errDiv = document.getElementById('inviteErrorMessage');
+  const btnSubmit = document.getElementById('btnSubmitInvite');
+  const resultBox = document.getElementById('inviteResultContainer');
+  const tokenDisplay = document.getElementById('inviteTokenDisplay');
+
+  if (errDiv) errDiv.style.display = 'none';
+  if (btnSubmit) btnSubmit.disabled = true;
+
+  const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
+  if (!orgId) {
+    if (errDiv) {
+      errDiv.textContent = 'Organização não encontrada.';
+      errDiv.style.display = 'block';
+    }
+    if (btnSubmit) btnSubmit.disabled = false;
+    return;
+  }
+
+  try {
+    const { data, error } = await window.supabaseClient
+      .from('organization_invites')
+      .insert({
+        organization_id: orgId,
+        email: email,
+        role: role,
+        created_by: window.authManager.user.id
+      })
+      .select('token')
+      .single();
+
+    if (error) throw error;
+
+    if (tokenDisplay) tokenDisplay.textContent = data.token;
+    if (resultBox) resultBox.style.display = 'block';
+    showToast('Convite gerado com sucesso!', 'success');
+  } catch (err) {
+    console.error('[Invite Error]', err);
+    if (errDiv) {
+      errDiv.textContent = err.message || 'Erro ao gerar convite.';
+      errDiv.style.display = 'block';
+    }
+  } finally {
+    if (btnSubmit) btnSubmit.disabled = false;
+  }
+}
+
+function copyInviteToClipboard() {
+  const token = document.getElementById('inviteTokenDisplay').textContent.trim();
+  if (!token) return;
+
+  const inviteMsg = `Você foi convidado para a equipe ${window.authManager.getOrganizationName()} no Eldorado Pesca PRO! Use o código de convite abaixo ao criar sua conta:\n\nCódigo: ${token}\n\nAcesse: ${window.location.origin}`;
+  navigator.clipboard.writeText(inviteMsg).then(() => {
+    showToast('Mensagem de convite copiada!', 'success');
+  });
 }
 
 async function handleUserLogout() {
@@ -405,8 +640,9 @@ async function updateSyncCenterModal(status, conflicts) {
     statusText.textContent = status === 'synced' ? '🟢 Sincronizado' : (status === 'syncing' ? '🔵 Sincronizando...' : (status === 'conflict' ? '🔴 Conflito Detectado' : '🟡 Offline'));
   }
 
+  const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
   if (queueContainer && window.localDB) {
-    const pendingOps = await window.localDB.getPendingOperations();
+    const pendingOps = await window.localDB.getPendingOperations(orgId);
     if (pendingOps.length === 0) {
       queueContainer.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 1rem;">Nenhuma operação pendente. Todos os dados estão salvos na nuvem!</div>';
     } else {
@@ -414,7 +650,7 @@ async function updateSyncCenterModal(status, conflicts) {
         <div class="sync-queue-item">
           <div>
             <span class="sync-queue-type">${escapeHtml(op.type)}</span>
-            <div style="font-size: 0.72rem; color: var(--text-dim);">${new Date(op.timestamp).toLocaleTimeString()} • ${escapeHtml(op.tableName)}</div>
+            <div style="font-size: 0.72rem; color: var(--text-dim);">${new Date(op.timestamp).toLocaleTimeString()} • ${escapeHtml(op.tableName || 'db')}</div>
           </div>
           <span class="sync-queue-status ${op.status}">${op.status.toUpperCase()}</span>
         </div>
@@ -426,13 +662,33 @@ async function updateSyncCenterModal(status, conflicts) {
     if (Array.isArray(conflicts) && conflicts.length > 0) {
       conflictsSection.style.display = 'block';
       conflictsList.innerHTML = conflicts.map(c => `
-        <div style="font-size: 0.82rem; margin-bottom: 0.5rem;">
-          <strong>Rifa ${escapeHtml(c.raffleId)}:</strong> Cotas <em>${(c.conflictingNumbers || []).map(cn => `#${cn.num} (${cn.current_owner || 'outro comprador'})`).join(', ')}</em> já foram vendidas no servidor.
+        <div class="conflict-card">
+          <div class="conflict-card-header">
+            <span>⚠️ Conflito na Venda da Cota</span>
+            <span style="font-size: 0.72rem; color: var(--text-dim);">${new Date(c.timestamp || Date.now()).toLocaleTimeString()}</span>
+          </div>
+          <div class="conflict-card-details">
+            <div><strong>Rifa ID:</strong> ${escapeHtml(c.raffleId)}</div>
+            <div><strong>Comprador Local:</strong> ${escapeHtml(c.buyerName || 'Sem nome')}</div>
+            <div><strong>Cotas Conflitantes:</strong> ${(c.conflictingNumbers || []).map(cn => `#${cn.num} (Já vendida no servidor para: <strong>${escapeHtml(cn.current_owner || 'Outro comprador')}</strong>)`).join('<br>')}</div>
+            <div style="font-size: 0.75rem; color: #ff9f43; margin-top: 0.35rem;">A venda foi bloqueada para proteger o comprador oficial no servidor.</div>
+          </div>
+          <div class="conflict-card-actions">
+            <button class="btn btn-secondary btn-xs" onclick="resolveConflictFromUI('${c.opId}', 'dismiss')">Descartar da Fila</button>
+            <button class="btn btn-gold btn-xs" onclick="resolveConflictFromUI('${c.opId}', 'accept_server')">Aceitar Estado do Servidor</button>
+          </div>
         </div>
       `).join('');
     } else {
       conflictsSection.style.display = 'none';
     }
+  }
+}
+
+async function resolveConflictFromUI(opId, action) {
+  if (window.syncEngine) {
+    await window.syncEngine.resolveConflict(opId, action);
+    showToast(action === 'accept_server' ? 'Estado do servidor aceito.' : 'Conflito descartado da fila.', 'info');
   }
 }
 
@@ -1319,7 +1575,15 @@ async function processWhatsAppImport() {
     }
   });
 
-  await saveState();
+  await saveState({
+    type: "BATCH_SET_NUMBERS",
+    tableName: "raffle_numbers",
+    recordId: raffle.id,
+    payload: {
+      raffleId: raffle.id,
+      numbersList: updatedList
+    }
+  });
   renderRaffleNumbersGrid();
   closeModal("modalImportWhatsApp");
   showToast(`Importação concluída! ${updatedList.length} números atualizados no banco de dados.`, "success");
@@ -1397,11 +1661,14 @@ function removeLinkedFishingBookings(prizeId, customerName = null) {
 
   if (toDelete.length > 0) {
     appData.fishingBookings = (appData.fishingBookings || []).filter(b => !toDelete.some(del => del.id === b.id));
-    if (isConnectedToBackend) {
-      toDelete.forEach(b => {
-        fetch(`/api/fishing/booking/${b.id}`, { method: "DELETE" }).catch(e => console.warn("Backend delete sync failed", e));
+    toDelete.forEach(b => {
+      saveState({
+        type: "DELETE_FISHING_BOOKING",
+        tableName: "fishing_bookings",
+        recordId: b.id,
+        payload: { id: b.id }
       });
-    }
+    });
   }
 }
 
@@ -2234,25 +2501,12 @@ async function confirmExchangePrize() {
   item.exchangeNotes = notes;
   item.exchangedAt = exDate;
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/vales/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          valeId: prizeId,
-          exchangedItem: newItem,
-          differencePaid: diffPaid,
-          exchangeNotes: notes,
-          exchangedAt: exDate
-        })
-      });
-    } catch (e) {
-      console.warn("Backend exchange failed", e);
-    }
-  }
-
-  saveState();
+  await saveState({
+    type: "UPDATE_VALE",
+    tableName: "vales_prizes",
+    recordId: prizeId,
+    payload: item
+  });
   renderValesView();
   closeModal("modalExchangePrize");
   showToast(`Troca salva com sucesso! ${item.customerName} levou: ${newItem}`, "success");
@@ -2283,19 +2537,12 @@ async function executeUndoExchange(prizeId) {
   item.exchangeNotes = null;
   item.exchangedAt = null;
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/vales/undo-exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ valeId: prizeId })
-      });
-    } catch (e) {
-      console.warn("Backend undo exchange failed", e);
-    }
-  }
-
-  saveState();
+  await saveState({
+    type: "UPDATE_VALE",
+    tableName: "vales_prizes",
+    recordId: prizeId,
+    payload: item
+  });
   renderValesView();
   updateGlobalStats();
   showToast(`Troca desfeita! O prêmio de ${item.customerName} voltou para Aguardando Retirada.`, "success");
@@ -2334,19 +2581,13 @@ async function markPrizeDelivered(prizeId) {
     item.status = "delivered";
     item.deliveredAt = getLocalDateStr();
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/vales/deliver", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ valeId: prizeId })
-        });
-      } catch (e) {
-        console.warn("Backend deliver prize failed", e);
-      }
-    }
+    await saveState({
+      type: "UPDATE_VALE",
+      tableName: "vales_prizes",
+      recordId: prizeId,
+      payload: item
+    });
 
-    saveState();
     renderValesView();
     showToast("Prêmio marcado como entregue com sucesso!", "success");
   }
@@ -2362,15 +2603,13 @@ async function deleteValeItem(id) {
 
     appData.valesAndPrizes = appData.valesAndPrizes.filter(v => v.id !== id);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch(`/api/vales/${id}`, { method: "DELETE" });
-      } catch (e) {
-        console.warn("Backend delete vale failed", e);
-      }
-    }
+    await saveState({
+      type: "DELETE_VALE",
+      tableName: "vales_prizes",
+      recordId: id,
+      payload: { id }
+    });
 
-    saveState();
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
@@ -3579,15 +3818,13 @@ async function deleteFishingBooking(bookingId) {
 
     appData.fishingBookings = (appData.fishingBookings || []).filter(item => item.id !== bookingId);
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch(`/api/fishing/booking/${bookingId}`, { method: "DELETE" });
-      } catch (e) {
-        console.warn("Backend delete fishing booking failed", e);
-      }
-    }
+    await saveState({
+      type: "DELETE_FISHING_BOOKING",
+      tableName: "fishing_bookings",
+      recordId: bookingId,
+      payload: { id: bookingId }
+    });
 
-    saveState();
     renderFishingAgendaView();
     renderValesView();
     showToast("Reserva excluída do calendário.", "success");
@@ -4304,15 +4541,13 @@ async function deleteRanchoBooking(id) {
 
   appData.ranchoBookings = (appData.ranchoBookings || []).filter(item => item.id !== id);
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch(`/api/rancho/booking/${id}`, { method: "DELETE" });
-    } catch (e) {
-      console.warn("Backend delete rancho booking failed", e);
-    }
-  }
+  await saveState({
+    type: "DELETE_RANCHO_BOOKING",
+    tableName: "rancho_bookings",
+    recordId: id,
+    payload: { id }
+  });
 
-  saveState();
   renderRanchoView();
   showToast(`Locação de ${name} excluída com sucesso!`, "info");
 }
@@ -4537,25 +4772,19 @@ async function saveEduardoDay() {
     });
   }
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/eduardo/day", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: dateVal,
-          type: currentEduardoType,
-          hoursWeight: weight,
-          amountDue: amountDue,
-          notes: notesVal
-        })
-      });
-    } catch (e) {
-      console.warn("Backend save eduardo day failed", e);
+  await saveState({
+    type: "SET_EDUARDO_DAY",
+    tableName: "eduardo_work_days",
+    recordId: dateVal,
+    payload: {
+      date: dateVal,
+      type: currentEduardoType,
+      hoursWeight: weight,
+      amountDue: amountDue,
+      notes: notesVal
     }
-  }
+  });
 
-  saveState();
   renderEduardoView();
   closeModal("modalEduardoDay");
   showToast(`Ponto do dia ${formatDate(dateVal)} salvo com sucesso!`, "success");
@@ -4565,15 +4794,13 @@ async function deleteEduardoDay() {
   const dateVal = document.getElementById("eduardoInputDate").value;
   appData.eduardoWorkDays = appData.eduardoWorkDays.filter(d => d.date !== dateVal);
   
-  if (isConnectedToBackend) {
-    try {
-      await fetch(`/api/eduardo/day/${dateVal}`, { method: "DELETE" });
-    } catch (e) {
-      console.warn("Backend delete eduardo day failed", e);
-    }
-  }
+  await saveState({
+    type: "DELETE_EDUARDO_DAY",
+    tableName: "eduardo_work_days",
+    recordId: dateVal,
+    payload: { date: dateVal }
+  });
 
-  saveState();
   renderEduardoView();
   closeModal("modalEduardoDay");
   showToast(`Registro do dia ${formatDate(dateVal)} excluído.`, "success");
@@ -4636,22 +4863,19 @@ async function updateEduardoRatesInDatabase() {
   appData.settings.eduardoDailyRate = dailyRate;
   appData.settings.eduardoHalfRate = halfRate;
 
-  if (isConnectedToBackend) {
-    try {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eduardoDailyRate: dailyRate,
-          eduardoHalfRate: halfRate
-        })
-      });
-    } catch (e) {
-      console.warn("Backend save rate failed", e);
+  await saveState({
+    type: "UPDATE_SETTINGS",
+    tableName: "settings",
+    recordId: "eduardoRates",
+    payload: {
+      key: "eduardoRates",
+      value: {
+        eduardoDailyRate: dailyRate,
+        eduardoHalfRate: halfRate
+      }
     }
-  }
+  });
 
-  saveState();
   renderEduardoCalculations();
 }
 
@@ -4697,6 +4921,7 @@ function handleRestoreBackupFile(event) {
    ========================================================================== */
 async function markAllReservedAsPaid() {
   const raffle = getActiveRaffle();
+  if (!raffle) return;
   let updatedList = [];
   raffle.numbers.forEach(n => {
     if (n.status === "reserved" && n.name) {
@@ -4707,19 +4932,16 @@ async function markAllReservedAsPaid() {
   });
 
   if (updatedList.length > 0) {
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/raffles/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ raffleId: raffle.id, numbers: updatedList })
-        });
-      } catch (e) {
-        console.warn("Backend batch update failed", e);
+    await saveState({
+      type: "BATCH_SET_NUMBERS",
+      tableName: "raffle_numbers",
+      recordId: raffle.id,
+      payload: {
+        raffleId: raffle.id,
+        numbersList: updatedList
       }
-    }
+    });
 
-    saveState();
     renderRaffleView();
     showToast(`${updatedList.length} números marcados como Pagos ✅!`, "success");
   } else {
@@ -4897,24 +5119,13 @@ async function saveRaffleForm() {
 
     targetRaffle.prizes = prizesArray;
 
-    if (isConnectedToBackend) {
-      try {
-        await fetch("/api/raffles/update-details", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            raffleId: editId,
-            title: title,
-            pricePerNumber: price,
-            prizes: prizesArray
-          })
-        });
-      } catch (e) {
-        console.warn("Backend update raffle details failed", e);
-      }
-    }
+    await saveState({
+      type: "UPDATE_RAFFLE",
+      tableName: "raffles",
+      recordId: targetRaffle.id,
+      payload: targetRaffle
+    });
 
-    saveState();
     renderRaffleDropdown();
     renderRaffleView();
     closeModal("modalRaffleForm");
@@ -5000,19 +5211,6 @@ async function confirmDeleteRaffle() {
   const raffleId = raffle.id;
   const raffleTitle = raffle.title || "Ação";
 
-  if (isConnectedToBackend) {
-    try {
-      const res = await fetch(`/api/raffles/${encodeURIComponent(raffleId)}`, {
-        method: "DELETE"
-      });
-      if (!res.ok) {
-        throw new Error(`Status ${res.status}`);
-      }
-    } catch (e) {
-      console.warn("Backend delete raffle failed, deleting locally", e);
-    }
-  }
-
   // Remove the raffle from local state. NOTE: appData.valesAndPrizes and appData.fishingBookings remain 100% UNTOUCHED!
   appData.raffles = (appData.raffles || []).filter(r => String(r.id) !== String(raffleId));
 
@@ -5024,7 +5222,13 @@ async function confirmDeleteRaffle() {
     activeRaffleId = null;
   }
 
-  saveState();
+  await saveState({
+    type: "DELETE_RAFFLE",
+    tableName: "raffles",
+    recordId: raffleId,
+    payload: { id: raffleId }
+  });
+
   renderAll();
   closeModal("modalDeleteRaffle");
   showToast(`Rifa "${raffleTitle}" excluída com sucesso! Os ganhadores e vales foram mantidos.`, "success");

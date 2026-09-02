@@ -1,14 +1,12 @@
 /**
- * Eldorado Pesca & Lake - Dexie.js / IndexedDB Offline Persistence Layer
- * Armazenamento local ultra-rápido, resiliente e offline-first com fila outbox.
+ * Eldorado Pesca & Lake - Dexie.js / IndexedDB Offline Persistence Layer (v2.1)
+ * Armazenamento local com isolamento estrito por organization_id e fila outbox.
  */
-
-const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 class LocalDatabase {
   constructor() {
     this.dbName = 'EldoradoPesca_v2';
-    this.version = 2;
+    this.version = 3;
     this.db = null;
     this.isReady = false;
     this._initPromise = this.init();
@@ -23,7 +21,7 @@ class LocalDatabase {
 
         // Settings
         if (!db.objectStoreNames.contains('settings')) {
-          const store = db.createObjectStore('settings', { keyPath: 'key' });
+          const store = db.createObjectStore('settings', { keyPath: ['organization_id', 'key'] });
           store.createIndex('idx_org', 'organization_id', { unique: false });
         }
 
@@ -34,10 +32,11 @@ class LocalDatabase {
           store.createIndex('idx_status', 'status', { unique: false });
         }
 
-        // Raffle Numbers: composite key id (org_raffle_num)
+        // Raffle Numbers
         if (!db.objectStoreNames.contains('raffle_numbers')) {
           const store = db.createObjectStore('raffle_numbers', { keyPath: '_key' });
           store.createIndex('idx_raffle_id', 'raffle_id', { unique: false });
+          store.createIndex('idx_org', 'organization_id', { unique: false });
           store.createIndex('idx_org_raffle', ['organization_id', 'raffle_id'], { unique: false });
           store.createIndex('idx_status', 'status', { unique: false });
         }
@@ -52,6 +51,7 @@ class LocalDatabase {
         // Transações de Vales
         if (!db.objectStoreNames.contains('vale_transactions')) {
           const store = db.createObjectStore('vale_transactions', { keyPath: 'id' });
+          store.createIndex('idx_org', 'organization_id', { unique: false });
           store.createIndex('idx_vale_id', 'vale_id', { unique: false });
         }
 
@@ -72,13 +72,14 @@ class LocalDatabase {
 
         // Folha e Ponto do Eduardo
         if (!db.objectStoreNames.contains('eduardo_work_days')) {
-          const store = db.createObjectStore('eduardo_work_days', { keyPath: 'date' });
+          const store = db.createObjectStore('eduardo_work_days', { keyPath: ['organization_id', 'date'] });
           store.createIndex('idx_org', 'organization_id', { unique: false });
         }
 
         // Fila de Sincronização Outbox
         if (!db.objectStoreNames.contains('sync_queue')) {
           const store = db.createObjectStore('sync_queue', { keyPath: 'id' });
+          store.createIndex('idx_org', 'orgId', { unique: false });
           store.createIndex('idx_status', 'status', { unique: false });
           store.createIndex('idx_timestamp', 'timestamp', { unique: false });
         }
@@ -171,10 +172,15 @@ class LocalDatabase {
 
   // --- FILA DE SINCRONIZAÇÃO OUTBOX ---
   async enqueueOperation(op) {
+    const orgId = op.orgId || (window.authManager ? window.authManager.getOrganizationId() : null);
+    if (!orgId) {
+      throw new Error('[LocalDB] Impossível enfileirar operação sem organization_id válido.');
+    }
+
     const operation = {
       id: op.id || ('op-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6)),
-      orgId: op.orgId || DEFAULT_ORG_ID,
-      type: op.type, // 'SELL_NUMBERS', 'CREATE_RAFFLE', 'UPDATE_VALE', 'BOOK_FISHING', 'BOOK_RANCHO', 'SET_EDUARDO_DAY', etc.
+      orgId: orgId,
+      type: op.type,
       tableName: op.tableName,
       recordId: op.recordId,
       payload: op.payload,
@@ -188,10 +194,16 @@ class LocalDatabase {
     return operation;
   }
 
-  async getPendingOperations() {
+  async getPendingOperations(filterOrgId = null) {
     const all = await this.getAll('sync_queue');
+    const orgId = filterOrgId || (window.authManager ? window.authManager.getOrganizationId() : null);
+    
     return all
-      .filter(op => op.status === 'pending' || op.status === 'conflict' || op.status === 'failed')
+      .filter(op => {
+        const matchesOrg = !orgId || op.orgId === orgId;
+        const matchesStatus = op.status === 'pending' || op.status === 'conflict' || op.status === 'failed';
+        return matchesOrg && matchesStatus;
+      })
       .sort((a, b) => a.timestamp - b.timestamp);
   }
 
@@ -203,14 +215,25 @@ class LocalDatabase {
     const op = await this.get('sync_queue', opId);
     if (op) {
       op.status = status;
-      if (error) op.error = error;
+      if (error !== undefined) op.error = error;
       if (status === 'syncing') op.retryCount = (op.retryCount || 0) + 1;
       await this.put('sync_queue', op);
     }
   }
 
-  // Carrega todos os dados do banco IndexedDB para a memória do app
-  async loadFullAppData(orgId = DEFAULT_ORG_ID) {
+  // Carrega todos os dados do banco IndexedDB filtrando ESTRITAMENTE pela organização
+  async loadFullAppData(orgId) {
+    if (!orgId) {
+      return {
+        settings: null,
+        raffles: null,
+        valesAndPrizes: null,
+        fishingBookings: null,
+        ranchoBookings: null,
+        eduardoWorkDays: null
+      };
+    }
+
     const [settingsList, raffles, valesAndPrizes, fishingBookings, ranchoBookings, eduardoWorkDays] = await Promise.all([
       this.getAll('settings'),
       this.getAll('raffles'),
@@ -220,23 +243,30 @@ class LocalDatabase {
       this.getAll('eduardo_work_days')
     ]);
 
-    // Transforma array de settings em objeto chave-valor
+    // Filtra estritamente pelo organization_id
+    const orgSettingsList = settingsList.filter(s => s.organization_id === orgId);
+    const orgRaffles = raffles.filter(r => r.organization_id === orgId);
+    const orgVales = valesAndPrizes.filter(v => v.organization_id === orgId);
+    const orgFishing = fishingBookings.filter(f => f.organization_id === orgId);
+    const orgRancho = ranchoBookings.filter(r => r.organization_id === orgId);
+    const orgEduardo = eduardoWorkDays.filter(d => d.organization_id === orgId);
+
     const settings = {};
-    settingsList.forEach(s => { settings[s.key] = s.value; });
+    orgSettingsList.forEach(s => { settings[s.key] = s.value; });
 
     return {
       settings: Object.keys(settings).length > 0 ? settings : null,
-      raffles: raffles.length > 0 ? raffles : null,
-      valesAndPrizes: valesAndPrizes.length > 0 ? valesAndPrizes : null,
-      fishingBookings: fishingBookings.length > 0 ? fishingBookings : null,
-      ranchoBookings: ranchoBookings.length > 0 ? ranchoBookings : null,
-      eduardoWorkDays: eduardoWorkDays.length > 0 ? eduardoWorkDays : null
+      raffles: orgRaffles.length > 0 ? orgRaffles : null,
+      valesAndPrizes: orgVales.length > 0 ? orgVales : null,
+      fishingBookings: orgFishing.length > 0 ? orgFishing : null,
+      ranchoBookings: orgRancho.length > 0 ? orgRancho : null,
+      eduardoWorkDays: orgEduardo.length > 0 ? orgEduardo : null
     };
   }
 
-  // Salva todo o snapshot do appData no IndexedDB
-  async saveFullAppData(appData, orgId = DEFAULT_ORG_ID) {
-    if (!appData) return;
+  // Salva todo o snapshot do appData no IndexedDB vinculado ao organization_id
+  async saveFullAppData(appData, orgId) {
+    if (!appData || !orgId) return;
 
     // Settings
     if (appData.settings && typeof appData.settings === 'object') {
@@ -271,6 +301,15 @@ class LocalDatabase {
     // Eduardo
     if (Array.isArray(appData.eduardoWorkDays) && appData.eduardoWorkDays.length > 0) {
       await this.putBatch('eduardo_work_days', appData.eduardoWorkDays.map(d => ({ ...d, organization_id: orgId })));
+    }
+  }
+
+  // Helper para exclusão pontual no IndexedDB
+  async deleteRecord(storeName, key) {
+    try {
+      await this.delete(storeName, key);
+    } catch (e) {
+      console.warn(`[LocalDB] Falha ao deletar ${key} de ${storeName}:`, e);
     }
   }
 }

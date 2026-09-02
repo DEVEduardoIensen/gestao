@@ -1,6 +1,6 @@
 /**
- * Eldorado Pesca & Lake - Sync Engine (Outbox Queue & Realtime Sync)
- * Processamento robusto de fila offline, RPCs atômicas e resolução de conflitos.
+ * Eldorado Pesca & Lake - Sync Engine (Outbox Queue & Realtime Sync) (v2.1)
+ * Processamento robusto de fila offline, RPCs atômicas, resolução de conflitos, deleções e idempotência.
  */
 
 class SyncEngine {
@@ -54,21 +54,21 @@ class SyncEngine {
     });
   }
 
-  // --- BUSCAR DADOS COMPLETOS DO SUPABASE ---
+  // --- BUSCAR DADOS COMPLETOS DO SUPABASE PARA O TENANT ---
   async fetchRemoteData(orgId) {
-    if (!window.supabaseClient || !this.isOnline) return null;
+    if (!window.supabaseClient || !this.isOnline || !orgId) return null;
 
     try {
       const [
-        { data: settingsData },
-        { data: rafflesData },
-        { data: raffleNumbersData },
-        { data: rafflePrizesData },
-        { data: valesData },
-        { data: valeTxData },
-        { data: fishingData },
-        { data: ranchoData },
-        { data: eduardoData }
+        { data: settingsData, error: sErr },
+        { data: rafflesData, error: rErr },
+        { data: raffleNumbersData, error: rnErr },
+        { data: rafflePrizesData, error: rpErr },
+        { data: valesData, error: vErr },
+        { data: valeTxData, error: vtErr },
+        { data: fishingData, error: fErr },
+        { data: ranchoData, error: raErr },
+        { data: eduardoData, error: eErr }
       ] = await Promise.all([
         window.supabaseClient.from('settings').select('*').eq('organization_id', orgId),
         window.supabaseClient.from('raffles').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
@@ -81,6 +81,10 @@ class SyncEngine {
         window.supabaseClient.from('eduardo_work_days').select('*').eq('organization_id', orgId)
       ]);
 
+      if (sErr || rErr || rnErr || rpErr || vErr || vtErr || fErr || raErr || eErr) {
+        console.warn('[SyncEngine] Erro parcial no fetchRemoteData:', { sErr, rErr, rnErr, rpErr, vErr, vtErr, fErr, raErr, eErr });
+      }
+
       // Monta objeto settings
       const settings = {};
       (settingsData || []).forEach(s => {
@@ -92,7 +96,6 @@ class SyncEngine {
         const numbersForThisRaffle = (raffleNumbersData || []).filter(n => n.raffle_id === r.id);
         const prizesForThisRaffle = (rafflePrizesData || []).filter(p => p.raffle_id === r.id);
 
-        // Se a rifa não tiver registros individuais de números gerados, gera o array
         let numbersArray = [];
         const total = r.total_numbers || 60;
         for (let i = 1; i <= total; i++) {
@@ -247,8 +250,11 @@ class SyncEngine {
   async processQueue() {
     if (this.isSyncing || !this.isOnline || !window.supabaseClient) return;
 
+    const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
+    if (!orgId) return;
+
     this.isSyncing = true;
-    const pendingOps = await window.localDB.getPendingOperations();
+    const pendingOps = await window.localDB.getPendingOperations(orgId);
 
     if (pendingOps.length === 0) {
       this.isSyncing = false;
@@ -259,29 +265,53 @@ class SyncEngine {
     this.updateStatus('syncing');
 
     for (const op of pendingOps) {
+      // Se a operação já está marcada como conflito não resolvido, pula para o próximo item
+      if (op.status === 'conflict') {
+        continue;
+      }
+
+      // Backoff exponencial para retentativas de falha
+      if (op.retryCount > 0 && op.lastAttempt) {
+        const delay = Math.min(1000 * Math.pow(2, Math.min(op.retryCount, 6)), 60000);
+        if (Date.now() - op.lastAttempt < delay) {
+          continue;
+        }
+      }
+
       try {
         await window.localDB.updateOperationStatus(op.id, 'syncing');
-        const success = await this.executeOperation(op);
+        op.lastAttempt = Date.now();
 
-        if (success) {
+        const result = await this.executeOperation(op);
+
+        if (result === true || (result && result.success)) {
           await window.localDB.removeOperation(op.id);
+          // Remove de eventuais conflitos resolvidos
+          this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
+        } else if (result && result.conflict) {
+          // Conflito registrado — mantem na fila para decisão do operador
+          console.warn('[SyncEngine] Conflito retornado pelo servidor:', result);
         }
       } catch (err) {
-        console.error(`[SyncEngine] Falha ao sincronizar operação ${op.id}:`, err);
-        await window.localDB.updateOperationStatus(op.id, 'failed', err.message);
+        console.error(`[SyncEngine] Falha ao sincronizar operação ${op.id} (${op.type}):`, err);
+        await window.localDB.updateOperationStatus(op.id, 'failed', err.message || 'Erro de rede');
       }
     }
 
     this.isSyncing = false;
-    const remaining = await window.localDB.getPendingOperations();
+    const remaining = await window.localDB.getPendingOperations(orgId);
     const hasConflicts = remaining.some(o => o.status === 'conflict');
     this.updateStatus(hasConflicts ? 'conflict' : (remaining.length > 0 ? 'offline' : 'synced'));
   }
 
   async executeOperation(op) {
-    const orgId = op.orgId || window.authManager.getOrganizationId();
+    const orgId = op.orgId || (window.authManager ? window.authManager.getOrganizationId() : null);
+    if (!orgId) {
+      throw new Error('Operação cancelada: organization_id ausente.');
+    }
 
     switch (op.type) {
+      // 1. Venda de Cotas (Atômica Anti-Conflito)
       case 'SELL_NUMBERS': {
         const { raffleId, numbers, status, buyerName, reservedAt, paidAt, allowOverride } = op.payload;
         const { data, error } = await window.supabaseClient.rpc('sell_raffle_numbers_atomic', {
@@ -289,7 +319,7 @@ class SyncEngine {
           p_raffle_id: raffleId,
           p_numbers: numbers,
           p_status: status,
-          p_buyer_name: buyerName,
+          p_buyer_name: buyerName || '',
           p_reserved_at: reservedAt || null,
           p_paid_at: paidAt || null,
           p_allow_override: !!allowOverride
@@ -299,24 +329,67 @@ class SyncEngine {
 
         if (data && data.conflict) {
           console.warn('[SyncEngine] Conflito detectado na venda de cotas:', data);
-          op.status = 'conflict';
-          op.error = data.message;
           await window.localDB.updateOperationStatus(op.id, 'conflict', data.message);
-          this.conflicts.push({
+          
+          const conflictEntry = {
             opId: op.id,
             type: 'RAFFLE_NUMBERS_CONFLICT',
             raffleId,
-            conflictingNumbers: data.conflict_numbers,
+            conflictingNumbers: data.conflict_numbers || [],
             buyerName,
-            attemptedNumbers: numbers
-          });
-          return false;
+            attemptedNumbers: numbers,
+            timestamp: op.timestamp
+          };
+
+          this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
+          this.conflicts.push(conflictEntry);
+
+          // Atualiza o estado da cota localmente para refletir o estado real do servidor
+          if (Array.isArray(data.conflict_numbers) && window.appData && Array.isArray(window.appData.raffles)) {
+            const raffle = window.appData.raffles.find(r => r.id === raffleId);
+            if (raffle && Array.isArray(raffle.numbers)) {
+              data.conflict_numbers.forEach(c => {
+                const item = raffle.numbers.find(n => n.num === c.num);
+                if (item) {
+                  item.status = c.status;
+                  item.name = c.current_owner || '';
+                }
+              });
+              if (window.renderRaffleNumbersGrid) window.renderRaffleNumbersGrid();
+            }
+          }
+
+          return { success: false, conflict: true, data };
         }
 
-        return data?.success;
+        return data?.success || true;
       }
 
-      case 'CREATE_RAFFLE': {
+      // 2. Venda / Atualização de Cotas em Lote
+      case 'BATCH_SET_NUMBERS': {
+        const { raffleId, numbersList } = op.payload; // array de { num, name, status, reservedAt, paidAt }
+        const nums = numbersList.map(n => n.num);
+        const buyer = numbersList[0]?.name || '';
+        const status = numbersList[0]?.status || 'paid';
+
+        const { data, error } = await window.supabaseClient.rpc('sell_raffle_numbers_atomic', {
+          p_org_id: orgId,
+          p_raffle_id: raffleId,
+          p_numbers: nums,
+          p_status: status,
+          p_buyer_name: buyer,
+          p_reserved_at: null,
+          p_paid_at: new Date().toISOString(),
+          p_allow_override: true
+        });
+
+        if (error) throw error;
+        return data?.success || true;
+      }
+
+      // 3. Criar ou Atualizar Rifa
+      case 'CREATE_RAFFLE':
+      case 'UPDATE_RAFFLE': {
         const r = op.payload;
         const { error: rError } = await window.supabaseClient.from('raffles').upsert({
           organization_id: orgId,
@@ -343,16 +416,31 @@ class SyncEngine {
             raffle_id: r.id,
             position: p.position || (idx + 1),
             description: p.description,
-            winner_number: p.winnerNumber,
-            winner_name: p.winnerName
+            winner_number: p.winnerNumber || null,
+            winner_name: p.winnerName || ''
           }));
-          const { error: pError } = await window.supabaseClient.from('raffle_prizes').upsert(prizeRecords);
+          const { error: pError } = await window.supabaseClient
+            .from('raffle_prizes')
+            .upsert(prizeRecords, { onConflict: 'organization_id,raffle_id,position' });
           if (pError) throw pError;
         }
         return true;
       }
 
-      case 'UPDATE_VALE': {
+      // 4. Excluir Rifa
+      case 'DELETE_RAFFLE': {
+        const { id } = op.payload;
+        const { error } = await window.supabaseClient
+          .from('raffles')
+          .delete()
+          .match({ organization_id: orgId, id: id });
+        if (error) throw error;
+        return true;
+      }
+
+      // 5. Criar / Atualizar Vale ou Prêmio
+      case 'UPDATE_VALE':
+      case 'CREATE_VALE': {
         const v = op.payload;
         const { error } = await window.supabaseClient.from('vales_prizes').upsert({
           organization_id: orgId,
@@ -377,6 +465,18 @@ class SyncEngine {
         return true;
       }
 
+      // 6. Excluir Vale
+      case 'DELETE_VALE': {
+        const { id } = op.payload;
+        const { error } = await window.supabaseClient
+          .from('vales_prizes')
+          .delete()
+          .match({ organization_id: orgId, id: id });
+        if (error) throw error;
+        return true;
+      }
+
+      // 7. Adicionar Transação de Vale
       case 'ADD_VALE_TRANSACTION': {
         const tx = op.payload;
         const { error } = await window.supabaseClient.from('vale_transactions').upsert({
@@ -393,7 +493,9 @@ class SyncEngine {
         return true;
       }
 
-      case 'BOOK_FISHING': {
+      // 8. Criar / Atualizar Agendamento de Pesca
+      case 'BOOK_FISHING':
+      case 'UPDATE_FISHING': {
         const f = op.payload;
         const { error } = await window.supabaseClient.from('fishing_bookings').upsert({
           organization_id: orgId,
@@ -428,7 +530,20 @@ class SyncEngine {
         return true;
       }
 
-      case 'BOOK_RANCHO': {
+      // 9. Excluir Agendamento de Pesca
+      case 'DELETE_FISHING_BOOKING': {
+        const { id } = op.payload;
+        const { error } = await window.supabaseClient
+          .from('fishing_bookings')
+          .delete()
+          .match({ organization_id: orgId, id: id });
+        if (error) throw error;
+        return true;
+      }
+
+      // 10. Criar / Atualizar Locação do Rancho
+      case 'BOOK_RANCHO':
+      case 'UPDATE_RANCHO': {
         const r = op.payload;
         const { error } = await window.supabaseClient.from('rancho_bookings').upsert({
           organization_id: orgId,
@@ -451,6 +566,18 @@ class SyncEngine {
         return true;
       }
 
+      // 11. Excluir Locação do Rancho
+      case 'DELETE_RANCHO_BOOKING': {
+        const { id } = op.payload;
+        const { error } = await window.supabaseClient
+          .from('rancho_bookings')
+          .delete()
+          .match({ organization_id: orgId, id: id });
+        if (error) throw error;
+        return true;
+      }
+
+      // 12. Ponto do Eduardo (Definir Dia)
       case 'SET_EDUARDO_DAY': {
         const d = op.payload;
         if (d.type === 'off') {
@@ -471,6 +598,18 @@ class SyncEngine {
         return true;
       }
 
+      // 13. Excluir Ponto do Eduardo
+      case 'DELETE_EDUARDO_DAY': {
+        const { date } = op.payload;
+        const { error } = await window.supabaseClient
+          .from('eduardo_work_days')
+          .delete()
+          .match({ organization_id: orgId, date: date });
+        if (error) throw error;
+        return true;
+      }
+
+      // 14. Atualizar Configurações Globais da Organização
       case 'UPDATE_SETTINGS': {
         const { key, value } = op.payload;
         const valStr = typeof value === 'string' ? value : JSON.stringify(value);
@@ -484,8 +623,35 @@ class SyncEngine {
       }
 
       default:
-        console.warn('[SyncEngine] Tipo de operação desconhecido:', op.type);
-        return true;
+        // NUNCA descartar silenciosamente operações desconhecidas!
+        console.error('[SyncEngine] Tipo de operação desconhecido:', op.type);
+        throw new Error(`Operação não suportada pelo motor de sincronização: ${op.type}`);
+    }
+  }
+
+  // Resolução de Conflitos pelo Usuário na Central de Sincronização
+  async resolveConflict(opId, action = 'accept_server') {
+    const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
+    if (!orgId) return;
+
+    if (action === 'accept_server' || action === 'dismiss') {
+      await window.localDB.removeOperation(opId);
+      this.conflicts = this.conflicts.filter(c => c.opId !== opId);
+      // Recarrega os dados remotos para sincronizar a interface
+      if (window.initAppState) {
+        await window.initAppState();
+        if (window.renderAll) window.renderAll();
+      }
+      this.updateStatus(this.conflicts.length > 0 ? 'conflict' : 'synced');
+    } else if (action === 'force_override') {
+      const op = await window.localDB.get('sync_queue', opId);
+      if (op && op.payload) {
+        op.payload.allowOverride = true;
+        op.status = 'pending';
+        op.retryCount = 0;
+        await window.localDB.put('sync_queue', op);
+        this.processQueue();
+      }
     }
   }
 }

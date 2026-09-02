@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ELDORADO PESCA & LAKE - SUPABASE MULTI-TENANT POSTGRESQL SCHEMA COMPLETO
+-- ELDORADO PESCA & LAKE - SUPABASE MULTI-TENANT POSTGRESQL SCHEMA COMPLETO (v2.1)
 -- Execute este script no "SQL Editor" do painel Supabase (https://supabase.com)
 -- ==============================================================================
 
@@ -7,7 +7,7 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ==============================================================================
--- 1. TABELAS DE MULTI-TENANCY E ORGANIZAÇÕES
+-- 1. TABELAS DE MULTI-TENANCY, ORGANIZAÇÕES E MEMBROS
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS public.organizations (
@@ -27,25 +27,68 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
     UNIQUE(organization_id, user_id)
 );
 
--- Organização Padrão para Migração e Desenvolvimento Local (Eldorado Pesca & Lake)
-INSERT INTO public.organizations (id, name, slug)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Eldorado Pesca & Lake', 'eldorado-pesca-principal')
-ON CONFLICT (slug) DO NOTHING;
+-- Tabela de Convites de Funcionários para a Organização
+CREATE TABLE IF NOT EXISTS public.organization_invites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member', -- 'admin', 'member'
+    token TEXT UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(24), 'hex'),
+    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (timezone('utc'::text, now()) + interval '7 days'),
+    used_at TIMESTAMP WITH TIME ZONE
+);
 
 -- Função auxiliar segura para verificar quais organizações o usuário atual pertence
 CREATE OR REPLACE FUNCTION public.get_user_organizations()
-RETURNS SETOF UUID AS $$
+RETURNS SETOF UUID
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public, auth
+AS $$
   SELECT organization_id FROM public.organization_members WHERE user_id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
--- Trigger para criar organização automaticamente quando um novo usuário se cadastrar
+-- Trigger para vincular novo usuário à sua organização (ou criar nova se não houver convite)
 CREATE OR REPLACE FUNCTION public.handle_new_user_organization()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
 DECLARE
     new_org_id UUID;
     org_name TEXT;
     org_slug TEXT;
+    invite_token TEXT;
+    invite_rec RECORD;
 BEGIN
+    invite_token := NEW.raw_user_meta_data->>'invite_token';
+
+    -- Se tiver token de convite válido, vincula o usuário à organização correspondente
+    IF invite_token IS NOT NULL AND invite_token <> '' THEN
+        SELECT * INTO invite_rec FROM public.organization_invites
+        WHERE token = invite_token
+          AND used_at IS NULL
+          AND expires_at > now()
+        LIMIT 1;
+
+        IF FOUND THEN
+            INSERT INTO public.organization_members (organization_id, user_id, role)
+            VALUES (invite_rec.organization_id, NEW.id, invite_rec.role)
+            ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+
+            UPDATE public.organization_invites
+            SET used_at = now()
+            WHERE id = invite_rec.id;
+
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    -- Caso contrário, cria uma nova organização padrão para o usuário como owner
     org_name := COALESCE(NEW.raw_user_meta_data->>'organization_name', 'Empresa ' || SUBSTRING(NEW.email FROM '^[^@]+'));
     org_slug := 'org-' || SUBSTRING(NEW.id::text FROM 1 FOR 8) || '-' || (EXTRACT(EPOCH FROM now())::BIGINT);
 
@@ -58,12 +101,48 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_organization();
+
+-- RPC para aceitar convite após login
+CREATE OR REPLACE FUNCTION public.join_organization_via_invite(p_token TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_invite RECORD;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Usuário não autenticado', 'code', 'UNAUTHORIZED');
+    END IF;
+
+    SELECT * INTO v_invite FROM public.organization_invites
+    WHERE token = p_token AND used_at IS NULL AND expires_at > now()
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Convite inválido ou expirado', 'code', 'INVALID_INVITE');
+    END IF;
+
+    INSERT INTO public.organization_members (organization_id, user_id, role)
+    VALUES (v_invite.organization_id, v_user_id, v_invite.role)
+    ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+
+    UPDATE public.organization_invites
+    SET used_at = now()
+    WHERE id = v_invite.id;
+
+    RETURN jsonb_build_object('success', true, 'organization_id', v_invite.organization_id);
+END;
+$$;
 
 -- ==============================================================================
 -- 2. TABELAS DE DADOS DO SISTEMA (VINCULADAS À ORGANIZAÇÃO)
@@ -114,7 +193,7 @@ CREATE TABLE IF NOT EXISTS public.raffle_numbers (
     FOREIGN KEY (organization_id, raffle_id) REFERENCES public.raffles(organization_id, id) ON DELETE CASCADE
 );
 
--- 2.4 Prêmios Definidos por Rifa (raffle_prizes)
+-- 2.4 Prêmios Definidos por Rifa (raffle_prizes) com Constraint Única Anti-Duplicação
 CREATE TABLE IF NOT EXISTS public.raffle_prizes (
     id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -123,6 +202,7 @@ CREATE TABLE IF NOT EXISTS public.raffle_prizes (
     description TEXT NOT NULL,
     winner_number INTEGER,
     winner_name TEXT,
+    UNIQUE(organization_id, raffle_id, position),
     FOREIGN KEY (organization_id, raffle_id) REFERENCES public.raffles(organization_id, id) ON DELETE CASCADE
 );
 
@@ -237,6 +317,7 @@ CREATE TABLE IF NOT EXISTS public.eduardo_work_days (
 -- 3. ÍNDICES PARA ALTA PERFORMANCE
 -- ==============================================================================
 CREATE INDEX IF NOT EXISTS idx_members_user_org ON public.organization_members(user_id, organization_id);
+CREATE INDEX IF NOT EXISTS idx_invites_org ON public.organization_invites(organization_id);
 CREATE INDEX IF NOT EXISTS idx_raffles_org_status ON public.raffles(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_raffle_numbers_org_raffle ON public.raffle_numbers(organization_id, raffle_id, num);
 CREATE INDEX IF NOT EXISTS idx_vales_org_status ON public.vales_prizes(organization_id, status);
@@ -244,7 +325,7 @@ CREATE INDEX IF NOT EXISTS idx_fishing_org_date ON public.fishing_bookings(organ
 CREATE INDEX IF NOT EXISTS idx_rancho_org_checkin ON public.rancho_bookings(organization_id, check_in_date);
 
 -- ==============================================================================
--- 4. OPERAÇÃO ATÔMICA ANTI-CONFLITO DE COTAS (RPC)
+-- 4. OPERAÇÃO ATÔMICA ANTI-CONFLITO DE COTAS COM ISOLAMENTO ESTRITO (RPC)
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.sell_raffle_numbers_atomic(
     p_org_id UUID,
@@ -256,7 +337,11 @@ CREATE OR REPLACE FUNCTION public.sell_raffle_numbers_atomic(
     p_paid_at TIMESTAMPTZ DEFAULT NULL,
     p_allow_override BOOLEAN DEFAULT FALSE
 )
-RETURNS JSONB AS $$
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
 DECLARE
     conflict_rec RECORD;
     conflicts JSONB := '[]'::JSONB;
@@ -264,8 +349,8 @@ DECLARE
     res_time TIMESTAMPTZ := COALESCE(p_reserved_at, now());
     pay_time TIMESTAMPTZ := COALESCE(p_paid_at, now());
 BEGIN
-    -- 1. Verifica se o usuário tem permissão na organização
-    IF auth.uid() IS NOT NULL AND NOT EXISTS (
+    -- 1. Exige autenticação e permissão estrita na organização
+    IF auth.uid() IS NULL OR NOT EXISTS (
         SELECT 1 FROM public.organization_members
         WHERE organization_id = p_org_id AND user_id = auth.uid()
     ) THEN
@@ -276,7 +361,7 @@ BEGIN
         );
     END IF;
 
-    -- 2. Se não for liberação ('available') e nem substituição forçada, checar conflitos
+    -- 2. Se não for liberação ('available') e nem substituição forçada, checar conflitos com bloqueio de linha
     IF p_status <> 'available' AND NOT p_allow_override THEN
         FOR conflict_rec IN
             SELECT num, status, name FROM public.raffle_numbers
@@ -284,6 +369,7 @@ BEGIN
               AND raffle_id = p_raffle_id
               AND num = ANY(p_numbers)
               AND status IN ('reserved', 'paid')
+            FOR UPDATE
         LOOP
             conflicts := conflicts || jsonb_build_object(
                 'num', conflict_rec.num,
@@ -330,13 +416,14 @@ BEGIN
         'updated_count', array_length(p_numbers, 1)
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- ==============================================================================
--- 5. POLÍTICAS DE ACESSO (Row Level Security - RLS)
+-- 5. POLÍTICAS DE ACESSO (Row Level Security - RLS) — 100% FECHADAS PARA ANÔNIMOS
 -- ==============================================================================
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.organization_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.raffles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.raffle_numbers ENABLE ROW LEVEL SECURITY;
@@ -348,63 +435,118 @@ ALTER TABLE public.rancho_bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eduardo_work_days ENABLE ROW LEVEL SECURITY;
 
 -- 5.1 Organizations
+DROP POLICY IF EXISTS "Membros veem sua organização" ON public.organizations;
 CREATE POLICY "Membros veem sua organização" ON public.organizations
     FOR SELECT USING (
-        id IN (SELECT public.get_user_organizations()) 
-        OR auth.uid() IS NULL -- Fallback controlado quando anon
+        auth.uid() IS NOT NULL AND id IN (SELECT public.get_user_organizations())
+    );
+
+DROP POLICY IF EXISTS "Owners e Admins atualizam organização" ON public.organizations;
+CREATE POLICY "Owners e Admins atualizam organização" ON public.organizations
+    FOR UPDATE USING (
+        auth.uid() IS NOT NULL AND id IN (
+            SELECT organization_id FROM public.organization_members 
+            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
+        )
     );
 
 -- 5.2 Organization Members
+DROP POLICY IF EXISTS "Membros veem seus colegas de organização" ON public.organization_members;
 CREATE POLICY "Membros veem seus colegas de organização" ON public.organization_members
     FOR SELECT USING (
-        organization_id IN (SELECT public.get_user_organizations())
-        OR user_id = auth.uid()
+        auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations())
     );
 
--- 5.3 Settings
+DROP POLICY IF EXISTS "Owners gerenciam membros" ON public.organization_members;
+CREATE POLICY "Owners gerenciam membros" ON public.organization_members
+    FOR ALL USING (
+        auth.uid() IS NOT NULL AND organization_id IN (
+            SELECT organization_id FROM public.organization_members 
+            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
+        )
+    )
+    WITH CHECK (
+        auth.uid() IS NOT NULL AND organization_id IN (
+            SELECT organization_id FROM public.organization_members 
+            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
+        )
+    );
+
+-- 5.3 Organization Invites
+DROP POLICY IF EXISTS "Membros veem convites da sua organização" ON public.organization_invites;
+CREATE POLICY "Membros veem convites da sua organização" ON public.organization_invites
+    FOR SELECT USING (
+        auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations())
+    );
+
+DROP POLICY IF EXISTS "Owners gerenciam convites" ON public.organization_invites;
+CREATE POLICY "Owners gerenciam convites" ON public.organization_invites
+    FOR ALL USING (
+        auth.uid() IS NOT NULL AND organization_id IN (
+            SELECT organization_id FROM public.organization_members 
+            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
+        )
+    )
+    WITH CHECK (
+        auth.uid() IS NOT NULL AND organization_id IN (
+            SELECT organization_id FROM public.organization_members 
+            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
+        )
+    );
+
+-- 5.4 Settings
+DROP POLICY IF EXISTS "RLS Settings" ON public.settings;
 CREATE POLICY "RLS Settings" ON public.settings
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.4 Raffles
+-- 5.5 Raffles
+DROP POLICY IF EXISTS "RLS Raffles" ON public.raffles;
 CREATE POLICY "RLS Raffles" ON public.raffles
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.5 Raffle Numbers
+-- 5.6 Raffle Numbers
+DROP POLICY IF EXISTS "RLS Raffle Numbers" ON public.raffle_numbers;
 CREATE POLICY "RLS Raffle Numbers" ON public.raffle_numbers
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.6 Raffle Prizes
+-- 5.7 Raffle Prizes
+DROP POLICY IF EXISTS "RLS Raffle Prizes" ON public.raffle_prizes;
 CREATE POLICY "RLS Raffle Prizes" ON public.raffle_prizes
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.7 Vales & Prêmios
+-- 5.8 Vales & Prêmios
+DROP POLICY IF EXISTS "RLS Vales" ON public.vales_prizes;
 CREATE POLICY "RLS Vales" ON public.vales_prizes
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.8 Transações de Vales
+-- 5.9 Transações de Vales
+DROP POLICY IF EXISTS "RLS Vale Transactions" ON public.vale_transactions;
 CREATE POLICY "RLS Vale Transactions" ON public.vale_transactions
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.9 Agenda Pescaria
+-- 5.10 Agenda Pescaria
+DROP POLICY IF EXISTS "RLS Fishing" ON public.fishing_bookings;
 CREATE POLICY "RLS Fishing" ON public.fishing_bookings
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.10 Rancho
+-- 5.11 Rancho
+DROP POLICY IF EXISTS "RLS Rancho" ON public.rancho_bookings;
 CREATE POLICY "RLS Rancho" ON public.rancho_bookings
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
--- 5.11 Ponto Eduardo
+-- 5.12 Ponto Eduardo
+DROP POLICY IF EXISTS "RLS Eduardo" ON public.eduardo_work_days;
 CREATE POLICY "RLS Eduardo" ON public.eduardo_work_days
-    FOR ALL USING (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL)
-    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()) OR auth.uid() IS NULL);
+    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
 
 -- ==============================================================================
 -- 6. ATIVAR REALTIME DO SUPABASE

@@ -3,13 +3,14 @@
  * Versão 2.0.0 — Cache do App Shell com atualização resiliente (Offline-First)
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.0.0';
+const CACHE_NAME = 'eldorado-pwa-v2.1.0';
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
   './',
   './index.html',
   './styles.css',
+  './lib/supabase.js',
   './app.js',
   './db_dexie.js',
   './sync_engine.js',

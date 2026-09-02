@@ -26,7 +26,7 @@ try {
 const { db, getAllData } = require('./database.js');
 const SUPABASE_CONFIG = require('./supabase_config.js');
 
-const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
+const TARGET_ORG_ID = process.env.TARGET_ORG_ID || process.env.DEFAULT_ORG_ID || process.argv[2] || '00000000-0000-0000-0000-000000000001';
 
 async function migrateData() {
   console.log('============================================================');
@@ -81,19 +81,19 @@ async function migrateData() {
 
   console.log('\n2. Garantindo existência da Organização no Supabase...');
   await supabasePost('organizations', [{
-    id: DEFAULT_ORG_ID,
+    id: TARGET_ORG_ID,
     name: 'Eldorado Pesca & Lake',
     slug: 'eldorado-pesca-principal'
   }], 'id');
-  console.log('✓ Organização padrão verificada');
+  console.log(`✓ Organização alvo (${TARGET_ORG_ID}) verificada`);
 
   console.log('\n3. Enviando dados para o Supabase...');
 
   // 1. Settings
   const settingsRows = [
-    { organization_id: DEFAULT_ORG_ID, key: 'eduardoDailyRate', value: JSON.stringify({ rate: localData.settings?.eduardoDailyRate || 62.00 }) },
-    { organization_id: DEFAULT_ORG_ID, key: 'eduardoHalfRate', value: JSON.stringify({ rate: localData.settings?.eduardoHalfRate || 31.00 }) },
-    { organization_id: DEFAULT_ORG_ID, key: 'ranchoDailyRate', value: JSON.stringify({ rate: localData.settings?.ranchoDailyRate || 250.00 }) }
+    { organization_id: TARGET_ORG_ID, key: 'eduardoDailyRate', value: JSON.stringify({ rate: localData.settings?.eduardoDailyRate || 62.00 }) },
+    { organization_id: TARGET_ORG_ID, key: 'eduardoHalfRate', value: JSON.stringify({ rate: localData.settings?.eduardoHalfRate || 31.00 }) },
+    { organization_id: TARGET_ORG_ID, key: 'ranchoDailyRate', value: JSON.stringify({ rate: localData.settings?.ranchoDailyRate || 250.00 }) }
   ];
   await supabasePost('settings', settingsRows, 'organization_id,key');
   console.log('✓ Configurações migradas');
@@ -101,7 +101,7 @@ async function migrateData() {
   // 2. Raffles, Numbers & Prizes
   if (localData.raffles && localData.raffles.length > 0) {
     const rafflesRows = localData.raffles.map(r => ({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: TARGET_ORG_ID,
       id: r.id,
       number: r.number || '',
       title: r.title,
@@ -122,7 +122,7 @@ async function migrateData() {
     for (const r of localData.raffles) {
       if (r.numbers && r.numbers.length > 0) {
         const numRows = r.numbers.map(n => ({
-          organization_id: DEFAULT_ORG_ID,
+          organization_id: TARGET_ORG_ID,
           raffle_id: r.id,
           num: n.num,
           name: n.name || '',
@@ -135,14 +135,14 @@ async function migrateData() {
 
       if (r.prizes && r.prizes.length > 0) {
         const prizeRows = r.prizes.map((p, idx) => ({
-          organization_id: DEFAULT_ORG_ID,
+          organization_id: TARGET_ORG_ID,
           raffle_id: r.id,
           position: p.position || (idx + 1),
           description: p.description || '',
           winner_number: p.winnerNumber || null,
           winner_name: p.winnerName || ''
         }));
-        await supabasePost('raffle_prizes', prizeRows);
+        await supabasePost('raffle_prizes', prizeRows, 'organization_id,raffle_id,position');
       }
     }
     console.log('✓ Rifas, números e prêmios migrados');
@@ -151,7 +151,7 @@ async function migrateData() {
   // 3. Vales & Prêmios
   if (localData.valesAndPrizes && localData.valesAndPrizes.length > 0) {
     const valesRows = localData.valesAndPrizes.map(v => ({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: TARGET_ORG_ID,
       id: v.id,
       customer_name: v.customerName,
       customer_phone: v.customerPhone || '',
@@ -174,7 +174,7 @@ async function migrateData() {
     for (const v of localData.valesAndPrizes) {
       if (v.transactions && v.transactions.length > 0) {
         const txRows = v.transactions.map((tx, idx) => ({
-          organization_id: DEFAULT_ORG_ID,
+          organization_id: TARGET_ORG_ID,
           id: tx.id || `${v.id}-tx-${idx}-${Date.now()}`,
           vale_id: v.id,
           date: tx.date || new Date().toISOString().slice(0, 10),
@@ -192,7 +192,7 @@ async function migrateData() {
   // 4. Fishing Bookings
   if (localData.fishingBookings && localData.fishingBookings.length > 0) {
     const fishRows = localData.fishingBookings.map(b => ({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: TARGET_ORG_ID,
       id: b.id,
       client_name: b.clientName,
       client_phone: b.clientPhone || '',
@@ -227,7 +227,7 @@ async function migrateData() {
   // 5. Rancho Bookings
   if (localData.ranchoBookings && localData.ranchoBookings.length > 0) {
     const ranchoRows = localData.ranchoBookings.map(r => ({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: TARGET_ORG_ID,
       id: r.id,
       client_name: r.clientName,
       client_phone: r.clientPhone || '',
@@ -261,7 +261,7 @@ async function migrateData() {
 
     if (entries.length > 0) {
       const eduardoRows = entries.map(d => ({
-        organization_id: DEFAULT_ORG_ID,
+        organization_id: TARGET_ORG_ID,
         date: d.date,
         type: d.type || 'off',
         hours_weight: d.hoursWeight || 1.0,
