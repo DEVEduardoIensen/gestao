@@ -5051,8 +5051,9 @@ function exportFullBackup() {
   a.click();
   URL.revokeObjectURL(url);
 
-  showToast("Backup baixado com sucesso!", "success");
+  showToast("Backup JSON baixado com sucesso!", "success");
 }
+window.exportFullBackup = exportFullBackup;
 
 function handleRestoreBackupFile(event) {
   const file = event.target.files[0];
@@ -5062,19 +5063,41 @@ function handleRestoreBackupFile(event) {
   reader.onload = async (e) => {
     try {
       const restored = JSON.parse(e.target.result);
-      if (!restored.raffles || !restored.valesAndPrizes) {
+      if (!restored || typeof restored !== 'object') {
         throw new Error("Arquivo de backup inválido.");
       }
-      appData = restored;
-      saveState();
+      appData = sanitizeAppData(restored);
+      
+      const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
+      if (orgId && window.localDB) {
+        await window.localDB.saveFullAppData(appData, orgId);
+      }
+
+      if (Array.isArray(appData.raffles) && appData.raffles.length > 0) {
+        for (const r of appData.raffles) {
+          await saveState({
+            type: "CREATE_RAFFLE",
+            tableName: "raffles",
+            recordId: r.id,
+            payload: r
+          });
+        }
+      }
+
+      if (appData.raffles && appData.raffles.length > 0) {
+        activeRaffleId = appData.raffles[0].id;
+      }
+
       renderAll();
-      showToast("Backup restaurado com sucesso!", "success");
+      showToast(`Backup restaurado com sucesso! ${appData.raffles?.length || 0} ações carregadas.`, "success");
     } catch (err) {
-      showToast("Erro ao restaurar backup: " + err.message, "warning");
+      console.error('[Backup] Erro ao restaurar:', err);
+      showToast("Erro ao restaurar backup: " + err.message, "error");
     }
   };
   reader.readAsText(file);
 }
+window.handleRestoreBackupFile = handleRestoreBackupFile;
 
 /* ==========================================================================
    Quick Batch Operations

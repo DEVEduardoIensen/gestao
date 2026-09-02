@@ -72,9 +72,6 @@
 
       <!-- Header Actions -->
       <div class="header-status-indicator">
-        <button class="btn btn-secondary btn-sm" id="btnHeaderAccessHub" onclick="openAccessHub()" title="Instalar Aplicativo no Celular ou PC" style="font-weight: 700; border-color: var(--border-gold);">
-          📲 <span id="headerInstallLabel">Instalar App</span>
-        </button>
         <div id="dbStatusBadge" class="db-status-badge online" title="Clique para ver o status da fila de sincronização" onclick="openModal('modalSyncCenter')">
           <span class="status-dot"></span>
           <span id="dbStatusText">Sincronizado</span>
@@ -1841,6 +1838,25 @@
             <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="openInviteMemberModal()">
               👥 Convidar Funcionário / Membro
             </button>
+          </div>
+
+          <!-- Backup & Restauração JSON -->
+          <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-light);">
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-gold); margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+              💾 Backup e Restauração de Dados
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem;">
+              Salve uma cópia completa de segurança em arquivo JSON ou restaure dados anteriores.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <button type="button" class="btn btn-gold btn-sm" onclick="exportFullBackup()" style="width: 100%;">
+                📥 Baixar Backup JSON
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inputAuthModalRestoreFile').click()" style="width: 100%; border-color: var(--border-gold);">
+                📤 Restaurar JSON
+              </button>
+              <input type="file" id="inputAuthModalRestoreFile" accept=".json" style="display: none;" onchange="handleRestoreBackupFile(event); closeModal('modalAuth');">
+            </div>
           </div>
 
           <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
