@@ -1,0 +1,14 @@
+# Local Desktop & SQLite files (Ignored on Vercel)
+local_server.js
+database.js
+migrate_sqlite_to_supabase.js
+main.js
+Launcher.cs
+*.exe
+*.ico
+*.db*
+backups/
+ABRIR_*.bat
+CRIAR_*.bat
+.env
+.env.*

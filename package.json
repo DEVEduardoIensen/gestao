@@ -5,7 +5,7 @@
   "scripts": {
     "build": "echo 'Static build ready'",
     "start": "electron main.js",
-    "server": "node server.js",
+    "server": "node local_server.js",
     "migrate": "node migrate_sqlite_to_supabase.js"
   },
   "keywords": [

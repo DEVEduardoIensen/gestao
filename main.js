@@ -19,7 +19,7 @@ if (!gotTheLock) {
 } else {
   // Start SQLite Backend Server in-process (lightning fast)
   try {
-    require('./server.js');
+    require('./local_server.js');
   } catch (e) {
     console.log('Backend server initialization note:', e.message);
   }
