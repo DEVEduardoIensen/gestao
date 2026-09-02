@@ -169,6 +169,19 @@ class AuthManager {
     return data;
   }
 
+  async loginWithGoogle() {
+    if (!this.client) throw new Error('Cliente Supabase não inicializado.');
+    const redirectUrl = window.location.origin + window.location.pathname;
+    const { data, error } = await this.client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl
+      }
+    });
+    if (error) throw error;
+    return data;
+  }
+
   async register(email, password, organizationName, inviteToken = null) {
     if (!this.client) throw new Error('Cliente Supabase não inicializado.');
     const metaData = {

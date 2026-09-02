@@ -539,6 +539,22 @@ async function handleGateAuthSubmit(e) {
   }
 }
 
+async function handleGoogleLogin() {
+  const errDiv = document.getElementById('gateErrorMessage');
+  if (errDiv) errDiv.style.display = 'none';
+  try {
+    showToast('Redirecionando para login com o Google...', 'info');
+    await window.authManager.loginWithGoogle();
+  } catch (err) {
+    console.error('[Google Auth Error]', err);
+    if (errDiv) {
+      errDiv.textContent = err.message || 'Erro ao conectar com o Google.';
+      errDiv.style.display = 'block';
+    }
+    showToast('Falha no login com Google. Verifique a configuração.', 'error');
+  }
+}
+
 async function handleAuthSubmit(e) {
   e.preventDefault();
   const email = document.getElementById('authEmailInput').value.trim();
