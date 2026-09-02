@@ -279,37 +279,13 @@ async function saveState(syncOperation = null) {
 }
 
 function initSyncAndPwaHandlers() {
-  // Service Worker Registration & Update Notification
+  // Service Worker Registration
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then(reg => {
       console.log('[PWA] Service Worker registrado com sucesso:', reg.scope);
-      
-      reg.addEventListener('updatefound', () => {
-        const newWorker = reg.installing;
-        if (newWorker) {
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              const banner = document.getElementById('pwaUpdateBanner');
-              if (banner) banner.style.display = 'block';
-            }
-          });
-        }
-      });
     }).catch(err => {
       console.warn('[PWA] Falha ao registrar Service Worker:', err);
     });
-
-    const btnUpdate = document.getElementById('btnApplyPwaUpdate');
-    if (btnUpdate) {
-      btnUpdate.addEventListener('click', () => {
-        navigator.serviceWorker.getRegistration().then(reg => {
-          if (reg && reg.waiting) {
-            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          }
-          window.location.reload();
-        });
-      });
-    }
   }
 
   // Escuta mudanças de status no SyncEngine
@@ -342,7 +318,9 @@ function updateAuthUi() {
   const loggedView = document.getElementById('authLoggedInView');
   const formView = document.getElementById('authFormView');
   const emailDisplay = document.getElementById('authUserEmailDisplay');
-  const orgSelect = document.getElementById('selectUserOrganization');
+  const adminEmailDisplay = document.getElementById('adminUserEmailDisplay');
+  const adminUserRoleBadge = document.getElementById('adminUserRoleBadge');
+  const adminUserAvatar = document.getElementById('adminUserAvatar');
   const gateScreen = document.getElementById('authGateScreen');
 
   const user = window.authManager ? window.authManager.user : null;
@@ -358,21 +336,46 @@ function updateAuthUi() {
     if (loggedView) loggedView.style.display = 'block';
     if (formView) formView.style.display = 'none';
     if (emailDisplay) emailDisplay.textContent = user.email || 'Usuário';
+    if (adminEmailDisplay) adminEmailDisplay.textContent = user.email || 'Usuário';
 
-    if (orgSelect && window.authManager.organizations.length > 0) {
-      orgSelect.innerHTML = '';
-      window.authManager.organizations.forEach(o => {
-        const opt = document.createElement('option');
-        opt.value = o.id;
-        opt.textContent = `${o.name} (${o.role || 'membro'})`;
-        if (o.id === currentOrg?.id) opt.selected = true;
-        orgSelect.appendChild(opt);
+    if (adminUserRoleBadge) {
+      const role = currentOrg?.role || 'owner';
+      adminUserRoleBadge.textContent = role === 'owner' ? 'Proprietário' : (role === 'admin' ? 'Administrador' : 'Membro');
+    }
+
+    if (adminUserAvatar) {
+      const initials = (currentOrg?.name || user.email || 'EP')
+        .split(' ')
+        .filter(Boolean)
+        .map(w => w[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+      adminUserAvatar.textContent = initials || 'EP';
+    }
+
+    const orgSelects = [
+      document.getElementById('selectUserOrganization'),
+      document.getElementById('adminSelectUserOrganization')
+    ].filter(Boolean);
+
+    if (window.authManager && window.authManager.organizations.length > 0) {
+      orgSelects.forEach(sel => {
+        sel.innerHTML = '';
+        window.authManager.organizations.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o.id;
+          opt.textContent = `${o.name} (${o.role || 'membro'})`;
+          if (o.id === currentOrg?.id) opt.selected = true;
+          sel.appendChild(opt);
+        });
       });
     }
   } else {
     if (label) label.textContent = 'Entrar';
     if (loggedView) loggedView.style.display = 'none';
     if (formView) formView.style.display = 'block';
+    if (adminEmailDisplay) adminEmailDisplay.textContent = 'Não Autenticado';
   }
 }
 
@@ -844,30 +847,7 @@ function onSelectActiveRaffle(raffleId) {
    Render Orchestration
    ========================================================================== */
 function renderBackupView() {
-  const statRaffles = document.getElementById('statBackupRafflesCount');
-  const statCotas = document.getElementById('statBackupCotasCount');
-  const statVales = document.getElementById('statBackupValesCount');
-  const statBookings = document.getElementById('statBackupBookingsCount');
-
-  if (statRaffles) {
-    const rafflesCount = appData.raffles?.length || 0;
-    statRaffles.textContent = `${rafflesCount} ação(ões)`;
-  }
-  if (statCotas) {
-    let totalCotas = 0;
-    (appData.raffles || []).forEach(r => {
-      totalCotas += (r.numbers || []).length;
-    });
-    statCotas.textContent = `${totalCotas} cotas no sistema`;
-  }
-  if (statVales) {
-    const valesCount = appData.valesAndPrizes?.length || 0;
-    statVales.textContent = `${valesCount} registros`;
-  }
-  if (statBookings) {
-    const bookingsCount = (appData.fishingBookings?.length || 0) + (appData.ranchoBookings?.length || 0);
-    statBookings.textContent = `${bookingsCount} agendamentos`;
-  }
+  updateAuthUi();
 }
 window.renderBackupView = renderBackupView;
 
@@ -1118,17 +1098,19 @@ function renderRaffleNumbersGrid() {
     }
 
     const isSelected = gridSelectedCotas.has(item.num);
+    const wonPrize = (raffle.prizes || []).find(p => p.winnerNumber === item.num);
+    const winnerClass = wonPrize ? ` is-winner winner-pos-${wonPrize.position || 1}` : "";
+
     const tile = document.createElement("div");
-    tile.className = `num-tile ${item.status}` + (isSelected ? " multi-selected" : "");
+    tile.className = `num-tile ${item.status}${winnerClass}` + (isSelected ? " multi-selected" : "");
     tile.dataset.index = index;
     tile.dataset.num = item.num;
 
-    // Check if this number won any prize
-    const wonPrize = (raffle.prizes || []).find(p => p.winnerNumber === item.num);
-
     let statusTag = "";
     if (wonPrize) {
-      statusTag = `<span class="num-status-tag" style="color: var(--primary-gold); font-weight: 800;">${wonPrize.position}º Lugar</span>`;
+      const pos = wonPrize.position || 1;
+      const posClass = pos <= 3 ? `winner-tag-${pos}` : 'winner-tag-other';
+      statusTag = `<span class="num-winner-tag ${posClass}">${pos}º Lugar</span>`;
     } else if (item.status === "paid") {
       statusTag = `<span class="num-status-tag" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {

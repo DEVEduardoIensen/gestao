@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="goldGradD" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5dfa0"/>
+      <stop offset="50%" stop-color="#e5c158"/>
+      <stop offset="100%" stop-color="#b89328"/>
+    </linearGradient>
+    <linearGradient id="bgGradD" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#060a13"/>
+    </linearGradient>
+  </defs>
+  <!-- Monitor Frame -->
+  <rect x="5" y="6" width="38" height="26" rx="4" fill="url(#bgGradD)" stroke="url(#goldGradD)" stroke-width="2.2"/>
+  <!-- Screen Area -->
+  <rect x="9" y="10" width="30" height="18" rx="2" fill="rgba(229, 193, 88, 0.1)"/>
+  <!-- App Dashboard preview inside screen -->
+  <line x1="12" y1="14" x2="20" y2="14" stroke="#e5c158" stroke-width="1.5" stroke-linecap="round"/>
+  <rect x="12" y="18" width="10" height="6" rx="1.5" fill="rgba(229, 193, 88, 0.25)"/>
+  <rect x="25" y="18" width="10" height="6" rx="1.5" fill="rgba(16, 185, 129, 0.25)"/>
+  <!-- Stand & Base -->
+  <path d="M20 32L18 39H30L28 32" fill="none" stroke="url(#goldGradD)" stroke-width="2.2" stroke-linejoin="round"/>
+  <line x1="15" y1="40" x2="33" y2="40" stroke="url(#goldGradD)" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

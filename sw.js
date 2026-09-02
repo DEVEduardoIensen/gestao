@@ -4,7 +4,7 @@
  * NUNCA apaga IndexedDB, dados locais ou Outbox durante atualizações.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.4.0';
+const CACHE_NAME = 'eldorado-pwa-v2.4.5';
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
@@ -24,7 +24,10 @@ const APP_SHELL_ASSETS = [
   './icon-512.png',
   './apple-touch-icon.png',
   './app_icon.ico',
-  './gremio_bg.jpg'
+  './gremio_bg.jpg',
+  './icon-mobile.svg',
+  './icon-desktop.svg',
+  './icon-web.svg'
 ];
 
 // Instalação: baixa os arquivos essenciais

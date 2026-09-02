@@ -55,21 +55,18 @@
         </button>
         <button class="nav-tab-btn" data-tab="tab-vales" id="tabBtnVales">
           Vales e Prêmios
-          <span class="tab-counter" id="badgePendingVales">2</span>
         </button>
         <button class="nav-tab-btn" data-tab="tab-agenda" id="tabBtnAgenda">
           Agenda de Pesca
-          <span class="tab-counter" id="badgePendingFishing">1</span>
         </button>
         <button class="nav-tab-btn" data-tab="tab-rancho" id="tabBtnRancho">
           Rancho
-          <span class="tab-counter" id="badgePendingRancho">0</span>
         </button>
         <button class="nav-tab-btn" data-tab="tab-eduardo" id="tabBtnEduardo">
           Ponto do Eduardo
         </button>
         <button class="nav-tab-btn" data-tab="tab-backup" id="tabBtnBackup">
-          Backup JSON
+          Administração
         </button>
       </nav>
 
@@ -79,23 +76,10 @@
           <span class="status-dot"></span>
           <span id="dbStatusText">Sincronizado</span>
         </div>
-        <button class="btn btn-gold btn-sm" id="btnHeaderAuth" onclick="openModal('modalAuth')" title="Gerenciar Conta e Organização">
-          <span id="headerAuthLabel">Conta</span>
-        </button>
       </div>
     </div>
   </header>
 
-  <!-- PWA Update Banner -->
-  <div id="pwaUpdateBanner" class="pwa-update-banner" style="display: none;">
-    <div class="pwa-update-content">
-      <span><strong>Nova versão disponível!</strong> Atualize para carregar as melhorias mais recentes.</span>
-      <div class="pwa-update-actions">
-        <button class="btn btn-gold btn-xs" id="btnApplyPwaUpdate">Atualizar Agora</button>
-        <button class="btn btn-secondary btn-xs" onclick="document.getElementById('pwaUpdateBanner').style.display='none'">Depois</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Main Container -->
   <main class="main-content">
@@ -721,42 +705,116 @@
     </section>
 
     <!-- ====================================================================
-         TAB 6: CENTRAL DE BACKUP E RESTAURAÇÃO JSON
+         TAB 6: PAINEL DE ADMINISTRAÇÃO & BACKUP
          ==================================================================== -->
     <section class="tab-pane" id="tab-backup">
-      <div class="section-header">
+      <div class="section-header" style="margin-bottom: 1.5rem;">
         <div class="section-title">
-          <h2>Backup e Restauração de Dados</h2>
-          <p>Exportação e importação de arquivo JSON com todas as rifas, cotas, vales, agendamentos e cadastros</p>
+          <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+            <h2 style="margin: 0;">Painel de Administração</h2>
+            <span class="badge" style="background: rgba(229, 193, 88, 0.15); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 700;">ÁREA MASTER</span>
+          </div>
+          <p style="margin-top: 0.35rem;">Gestão da conta, organização multi-tenant, colaboradores e segurança de backups</p>
         </div>
       </div>
 
-      <!-- Stats do Backup -->
-      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
-        <div class="stat-box">
-          <div class="stat-box-label">Ações / Rifas</div>
-          <div class="stat-box-value gold" id="statBackupRafflesCount">0 ações</div>
-          <div class="stat-box-sub" id="statBackupCotasCount">0 cotas no sistema</div>
+      <!-- Grid de Administração & Controle de Acesso -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.75rem;">
+        
+        <!-- Card 1: Conta & Organização Ativa (Multi-Tenant) -->
+        <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Organização & Conta</h3>
+              </div>
+              <span id="adminUserRoleBadge" class="badge" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-size: 0.7rem; padding: 0.2rem 0.55rem; border-radius: 9999px; font-weight: 700;">Proprietário</span>
+            </div>
+
+            <!-- Usuário Autenticado -->
+            <div style="background: rgba(255, 215, 0, 0.05); border: 1px solid rgba(229, 193, 88, 0.2); padding: 0.9rem 1.1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.85rem;">
+              <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #e5c158, #cfab44); color: #000; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.95rem; flex-shrink: 0;" id="adminUserAvatar">
+                EP
+              </div>
+              <div style="overflow: hidden;">
+                <div style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Usuário Autenticado</div>
+                <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="adminUserEmailDisplay">—</div>
+              </div>
+            </div>
+
+            <!-- Seletor de Organização Multi-Tenant -->
+            <div class="form-group" style="margin-bottom: 1rem;">
+              <label class="form-label" style="font-size: 0.82rem; font-weight: 600; color: var(--text-dim); display: flex; justify-content: space-between;">
+                <span>Organização Ativa (Multi-Tenant)</span>
+                <span style="color: #34d399; font-size: 0.75rem;">RLS Ativo</span>
+              </label>
+              <select id="adminSelectUserOrganization" class="form-select" onchange="onSwitchOrganization(this.value)" style="background: var(--bg-input); border-color: var(--border-gold); font-weight: 600;">
+                <!-- Renderizado dinamicamente pelo JS -->
+              </select>
+              <small style="color: var(--text-dim); font-size: 0.75rem; margin-top: 0.4rem; display: block; line-height: 1.4;">
+                Seus dados e tabelas são isolados por segurança (RLS) dentro desta organização.
+              </small>
+            </div>
+          </div>
+
+          <!-- Ações de Conta -->
+          <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.65rem;">
+            <button type="button" class="btn btn-secondary" onclick="handleUserLogout()" style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.82rem; border-color: rgba(239, 68, 68, 0.4); color: #f87171; text-align: center;">
+              Sair da Conta
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="openModal('modalSyncCenter')" style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.82rem; border-color: var(--border-gold); color: var(--primary-gold); text-align: center;">
+              Sincronização
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="openAccessHub()" style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.82rem; border-color: var(--border-gold); color: var(--primary-gold); text-align: center;">
+              Instalar App
+            </button>
+          </div>
         </div>
 
-        <div class="stat-box">
-          <div class="stat-box-label">Vales e Prêmios</div>
-          <div class="stat-box-value" id="statBackupValesCount">0 registros</div>
-          <div class="stat-box-sub">Créditos e trocas ativas</div>
+        <!-- Card 2: Equipe & Membros -->
+        <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <h3 style="color: var(--text-light); font-size: 1.15rem; margin: 0; font-weight: 700;">Equipe & Membros</h3>
+              </div>
+              <span class="badge" style="background: rgba(229, 193, 88, 0.1); color: var(--primary-gold); font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 9999px;">Acesso Colaborativo</span>
+            </div>
+
+            <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
+              Adicione funcionários, gerentes ou operadores à sua empresa. Membros convidados acessam os mesmos dados de rifas, agendamentos e vales com permissões seguras.
+            </p>
+
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.9rem 1rem; margin-bottom: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem; color: var(--text-light); font-size: 0.82rem; font-weight: 600; margin-bottom: 0.35rem;">
+                Convites via Código Seguro
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-dim); line-height: 1.4;">
+                Gere um token com o cargo desejado (Administrador ou Membro) para seu colaborador se conectar.
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button type="button" class="btn btn-gold" onclick="openInviteMemberModal()" style="width: 100%; padding: 0.85rem; font-weight: 700; font-size: 0.9rem;">
+              + Convidar Funcionário / Membro
+            </button>
+          </div>
         </div>
 
-        <div class="stat-box">
-          <div class="stat-box-label">Agenda & Rancho</div>
-          <div class="stat-box-value gold" id="statBackupBookingsCount">0 diárias</div>
-          <div class="stat-box-sub">Pesca e locações cadastradas</div>
-        </div>
+      </div>
+
+      <!-- Divisor Elegante -->
+      <div style="display: flex; align-items: center; gap: 1rem; margin: 1.75rem 0 1.5rem 0;">
+        <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--primary-gold);">Segurança & Backup de Dados</span>
+        <div style="flex: 1; height: 1px; background: var(--border-subtle);"></div>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
         <!-- Card Fazer Backup -->
         <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
           <div>
-            <h3 style="color: var(--primary-gold); font-size: 1.25rem; margin-bottom: 0.75rem; font-weight: 700;">Fazer Backup Completo (Download JSON)</h3>
+            <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin-bottom: 0.75rem; font-weight: 700;">Fazer Backup Completo (Download JSON)</h3>
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
               Gera e salva no seu dispositivo um arquivo JSON seguro contendo todas as rifas ativas e finalizadas, lista completa de cotas com nomes e status de pagamento, carteira de vales, diárias do Eldorado Lake, locações do Rancho e folhas do Eduardo.
             </p>
@@ -769,7 +827,7 @@
         <!-- Card Restaurar Backup -->
         <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
           <div>
-            <h3 style="color: var(--text-light); font-size: 1.25rem; margin-bottom: 0.75rem; font-weight: 700;">Restaurar Dados (Importar JSON)</h3>
+            <h3 style="color: var(--text-light); font-size: 1.15rem; margin-bottom: 0.75rem; font-weight: 700;">Restaurar Dados (Importar JSON)</h3>
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
               Selecione um arquivo de backup (.json) salvo anteriormente para restaurar os dados no aplicativo e sincronizar diretamente na nuvem.
             </p>
@@ -789,7 +847,7 @@
         <ul style="color: var(--text-muted); font-size: 0.82rem; line-height: 1.6; margin: 0; padding-left: 1.2rem;">
           <li>Todas as ações de rifas cadastradas, preços, regras e mensagens WhatsApp.</li>
           <li>Todas as cotas de cada ação com nomes de compradores e status (Pago ou Reservado).</li>
-          <li>Ganhadores, premiações e posições sorteadas.</li>
+          <li>Ganhadores, premiações e posições sorteadas (1º, 2º e 3º Lugar).</li>
           <li>Carteira de vales-compras, saldos e histórico de retiradas.</li>
           <li>Agendamentos de pesca do Eldorado Lake e locações do Rancho.</li>
           <li>Registros de diárias e ponto de trabalho do Eduardo.</li>
@@ -1820,7 +1878,12 @@
 
   <!-- Fullscreen Post-Login Hub Screen (Tela Dedicada com os 3 Modos de Acesso) -->
   <div id="postLoginHubScreen" class="auth-gate-screen" style="display: none;">
-    <div class="auth-gate-card" style="max-width: 640px; width: 95%;">
+    <div class="auth-gate-card" style="max-width: 640px; width: 95%; position: relative;">
+      <button type="button" class="hub-close-btn" onclick="proceedToDashboard()" aria-label="Fechar" title="Fechar">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1.5 1.5L12.5 12.5M1.5 12.5L12.5 1.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </button>
       <div class="auth-gate-header" style="margin-bottom: 1.5rem;">
         <img src="logo.webp" alt="Eldorado Pesca" class="auth-gate-logo" style="width: 64px; height: 64px;">
         <h2 class="auth-gate-title" id="hubWelcomeOrgName">ELDORADO PESCA <span class="brand-gold-tag">PRO</span></h2>
@@ -1832,7 +1895,9 @@
         
         <!-- Opção 1: Celular -->
         <div class="hub-option-card" onclick="triggerInstallApp('mobile')">
-          <div class="hub-option-icon">App</div>
+          <div class="hub-option-icon">
+            <img src="icon-mobile.svg" alt="Celular" class="hub-icon-img" width="36" height="36">
+          </div>
           <div class="hub-option-info">
             <div class="hub-option-title-row">
               <h3 class="hub-option-title">Instalar no Celular</h3>
@@ -1850,7 +1915,9 @@
 
         <!-- Opção 2: Computador -->
         <div class="hub-option-card" onclick="triggerInstallApp('desktop')">
-          <div class="hub-option-icon">PC</div>
+          <div class="hub-option-icon">
+            <img src="icon-desktop.svg" alt="Computador" class="hub-icon-img" width="36" height="36">
+          </div>
           <div class="hub-option-info">
             <div class="hub-option-title-row">
               <h3 class="hub-option-title">Instalar no Computador</h3>
@@ -1863,7 +1930,9 @@
 
         <!-- Opção 3: Continuar na Web -->
         <div class="hub-option-card" onclick="proceedToDashboard()">
-          <div class="hub-option-icon">Web</div>
+          <div class="hub-option-icon">
+            <img src="icon-web.svg" alt="Navegador Web" class="hub-icon-img" width="36" height="36">
+          </div>
           <div class="hub-option-info">
             <div class="hub-option-title-row">
               <h3 class="hub-option-title">Continuar no Navegador</h3>
@@ -1871,7 +1940,7 @@
             </div>
             <p class="hub-option-desc">Acesse direto pelo navegador sem instalar nada (ideal para emergências ou outro aparelho).</p>
           </div>
-          <button type="button" class="btn btn-secondary btn-sm hub-btn-action">Entrar ➔</button>
+          <button type="button" class="btn btn-secondary btn-sm hub-btn-action">Acessar</button>
         </div>
 
       </div>
