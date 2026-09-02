@@ -40,7 +40,18 @@ async function runE2ETests() {
   console.log('================================================================\n');
 
   const testOrgId = '00000000-0000-0000-0000-000000000001';
-  const testRaffleId = 'rifa-107';
+  const testRaffleId = 'rifa-test-concurrency';
+
+  // Cria a rifa de teste se não existir
+  await client.from('raffles').upsert({
+    organization_id: testOrgId,
+    id: testRaffleId,
+    number: 999,
+    title: 'Rifa Teste de Concorrência',
+    total_numbers: 60,
+    price_per_number: 25.00,
+    status: 'active'
+  }, { onConflict: 'organization_id,id' });
 
   // TESTE 1: RPC ATÔMICA - RESERVA E VENDA NORMAL
   console.log('1. Testando RPC Atômica - Venda e Reserva de Cotas:');

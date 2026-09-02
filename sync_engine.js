@@ -365,26 +365,27 @@ class SyncEngine {
         return data?.success || true;
       }
 
-      // 2. Venda / Atualização de Cotas em Lote
+      // 2. Venda / Atualização de Cotas em Lote (ex: Importação do WhatsApp)
       case 'BATCH_SET_NUMBERS': {
         const { raffleId, numbersList } = op.payload; // array de { num, name, status, reservedAt, paidAt }
-        const nums = numbersList.map(n => n.num);
-        const buyer = numbersList[0]?.name || '';
-        const status = numbersList[0]?.status || 'paid';
+        if (!Array.isArray(numbersList) || numbersList.length === 0) return true;
 
-        const { data, error } = await window.supabaseClient.rpc('sell_raffle_numbers_atomic', {
-          p_org_id: orgId,
-          p_raffle_id: raffleId,
-          p_numbers: nums,
-          p_status: status,
-          p_buyer_name: buyer,
-          p_reserved_at: null,
-          p_paid_at: new Date().toISOString(),
-          p_allow_override: true
-        });
+        const rows = numbersList.map(n => ({
+          organization_id: orgId,
+          raffle_id: raffleId,
+          num: n.num,
+          name: n.name || '',
+          status: n.status || 'available',
+          reserved_at: n.reservedAt || null,
+          paid_at: n.paidAt || null
+        }));
+
+        const { error } = await window.supabaseClient
+          .from('raffle_numbers')
+          .upsert(rows, { onConflict: 'organization_id,raffle_id,num' });
 
         if (error) throw error;
-        return data?.success || true;
+        return true;
       }
 
       // 3. Criar ou Atualizar Rifa
