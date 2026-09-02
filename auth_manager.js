@@ -269,6 +269,10 @@ class AuthManager {
     localStorage.removeItem('ELDORADO_CACHED_ORGS');
   }
 
+  getCurrentOrganization() {
+    return this.currentOrg || this.getMainOrganization() || null;
+  }
+
   getOrganizationId() {
     return this.currentOrg?.id || null;
   }

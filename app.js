@@ -512,7 +512,7 @@ window.toggleGateRecover = toggleGateRecover;
 function openAccessHub() {
   const postHub = document.getElementById('postLoginHubScreen');
   if (postHub) {
-    const org = window.authManager ? window.authManager.getCurrentOrganization() : null;
+    const org = window.authManager ? (typeof window.authManager.getCurrentOrganization === 'function' ? window.authManager.getCurrentOrganization() : window.authManager.currentOrg) : null;
     const orgNameEl = document.getElementById('hubWelcomeOrgName');
     if (orgNameEl && org) {
       orgNameEl.innerHTML = `${escapeHtml(org.name || 'ELDORADO PESCA')} <span class="brand-gold-tag">PRO</span>`;
@@ -554,7 +554,7 @@ async function handleGateAuthSubmit(e) {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
       const postHub = document.getElementById('postLoginHubScreen');
       if (!isStandalone && postHub) {
-        const org = window.authManager.getCurrentOrganization();
+        const org = window.authManager ? (typeof window.authManager.getCurrentOrganization === 'function' ? window.authManager.getCurrentOrganization() : window.authManager.currentOrg) : null;
         const orgNameEl = document.getElementById('hubWelcomeOrgName');
         if (orgNameEl && org) {
           orgNameEl.innerHTML = `${escapeHtml(org.name || 'ELDORADO PESCA')} <span class="brand-gold-tag">PRO</span>`;

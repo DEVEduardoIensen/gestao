@@ -4,7 +4,7 @@
  * NUNCA apaga IndexedDB, dados locais ou Outbox durante atualizações.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.3.0';
+const CACHE_NAME = 'eldorado-pwa-v2.3.1';
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
