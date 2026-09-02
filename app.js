@@ -132,6 +132,8 @@ async function initAppState() {
       openModal('modalResetPassword');
     }
     return;
+  }
+
   // Usuário autenticado: esconde tela de bloqueio inicial
   if (gateScreen) gateScreen.style.display = "none";
 
