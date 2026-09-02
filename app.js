@@ -1107,14 +1107,14 @@ function renderRaffleNumbersGrid() {
     tile.dataset.num = item.num;
 
     let statusTag = "";
-    if (wonPrize) {
-      const pos = wonPrize.position || 1;
-      const posClass = pos <= 3 ? `winner-tag-${pos}` : 'winner-tag-other';
-      statusTag = `<span class="num-winner-tag ${posClass}">${pos}º Lugar</span>`;
-    } else if (item.status === "paid") {
+    if (item.status === "paid") {
       statusTag = `<span class="num-status-tag" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {
       statusTag = `<span class="num-status-tag" style="color: var(--primary-gold);">Reservado</span>`;
+    }
+
+    if (wonPrize) {
+      tile.title = `${wonPrize.position || 1}º Lugar: ${item.name || 'Ganhador'}`;
     }
 
     tile.innerHTML = `
