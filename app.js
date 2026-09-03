@@ -280,13 +280,32 @@ async function saveState(syncOperation = null) {
     }
   }
 
-  // 3. Cache de sessão adicional por tenant
-  try {
-    localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
-  } catch (e) {}
+  // 3. Backup assíncrono com debounce para não travar a Main Thread (Zero Stuttering)
+  scheduleLocalStorageBackup(orgId);
 
   updateGlobalStats();
 }
+
+let localStorageBackupTimer = null;
+function scheduleLocalStorageBackup(orgId) {
+  if (!orgId || !appData) return;
+  if (localStorageBackupTimer) clearTimeout(localStorageBackupTimer);
+  localStorageBackupTimer = setTimeout(() => {
+    try {
+      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+    } catch (e) {}
+  }, 2000);
+}
+
+// Salva snapshot imediatamente ao fechar a aba
+window.addEventListener('beforeunload', () => {
+  const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
+  if (orgId && appData) {
+    try {
+      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+    } catch (e) {}
+  }
+});
 
 function initSyncAndPwaHandlers() {
   // Service Worker Registration com auto-update imediato
@@ -930,16 +949,51 @@ function renderBackupView() {
 }
 window.renderBackupView = renderBackupView;
 
-function renderAll() {
-  updateGlobalStats();
-  renderRaffleDropdown();
-  renderRaffleView();
-  renderValesView();
-  renderFishingAgendaView();
-  renderRanchoView();
-  renderEduardoView();
-  renderBackupView();
+function renderTab(tabId) {
+  const target = tabId || activeTab || "tab-rifas";
+  switch (target) {
+    case "tab-rifas":
+      renderRaffleDropdown();
+      renderRaffleView();
+      break;
+    case "tab-vales":
+      renderValesView();
+      break;
+    case "tab-agenda":
+      renderFishingAgendaView();
+      break;
+    case "tab-rancho":
+      renderRanchoView();
+      break;
+    case "tab-eduardo":
+      renderEduardoView();
+      break;
+    case "tab-backup":
+      renderBackupView();
+      break;
+    default:
+      renderRaffleDropdown();
+      renderRaffleView();
+      break;
+  }
 }
+window.renderTab = renderTab;
+
+function renderAll(forceAll = false) {
+  updateGlobalStats();
+  if (forceAll) {
+    renderRaffleDropdown();
+    renderRaffleView();
+    renderValesView();
+    renderFishingAgendaView();
+    renderRanchoView();
+    renderEduardoView();
+    renderBackupView();
+  } else {
+    renderTab(activeTab);
+  }
+}
+window.renderAll = renderAll;
 
 /* ==========================================================================
    Raffle Stats Bar (Exclusivo da aba de Rifas)
@@ -1206,20 +1260,6 @@ function renderRaffleNumbersGrid() {
         ${item.name ? escapeHtml(item.name) : '—'}
       </div>
     `;
-
-    tile.addEventListener("click", () => {
-      if (isGridMultiSelectMode) {
-        if (gridSelectedCotas.has(item.num)) {
-          gridSelectedCotas.delete(item.num);
-        } else {
-          gridSelectedCotas.add(item.num);
-        }
-        updateGridMultiSelectBar();
-        renderRaffleNumbersGrid();
-      } else {
-        openEditNumberModal(index);
-      }
-    });
 
     gridEl.appendChild(tile);
   });
@@ -5513,7 +5553,7 @@ async function confirmDeleteRaffle() {
    UI Event Handlers & Setup
    ========================================================================== */
 function setupEventListeners() {
-  // Navigation Tabs
+  // Navigation Tabs (Lazy Rendering sob demanda)
   document.querySelectorAll(".nav-tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".nav-tab-btn").forEach(b => b.classList.remove("active"));
@@ -5523,8 +5563,34 @@ function setupEventListeners() {
       const targetTab = btn.dataset.tab;
       document.getElementById(targetTab).classList.add("active");
       activeTab = targetTab;
+      renderTab(targetTab);
     });
   });
+
+  // Event Delegation para o Grid de Cotas (Alta Performance - Zero Listener Leak)
+  const gridEl = document.getElementById("raffleNumbersGrid");
+  if (gridEl) {
+    gridEl.addEventListener("click", (e) => {
+      const tile = e.target.closest(".num-tile");
+      if (!tile) return;
+      const num = parseInt(tile.dataset.num, 10);
+      const index = parseInt(tile.dataset.index, 10);
+      if (isNaN(num)) return;
+
+      if (isGridMultiSelectMode) {
+        if (gridSelectedCotas.has(num)) {
+          gridSelectedCotas.delete(num);
+          tile.classList.remove("multi-selected");
+        } else {
+          gridSelectedCotas.add(num);
+          tile.classList.add("multi-selected");
+        }
+        updateGridMultiSelectBar();
+      } else {
+        openEditNumberModal(index);
+      }
+    });
+  }
 
   // Raffle Dropdown Switcher (Histórico)
   const selectRaffleEl = document.getElementById("selectActiveRaffle");

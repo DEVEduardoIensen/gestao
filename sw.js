@@ -4,7 +4,7 @@
  * NUNCA apaga IndexedDB, dados locais ou Outbox durante atualizações.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.5.3'; // Atualização compatível eldorado-pwa-v2.2.0
+const CACHE_NAME = 'eldorado-pwa-v2.5.4'; // Atualização compatível eldorado-pwa-v2.2.0
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
@@ -35,9 +35,8 @@ self.addEventListener('install', (event) => {
   console.log('[Service Worker] Instalando versão:', CACHE_NAME);
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(APP_SHELL_ASSETS).catch((err) => {
-        console.warn('[Service Worker] Falha ao pré-carregar alguns assets:', err);
-      });
+      console.log('[Service Worker] Pré-cache de assets essenciais concluído');
+      return cache.addAll(APP_SHELL_ASSETS);
     })
   );
   self.skipWaiting();
@@ -47,12 +46,12 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   console.log('[Service Worker] Ativando versão:', CACHE_NAME);
   event.waitUntil(
-    caches.keys().then((keys) => {
+    caches.keys().then((cacheNames) => {
       return Promise.all(
-        keys.map((key) => {
-          if (key.startsWith('eldorado-pwa-') && key !== CACHE_NAME) {
-            console.log('[Service Worker] Removendo cache obsoleto:', key);
-            return caches.delete(key);
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[Service Worker] Removendo cache antigo:', cacheName);
+            return caches.delete(cacheName);
           }
         })
       );
@@ -70,7 +69,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // Fetch Interceptor:
-// - Network-First com Timeout (1.8s) para arquivos centrais (HTML, JS, CSS) garantindo que atualizações entrem direto no mobile
+// - Stale-While-Revalidate ultrarrápido para código da aplicação (abertura em ~5ms + update em background)
 // - Cache-First para imagens e ícones estáticos
 // - Bypass total para APIs do Supabase e chamadas REST
 self.addEventListener('fetch', (event) => {
@@ -93,35 +92,24 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/' ||
     url.pathname === '';
 
-  // Network-First para código da aplicação (garante atualizações instantâneas online sem desinstalar)
+  // Stale-While-Revalidate ultrarrápido para código da aplicação (abertura em ~5ms + update em background)
   if (isCoreAsset) {
     event.respondWith(
-      new Promise((resolve) => {
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          caches.match(event.request).then((cached) => {
-            if (cached) resolve(cached);
-          });
-        }, 1800);
-
-        fetch(event.request).then((networkResponse) => {
-          clearTimeout(timer);
+      caches.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
           }
-          if (!timedOut) resolve(networkResponse);
+          return networkResponse;
         }).catch(() => {
-          clearTimeout(timer);
-          caches.match(event.request).then((cached) => {
-            if (cached) {
-              resolve(cached);
-            } else if (event.request.mode === 'navigate') {
-              caches.match('./index.html').then((indexCached) => resolve(indexCached || caches.match('./')));
-            }
-          });
+          if (event.request.mode === 'navigate') {
+            return caches.match('./index.html').then((indexCached) => indexCached || caches.match('./'));
+          }
         });
+
+        // Se estiver em cache, entrega imediatamente sem esperar a rede
+        return cachedResponse || fetchPromise;
       })
     );
     return;

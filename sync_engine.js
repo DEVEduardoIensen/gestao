@@ -93,13 +93,18 @@ class SyncEngine {
 
       // Reconstrói as rifas com seus números e prêmios aninhados
       const raffles = (rafflesData || []).map(r => {
-        const numbersForThisRaffle = (raffleNumbersData || []).filter(n => String(n.raffle_id) === String(r.id));
+        const numberMap = new Map();
+        (raffleNumbersData || []).forEach(n => {
+          if (String(n.raffle_id) === String(r.id)) {
+            numberMap.set(parseInt(n.num, 10), n);
+          }
+        });
         const prizesForThisRaffle = (rafflePrizesData || []).filter(p => String(p.raffle_id) === String(r.id));
 
         let numbersArray = [];
         const total = r.total_numbers || 60;
         for (let i = 1; i <= total; i++) {
-          const found = numbersForThisRaffle.find(n => parseInt(n.num, 10) === i);
+          const found = numberMap.get(i);
           numbersArray.push(found ? {
             num: found.num,
             name: found.name || '',

@@ -401,7 +401,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  transition: all var(--transition-fast);
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   border: 1px solid transparent;
   text-decoration: none;
 }
@@ -607,7 +607,7 @@ body {
   justify-content: space-between;
   min-height: 74px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   position: relative;
 }
 
@@ -2812,8 +2812,8 @@ html.show-auth-gate .offline-bar {
   inset: 0;
   z-index: 99999;
   background: radial-gradient(circle at 50% 30%, rgba(17, 29, 51, 0.88) 0%, rgba(6, 10, 19, 0.94) 100%);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2825,8 +2825,8 @@ html.show-auth-gate .offline-bar {
 
 #postLoginHubScreen {
   background: rgba(4, 7, 14, 0.72) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  backdrop-filter: blur(12px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
 }
 
 .auth-gate-card {
@@ -2838,8 +2838,8 @@ html.show-auth-gate .offline-bar {
   border-radius: var(--radius-md);
   padding: 2.25rem 2rem;
   box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.8), 0 0 35px rgba(229, 193, 88, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
 }
 
 @media (max-width: 768px) {
@@ -2855,8 +2855,8 @@ html.show-auth-gate .offline-bar {
 
 #postLoginHubScreen .auth-gate-card {
   background: rgba(8, 14, 26, 0.78) !important;
-  backdrop-filter: blur(28px) saturate(200%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  backdrop-filter: blur(12px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
   border: 1px solid rgba(229, 193, 88, 0.35) !important;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(229, 193, 88, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
 }
@@ -3026,8 +3026,8 @@ html.show-auth-gate .offline-bar {
 /* Glassmorphism na Aba de Administração (Cards de vidro translúcido) */
 #tab-backup .card {
   background: rgba(10, 16, 28, 0.72) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  backdrop-filter: blur(12px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
   border: 1px solid rgba(229, 193, 88, 0.24) !important;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.08) !important;
 }
