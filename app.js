@@ -120,6 +120,7 @@ async function initAppState() {
 
   // 2. AUTH GUARD: Se o usuário não estiver autenticado e não for app instalado no mobile, bloqueia o acesso
   if (!isMobileInstalled && (!window.authManager || !window.authManager.isAuthenticated())) {
+    document.documentElement.classList.add('show-auth-gate');
     if (gateScreen) gateScreen.style.display = "flex";
     appData = {
       settings: {},
@@ -136,7 +137,8 @@ async function initAppState() {
     return;
   }
 
-  // Usuário autenticado ou app instalado no celular: esconde tela de bloqueio inicial
+  // Usuário autenticado ou app instalado no celular: esconde tela de bloqueio inicial sem piscar
+  document.documentElement.classList.remove('show-auth-gate');
   if (gateScreen) gateScreen.style.display = "none";
 
   // Se estiver acessando pelo navegador comum e ainda não tiver clicado para entrar no painel nesta sessão, abre a tela de direcionamento com os 3 botões
@@ -373,7 +375,14 @@ function updateAuthUi() {
   const isAuth = (window.authManager ? window.authManager.isAuthenticated() : false) || isMobileInstalled;
 
   if (gateScreen) {
-    gateScreen.style.display = (isAuth || isMobileInstalled) ? 'none' : 'flex';
+    const shouldShowGate = !isAuth && !isMobileInstalled;
+    if (shouldShowGate) {
+      document.documentElement.classList.add('show-auth-gate');
+      gateScreen.style.display = 'flex';
+    } else {
+      document.documentElement.classList.remove('show-auth-gate');
+      gateScreen.style.display = 'none';
+    }
   }
 
   if (isAuth && user) {
@@ -587,6 +596,7 @@ window.openAccessHub = openAccessHub;
 function proceedToDashboard() {
   const postHub = document.getElementById('postLoginHubScreen');
   if (postHub) postHub.style.display = 'none';
+  document.documentElement.classList.remove('show-auth-gate');
   sessionStorage.setItem('ELDORADO_POST_LOGIN_DONE', 'true');
 }
 window.proceedToDashboard = proceedToDashboard;
@@ -606,15 +616,11 @@ async function handleGateAuthSubmit(e) {
       await window.authManager.login(email, password);
       showToast('Login realizado com sucesso!', 'success');
 
-      const gateScreen = document.getElementById('authGateScreen');
-      if (gateScreen) gateScreen.style.display = 'none';
-
-      await initAppState();
-      renderAll();
-
-      // Tela pós-login dedicada com os 3 botões (Mobile, Desktop, Web)
+      // Transição direta para a tela dos 3 botões (Web / Mobile / PC) sem piscar o painel
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
       const postHub = document.getElementById('postLoginHubScreen');
+      const gateScreen = document.getElementById('authGateScreen');
+
       if (!isStandalone && postHub) {
         const org = window.authManager ? (typeof window.authManager.getCurrentOrganization === 'function' ? window.authManager.getCurrentOrganization() : window.authManager.currentOrg) : null;
         const orgNameEl = document.getElementById('hubWelcomeOrgName');
@@ -622,9 +628,16 @@ async function handleGateAuthSubmit(e) {
           orgNameEl.innerHTML = `${escapeHtml(org.name || 'ELDORADO PESCA')} <span class="brand-gold-tag">PRO</span>`;
         }
         postHub.style.display = 'flex';
+        document.documentElement.classList.remove('show-auth-gate');
+        if (gateScreen) gateScreen.style.display = 'none';
       } else {
+        document.documentElement.classList.remove('show-auth-gate');
+        if (gateScreen) gateScreen.style.display = 'none';
         proceedToDashboard();
       }
+
+      await initAppState();
+      renderAll();
     } else {
       await window.authManager.recoverPassword(email);
       showToast('Link de recuperação enviado! Verifique seu e-mail.', 'info');
@@ -803,6 +816,7 @@ function copyInviteToClipboard() {
 
 async function handleUserLogout() {
   if (window.authManager) {
+    document.documentElement.classList.add('show-auth-gate');
     await window.authManager.logout();
     showToast('Você saiu da sua conta.', 'info');
     updateAuthUi();

@@ -2793,6 +2793,19 @@ body {
   color: #f87171;
 }
 
+/* Zero-Flicker Auth Gate Transition (Elimina qualquer exibição prematura do dashboard) */
+html.show-auth-gate #authGateScreen {
+  display: flex !important;
+}
+
+html.show-auth-gate .app-header,
+html.show-auth-gate .app-main,
+html.show-auth-gate .toast-container,
+html.show-auth-gate .offline-bar {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Auth Gate Screen (Fullscreen Guard) */
 .auth-gate-screen {
   position: fixed;
