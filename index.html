@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.5.4">
+  <link rel="stylesheet" href="styles.css?v=2.6.0">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -38,14 +38,22 @@
           window.matchMedia('(display-mode: minimal-ui)').matches
         )) || window.navigator.standalone === true;
         var search = window.location.search || '';
-        var hasPwaParam = search.indexOf('source=pwa') !== -1 || search.indexOf('mode=standalone') !== -1 || search.indexOf('platform=mobile') !== -1;
-        var isMarked = localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true';
-        var isMobileApp = isStandalone || hasPwaParam || isMarked;
+        var hasPwaParam = search.indexOf('source=pwa') !== -1 || search.indexOf('mode=standalone') !== -1 || search.indexOf('platform=mobile') !== -1 || search.indexOf('platform=desktop') !== -1;
+        var isMarked = localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_DESKTOP_INSTALLED') === 'true';
+        var isElectron = (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.indexOf('Electron') !== -1);
+        var isLocal = (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        var isDesktop = isElectron || isLocal || (isStandalone && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+
+        if (isDesktop) {
+          window.__ELDORADO_IS_DESKTOP_APP = true;
+        }
+
+        var isMobileApp = isStandalone || hasPwaParam || isMarked || isDesktop;
         if (isMobileApp) {
           window.__ELDORADO_IS_MOBILE_APP = true;
         }
 
-        // Se NÃO for app mobile instalado e NÃO possuir credencial/organização salva, ativa bloqueio visual antes de pintar o HTML
+        // Se NÃO for app instalado/desktop e NÃO possuir credencial/organização salva, ativa bloqueio visual
         var hasSavedAuth = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || localStorage.getItem('sb-tfttmfbfzyymuwiwpxyw-auth-token');
         if (!isMobileApp && !hasSavedAuth) {
           document.documentElement.classList.add('show-auth-gate');
@@ -879,7 +887,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.5.4 PRO</span>
+              <span class="badge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.6.0 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -2240,7 +2248,7 @@
   <script src="auth_manager.js"></script>
   <script src="sync_engine.js"></script>
   <script src="sample-data.js"></script>
-  <script src="app.js?v=2.5.4"></script>
+  <script src="app.js?v=2.6.0"></script>
 </body>
 
 </html>

@@ -1,10 +1,10 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.2.0 — Cache do App Shell com atualização resiliente (Offline-First)
+ * Versão 2.6.0 — Cache do App Shell com atualização resiliente (Offline-First)
  * NUNCA apaga IndexedDB, dados locais ou Outbox durante atualizações.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.5.4'; // Atualização compatível eldorado-pwa-v2.2.0
+const CACHE_NAME = 'eldorado-pwa-v2.6.0'; // Atualização compatível eldorado-pwa-v2.6.0
 
 // Arquivos fundamentais do App Shell
 const APP_SHELL_ASSETS = [
@@ -95,7 +95,7 @@ self.addEventListener('fetch', (event) => {
   // Stale-While-Revalidate ultrarrápido para código da aplicação (abertura em ~5ms + update em background)
   if (isCoreAsset) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
+      caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
         const fetchPromise = fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();
@@ -104,7 +104,7 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         }).catch(() => {
           if (event.request.mode === 'navigate') {
-            return caches.match('./index.html').then((indexCached) => indexCached || caches.match('./'));
+            return caches.match('./index.html', { ignoreSearch: true }).then((indexCached) => indexCached || caches.match('./', { ignoreSearch: true }));
           }
         });
 
@@ -117,7 +117,7 @@ self.addEventListener('fetch', (event) => {
 
   // Cache-First com atualização em segundo plano para imagens e assets estáticos
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();

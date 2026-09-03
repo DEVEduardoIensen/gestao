@@ -113,7 +113,11 @@ async function initAppState() {
   // Inicializa escuta de PWA e verificação de Service Worker imediatamente (antes do Auth Guard)
   initSyncAndPwaHandlers();
 
-  const isMobileInstalled = window.authManager && typeof window.authManager.isMobileInstalledApp === 'function' && window.authManager.isMobileInstalledApp();
+  const isDirectAccess = (window.authManager && typeof window.authManager.isStandaloneOrInstalled === 'function' && window.authManager.isStandaloneOrInstalled()) ||
+    window.__ELDORADO_IS_DESKTOP_APP ||
+    window.__ELDORADO_IS_MOBILE_APP ||
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Electron')) ||
+    (typeof window !== 'undefined' && window.location && (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
 
   // 1. Recupera sessão do usuário se houver
   if (window.authManager) {
@@ -127,8 +131,8 @@ async function initAppState() {
 
   const gateScreen = document.getElementById("authGateScreen");
 
-  // 2. AUTH GUARD: Se o usuário não estiver autenticado e não for app instalado no mobile, bloqueia o acesso
-  if (!isMobileInstalled && (!window.authManager || !window.authManager.isAuthenticated())) {
+  // 2. AUTH GUARD: Se o usuário não estiver autenticado e não for app instalado no desktop/mobile, bloqueia o acesso
+  if (!isDirectAccess && (!window.authManager || !window.authManager.isAuthenticated())) {
     document.documentElement.classList.add('show-auth-gate');
     if (gateScreen) gateScreen.style.display = "flex";
     appData = {
@@ -146,7 +150,7 @@ async function initAppState() {
     return;
   }
 
-  // Usuário autenticado ou app instalado no celular: esconde tela de bloqueio inicial sem piscar
+  // Usuário autenticado ou app instalado: esconde tela de bloqueio inicial sem piscar
   document.documentElement.classList.remove('show-auth-gate');
   if (gateScreen) gateScreen.style.display = "none";
 
@@ -154,13 +158,13 @@ async function initAppState() {
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isPostLoginDone = sessionStorage.getItem('ELDORADO_POST_LOGIN_DONE') === 'true';
 
-  if (!isStandalone && !isMobileInstalled && !isPostLoginDone) {
+  if (!isStandalone && !isDirectAccess && !isPostLoginDone) {
     openAccessHub();
   } else {
     proceedToDashboard();
   }
 
-  const orgId = window.authManager.getOrganizationId();
+  const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
   // 3. Renderiza IMEDIATAMENTE do cache local IndexedDB exclusivo deste tenant (< 30ms)
   let loadedFromLocal = false;
@@ -208,30 +212,18 @@ async function initAppState() {
     activeRaffleId = null;
   }
 
-  // 4. Sincronização em background transparente (não bloqueia a renderização em 4G)
+  // 4. Sincronização em background transparente (não bloqueia a renderização)
   if (navigator.onLine && window.syncEngine && window.supabaseClient) {
     updateDbStatusBadge('syncing');
 
-    // Executa a fila de pendências locais primeiro antes de carregar dados remotos
     (async () => {
       try {
         if (window.syncEngine) {
           await window.syncEngine.processQueue();
         }
         const remoteData = await window.syncEngine.fetchRemoteData(orgId);
-        if (remoteData && (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays)) {
-          appData = sanitizeAppData(remoteData);
-          if (appData.raffles && appData.raffles.length > 0) {
-            const stillExists = activeRaffleId && appData.raffles.some(r => String(r.id) === String(activeRaffleId));
-            if (!stillExists) {
-              const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
-              activeRaffleId = active.id;
-            }
-          }
-          if (window.localDB) {
-            await window.localDB.saveFullAppData(appData, orgId);
-          }
-          renderAll();
+        if (remoteData) {
+          await window.mergeRemoteData(remoteData);
         }
         updateDbStatusBadge('synced');
       } catch (err) {
@@ -249,12 +241,44 @@ async function initAppState() {
   }
 }
 
-async function saveState(syncOperation = null) {
-  const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
-  if (!orgId) {
-    console.warn('[Persistence] Operação não gravada: nenhum tenant ativo autenticado.');
-    return;
+// Mescla dados remotos recebidos do Supabase / Realtime na memória e no cache local
+window.mergeRemoteData = async function(remoteData) {
+  if (!remoteData) return;
+  const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+
+  if (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays || remoteData.settings) {
+    const sanitized = sanitizeAppData(remoteData);
+
+    // Preserva seleção de rifa ativa se ainda existir
+    if (sanitized.raffles && sanitized.raffles.length > 0) {
+      const stillExists = activeRaffleId && sanitized.raffles.some(r => String(r.id) === String(activeRaffleId));
+      if (!stillExists) {
+        const active = sanitized.raffles.find(r => r.status === 'active') || sanitized.raffles[0];
+        activeRaffleId = active.id;
+      }
+    }
+
+    appData = sanitized;
+
+    if (window.localDB) {
+      try {
+        await window.localDB.saveFullAppData(appData, orgId);
+      } catch (e) {
+        console.warn('[mergeRemoteData] Falha ao persistir no IndexedDB:', e);
+      }
+    }
+
+    try {
+      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+    } catch (e) {}
+
+    renderAll();
+    updateGlobalStats();
   }
+};
+
+async function saveState(syncOperation = null) {
+  const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
   // 1. Salva no IndexedDB (Dexie) indexado pelo organization_id
   if (window.localDB) {
@@ -428,14 +452,14 @@ window.forceCheckAppUpdate = async function() {
         const cacheNames = await caches.keys();
         await Promise.all(
           cacheNames.map(name => {
-            if (name !== 'eldorado-pwa-v2.5.4') {
+            if (name !== 'eldorado-pwa-v2.6.0') {
               return caches.delete(name);
             }
           })
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.5.4)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.6.0)!', 'success');
     } else {
       window.location.reload();
     }
@@ -592,6 +616,24 @@ function triggerInstallApp(type) {
         }
       }
     } catch (e) {}
+  } else if (type === 'desktop') {
+    try {
+      localStorage.setItem('ELDORADO_DESKTOP_INSTALLED', 'true');
+      localStorage.setItem('ELDORADO_PWA_INSTALLED', 'true');
+      if (window.authManager) {
+        const orgId = window.authManager.getOrganizationId();
+        if (orgId) {
+          localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', orgId);
+          window.history.replaceState({}, '', './?source=pwa&mode=standalone&platform=desktop&orgId=' + encodeURIComponent(orgId));
+        }
+      }
+    } catch (e) {}
+
+    if (window.__ELDORADO_IS_ELECTRON || (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Electron'))) {
+      showToast('Você já está no aplicativo oficial Desktop da Eldorado Pesca!', 'success');
+      proceedToDashboard();
+      return;
+    }
   }
 
   if (isStandalone) {
@@ -624,7 +666,8 @@ function triggerInstallApp(type) {
     if (type === 'mobile') {
       showToast('No Chrome do celular: Toque nos 3 pontinhos (⋮) no topo e escolha "Instalar aplicativo" ou "Adicionar à tela inicial".', 'info', 8000);
     } else {
-      showToast('No computador: Clique no ícone de instalar (computador com seta ou +) na barra de endereços do Chrome/Edge.', 'info', 8000);
+      showToast('No computador: Abra pelo executável oficial "Eldorado Pesca.exe" na Área de Trabalho ou instale pelo menu do Chrome.', 'info', 8000);
+      proceedToDashboard();
     }
   }
 }

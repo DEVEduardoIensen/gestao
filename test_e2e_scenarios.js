@@ -5,19 +5,28 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('./node_modules/@supabase/supabase-js');
+const vm = require('vm');
 
-// Load .env
-const envContent = fs.readFileSync('.env', 'utf8');
-const env = {};
-envContent.split('\n').forEach(line => {
-  const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-  if (m) env[m[1]] = (m[2] || '').trim().replace(/^['"]|['"]$/g, '');
-});
+const sbCode = fs.readFileSync(path.join(__dirname, 'lib', 'supabase.js'), 'utf8');
+const ctx = { window: {}, console, URL, fetch, Headers, Request, Response, WebSocket, setTimeout, clearTimeout, setInterval, clearInterval };
+vm.createContext(ctx);
+vm.runInContext(sbCode, ctx);
+const createClient = ctx.supabase.createClient;
 
-const url = env.SUPABASE_URL;
-const secretKey = env.SUPABASE_SECRET_KEY;
-const pubKey = env.SUPABASE_PUBLISHABLE_KEY;
+// Load .env or fallback to supabase_config.js
+let env = {};
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (m) env[m[1]] = (m[2] || '').trim().replace(/^['"]|['"]$/g, '');
+  });
+}
+
+const cfg = require('./supabase_config.js');
+const url = env.SUPABASE_URL || cfg.SUPABASE_URL;
+const secretKey = env.SUPABASE_SECRET_KEY || cfg.SUPABASE_SECRET_KEY;
+const pubKey = env.SUPABASE_PUBLISHABLE_KEY || cfg.SUPABASE_PUBLISHABLE_KEY || cfg.SUPABASE_ANON_KEY;
 
 const client = createClient(url, secretKey || pubKey);
 

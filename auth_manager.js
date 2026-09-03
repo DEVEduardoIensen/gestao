@@ -45,16 +45,46 @@ class AuthManager {
 
         if (this.user) {
           await this.loadUserOrganizations();
-        } else {
+        } else if (event === 'SIGNED_OUT') {
           this.currentOrg = null;
           this.organizations = [];
           localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
           localStorage.removeItem('ELDORADO_CACHED_ORGS');
+        } else {
+          // Não limpa cache em caso de desconexão ou inicialização offline
+          this.restoreCachedOrganizations();
         }
 
         this.notifyListeners(event, session);
       });
     }
+  }
+
+  getDefaultOrgId() {
+    return (typeof SUPABASE_CONFIG !== 'undefined' && SUPABASE_CONFIG.DEFAULT_ORG_ID) ? SUPABASE_CONFIG.DEFAULT_ORG_ID : (this.currentOrg?.id || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || '');
+  }
+
+  getDefaultMasterOrganization() {
+    return {
+      id: this.getDefaultOrgId(),
+      name: 'Eldorado Pesca Principal',
+      slug: 'eldorado-a',
+      role: 'owner'
+    };
+  }
+
+  isDesktopApp() {
+    if (typeof window !== 'undefined' && (window.__ELDORADO_IS_DESKTOP_APP || window.__ELDORADO_IS_ELECTRON)) {
+      return true;
+    }
+    if (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Electron')) {
+      return true;
+    }
+    if (typeof window !== 'undefined' && window.location) {
+      if (window.location.protocol === 'file:') return true;
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return true;
+    }
+    return false;
   }
 
   isMobileInstalledApp() {
@@ -71,29 +101,38 @@ class AuthManager {
     );
     const search = (typeof window !== 'undefined' && window.location ? window.location.search : '') || '';
     const hash = (typeof window !== 'undefined' && window.location ? window.location.hash : '') || '';
-    const hasPwaParams = search.includes('source=pwa') || search.includes('mode=standalone') || search.includes('platform=mobile') || hash.includes('pwa');
+    const hasPwaParams = search.includes('source=pwa') || search.includes('mode=standalone') || search.includes('platform=mobile') || search.includes('platform=desktop') || hash.includes('pwa');
     const isMarkedInstalled = typeof localStorage !== 'undefined' && (
       localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' ||
-      localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true'
+      localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true' ||
+      localStorage.getItem('ELDORADO_DESKTOP_INSTALLED') === 'true'
     );
     const isMobileDevice = typeof navigator !== 'undefined' && (
       /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
       (typeof window !== 'undefined' && window.innerWidth <= 820 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
     );
 
-    return !!(isStandalone || hasPwaParams || (isMobileDevice && isMarkedInstalled));
+    return !!(isStandalone || hasPwaParams || isMarkedInstalled || (isMobileDevice && isMarkedInstalled));
+  }
+
+  isStandaloneOrInstalled() {
+    return this.isDesktopApp() || this.isMobileInstalledApp();
   }
 
   async ensureMobileInstalledSession() {
+    return this.ensureDirectInstalledSession();
+  }
+
+  async ensureDirectInstalledSession() {
     // 1. Tenta restaurar cache local existente
     if (this.restoreCachedOrganizations()) {
       if (!this.user) {
         this.user = {
-          id: 'pwa-mobile-user',
-          email: 'mobile@eldoradopesca.com',
+          id: 'pwa-app-user',
+          email: 'app@eldoradopesca.com',
           user_metadata: { role: 'owner' }
         };
-        this.session = { user: this.user, access_token: 'pwa-mobile-token' };
+        this.session = { user: this.user, access_token: 'pwa-app-token' };
       }
       return;
     }
@@ -102,8 +141,8 @@ class AuthManager {
     const urlParams = (typeof window !== 'undefined' && window.location) ? new URLSearchParams(window.location.search || '') : null;
     const urlOrgId = urlParams ? urlParams.get('orgId') : null;
 
-    // 3. Consulta organizações disponíveis no Supabase
-    if (this.client) {
+    // 3. Consulta organizações disponíveis no Supabase se houver conexão
+    if (this.client && navigator.onLine) {
       try {
         const { data: orgs } = await this.client.from('organizations').select('id, name, slug');
         if (Array.isArray(orgs) && orgs.length > 0) {
@@ -118,43 +157,40 @@ class AuthManager {
           localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
           localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
           this.user = {
-            id: 'pwa-mobile-user',
-            email: 'mobile@eldoradopesca.com',
+            id: 'pwa-app-user',
+            email: 'app@eldoradopesca.com',
             user_metadata: { role: 'owner' }
           };
-          this.session = { user: this.user, access_token: 'pwa-mobile-token' };
+          this.session = { user: this.user, access_token: 'pwa-app-token' };
           return;
         }
       } catch (err) {
-        console.warn('[AuthManager] Consulta remota de organizações no mobile indisponível:', err);
+        console.warn('[AuthManager] Consulta remota de organizações indisponível:', err);
       }
     }
 
-    // 4. Se houver urlOrgId mas sem rede
-    if (urlOrgId) {
-      this.currentOrg = {
-        id: urlOrgId,
-        name: 'Eldorado Pesca Principal',
-        slug: 'eldorado-a',
-        role: 'owner'
-      };
-      this.organizations = [this.currentOrg];
-      localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
-      localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
-    }
+    // 4. Fallback garantido para a organização master da Eldorado Pesca (100% Offline-Safe)
+    const masterOrg = this.getDefaultMasterOrganization();
+    this.currentOrg = urlOrgId ? { id: urlOrgId, name: 'Eldorado Pesca Principal', slug: 'eldorado-a', role: 'owner' } : masterOrg;
+    this.organizations = [this.currentOrg];
+    localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
+    localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
 
     if (!this.user) {
       this.user = {
-        id: 'pwa-mobile-user',
-        email: 'mobile@eldoradopesca.com',
+        id: 'pwa-app-user',
+        email: 'app@eldoradopesca.com',
         user_metadata: { role: 'owner' }
       };
-      this.session = { user: this.user, access_token: 'pwa-mobile-token' };
+      this.session = { user: this.user, access_token: 'pwa-app-token' };
     }
   }
 
   async checkInitialSession() {
-    if (!this.client) return null;
+    if (!this.client) {
+      await this.ensureDirectInstalledSession();
+      return this.session;
+    }
     try {
       const { data: { session }, error } = await this.client.auth.getSession();
       if (error) throw error;
@@ -168,28 +204,29 @@ class AuthManager {
 
       if (this.user) {
         await this.loadUserOrganizations();
-      } else if (this.isMobileInstalledApp()) {
-        await this.ensureMobileInstalledSession();
+      } else if (this.isStandaloneOrInstalled() || this.isDesktopApp() || this.isMobileInstalledApp()) {
+        await this.ensureDirectInstalledSession();
       } else {
-        this.currentOrg = null;
-        this.organizations = [];
+        if (!this.restoreCachedOrganizations()) {
+          const masterOrg = this.getDefaultMasterOrganization();
+          this.currentOrg = masterOrg;
+          this.organizations = [masterOrg];
+        }
       }
       return this.session;
     } catch (e) {
       console.warn('[AuthManager] Falha ao recuperar sessão inicial via rede. Tentando cache offline:', e);
-      // Fallback offline se já existe usuário ou se é app instalado no celular
-      if (this.user || this.isMobileInstalledApp()) {
-        if (!this.restoreCachedOrganizations() && this.isMobileInstalledApp()) {
-          await this.ensureMobileInstalledSession();
-        }
+      if (!this.restoreCachedOrganizations()) {
+        await this.ensureDirectInstalledSession();
       }
       return this.session;
     }
   }
 
   getMainOrganization() {
-    if (!this.organizations || this.organizations.length === 0) return null;
-    return this.organizations.find(o => o.slug === 'eldorado-a' || (o.name || '').toLowerCase() === 'eldorado pesca principal')
+    if (!this.organizations || this.organizations.length === 0) return this.getDefaultMasterOrganization();
+    const defaultId = this.getDefaultOrgId();
+    return this.organizations.find(o => (defaultId && o.id === defaultId) || o.slug === 'eldorado-a' || (o.name || '').toLowerCase() === 'eldorado pesca principal')
       || this.organizations.find(o => (o.name || '').toLowerCase().includes('principal') && !o.slug?.startsWith('org-'))
       || this.organizations.find(o => (o.name || '').toLowerCase().includes('eldorado') && !o.slug?.startsWith('org-'))
       || this.organizations[0];
@@ -221,8 +258,7 @@ class AuthManager {
 
   async loadUserOrganizations() {
     if (!this.client || !this.user) {
-      this.currentOrg = null;
-      this.organizations = [];
+      this.restoreCachedOrganizations();
       return;
     }
 
@@ -239,6 +275,9 @@ class AuthManager {
       if (error) {
         console.warn('[AuthManager] Erro ao carregar organizações remotas. Tentando cache:', error);
         if (this.restoreCachedOrganizations()) return;
+        const masterOrg = this.getDefaultMasterOrganization();
+        this.currentOrg = masterOrg;
+        this.organizations = [masterOrg];
         return;
       }
 
@@ -250,6 +289,12 @@ class AuthManager {
           role: item.role
         }));
 
+        // Garante que a organização principal do Eldorado Pesca esteja sempre acessível
+        const masterOrg = this.getDefaultMasterOrganization();
+        if (!this.organizations.some(o => o.id === masterOrg.id || o.slug === 'eldorado-a')) {
+          this.organizations.unshift(masterOrg);
+        }
+
         const savedOrgId = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
         const savedMatch = savedOrgId ? this.organizations.find(o => o.id === savedOrgId) : null;
         const mainOrg = this.getMainOrganization();
@@ -259,21 +304,24 @@ class AuthManager {
 
         this.currentOrg = match;
         
-        // Persiste cache para abertura offline no celular
+        // Persiste cache para abertura offline tanto no desktop quanto no mobile
         localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
         localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
       } else {
-        // Se usuário autenticado mas tabela remota vazia, tenta cache antes de zerar
-        if (!this.restoreCachedOrganizations()) {
-          this.organizations = [];
-          this.currentOrg = null;
-          localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
-          localStorage.removeItem('ELDORADO_CACHED_ORGS');
-        }
+        // Se usuário autenticado mas tabela remota vazia, vincula à organização principal do Eldorado
+        const masterOrg = this.getDefaultMasterOrganization();
+        this.organizations = [masterOrg];
+        this.currentOrg = masterOrg;
+        localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
+        localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
       }
     } catch (err) {
       console.warn('[AuthManager] Falha de conexão ao buscar organizações. Acionando cache offline:', err);
-      this.restoreCachedOrganizations();
+      if (!this.restoreCachedOrganizations()) {
+        const masterOrg = this.getDefaultMasterOrganization();
+        this.currentOrg = masterOrg;
+        this.organizations = [masterOrg];
+      }
     }
   }
 
@@ -370,19 +418,22 @@ class AuthManager {
   }
 
   getCurrentOrganization() {
-    return this.currentOrg || this.getMainOrganization() || null;
+    return this.currentOrg || this.getMainOrganization() || this.getDefaultMasterOrganization();
   }
 
   getOrganizationId() {
-    return this.currentOrg?.id || null;
+    return this.currentOrg?.id || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || this.getDefaultOrgId();
   }
 
   getOrganizationName() {
-    return this.currentOrg?.name || '';
+    return this.currentOrg?.name || 'Eldorado Pesca Principal';
   }
 
   isAuthenticated() {
-    if (this.isMobileInstalledApp() && this.currentOrg && this.currentOrg.id) {
+    if (this.isStandaloneOrInstalled() || this.isDesktopApp() || this.isMobileInstalledApp()) {
+      return true;
+    }
+    if (this.currentOrg && this.currentOrg.id) {
       return true;
     }
     return !!(this.user && this.currentOrg && this.currentOrg.id);

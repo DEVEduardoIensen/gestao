@@ -20,7 +20,10 @@ const SUPABASE_CONFIG = {
   SUPABASE_SECRET_KEY: (isNode && process.env.SUPABASE_SECRET_KEY) || '',
 
   // JWKS URL para validação de JWTs
-  SUPABASE_JWKS_URL: (isNode && process.env.SUPABASE_JWKS_URL) || 'https://tfttmfbfzyymuwiwpxyw.supabase.co/auth/v1/.well-known/jwks.json'
+  SUPABASE_JWKS_URL: (isNode && process.env.SUPABASE_JWKS_URL) || 'https://tfttmfbfzyymuwiwpxyw.supabase.co/auth/v1/.well-known/jwks.json',
+
+  // Organização Principal da Eldorado Pesca (Garante sincronização transparente entre Mobile, Desktop e Web)
+  DEFAULT_ORG_ID: '00000000-0000-0000-0000-000000000001'
 };
 
 if (typeof module !== 'undefined' && module.exports) {

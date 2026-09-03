@@ -11,15 +11,18 @@ class SyncEngine {
     this.conflicts = [];
     this.listeners = [];
     this.syncInterval = null;
+    this.realtimeChannel = null;
+    this._refreshTimer = null;
 
     this.init();
   }
 
   init() {
     window.addEventListener('online', () => {
-      console.log('[SyncEngine] Conexão restabelecida!');
+      console.log('[SyncEngine] Conexão restabelecida! Iniciando sincronização...');
       this.isOnline = true;
       this.updateStatus('syncing');
+      this.initRealtimeSubscription();
       this.processQueue();
     });
 
@@ -29,12 +32,95 @@ class SyncEngine {
       this.updateStatus('offline');
     });
 
-    // Processamento periódico a cada 20 segundos se estiver online
+    // Ao focar na janela ou voltar de segundo plano, processa fila pendente
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.isOnline) {
+          this.initRealtimeSubscription();
+          this.processQueue();
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('focus', () => {
+        if (this.isOnline) {
+          this.initRealtimeSubscription();
+          this.processQueue();
+        }
+      });
+    }
+
+    // Processamento periódico a cada 15 segundos se estiver online
     this.syncInterval = setInterval(() => {
       if (this.isOnline && !this.isSyncing) {
         this.processQueue();
       }
-    }, 20000);
+    }, 15000);
+
+    // Inicializa Realtime imediatamente se online
+    if (this.isOnline) {
+      setTimeout(() => this.initRealtimeSubscription(), 1000);
+    }
+  }
+
+  initRealtimeSubscription() {
+    if (!window.supabaseClient || !this.isOnline || this.realtimeChannel) return;
+
+    try {
+      this.realtimeChannel = window.supabaseClient.channel('eldorado-sync-channel')
+        .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+          console.log('[Realtime] Mudança remota recebida do Supabase:', payload.table, payload.eventType);
+          if (this.isSyncing) return;
+          this.handleRealtimePayload(payload);
+        })
+        .subscribe((status) => {
+          console.log('[Realtime] Status do canal:', status);
+        });
+    } catch (e) {
+      console.warn('[Realtime] Falha ao assinar Realtime:', e);
+    }
+  }
+
+  handleRealtimePayload(payload) {
+    const { table, eventType, new: newRec } = payload;
+    if (!window.appData) return;
+
+    // Se for atualização pontual de cota da rifa
+    if (table === 'raffle_numbers' && newRec) {
+      const raffle = (window.appData.raffles || []).find(r => String(r.id) === String(newRec.raffle_id));
+      if (raffle && Array.isArray(raffle.numbers)) {
+        const numItem = raffle.numbers.find(n => n.num === parseInt(newRec.num, 10));
+        if (numItem) {
+          numItem.status = newRec.status;
+          numItem.name = newRec.name || '';
+          numItem.reservedAt = newRec.reserved_at;
+          numItem.paidAt = newRec.paid_at;
+          if (typeof window.renderRaffleNumbersGrid === 'function') {
+            window.renderRaffleNumbersGrid();
+          }
+          if (typeof window.updateRaffleStats === 'function') {
+            window.updateRaffleStats();
+          }
+          return;
+        }
+      }
+    }
+
+    // Para demais tabelas ou alterações estruturais, agenda recarga remota suave
+    this.scheduleDebouncedRemoteRefresh();
+  }
+
+  scheduleDebouncedRemoteRefresh() {
+    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+    this._refreshTimer = setTimeout(async () => {
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      if (!this.isOnline || this.isSyncing) return;
+      const remoteData = await this.fetchRemoteData(orgId);
+      if (remoteData && typeof window.mergeRemoteData === 'function') {
+        await window.mergeRemoteData(remoteData);
+      }
+    }, 1200);
   }
 
   updateStatus(newStatus) {
@@ -255,8 +341,7 @@ class SyncEngine {
   async processQueue() {
     if (this.isSyncing || !this.isOnline || !window.supabaseClient) return;
 
-    const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
-    if (!orgId) return;
+    const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
     this.isSyncing = true;
     const pendingOps = await window.localDB.getPendingOperations(orgId);
@@ -312,14 +397,13 @@ class SyncEngine {
       this.updateStatus('conflict');
     } else {
       this.updateStatus('synced');
+      // Sincronização concluída com sucesso: atualiza estado remoto suavemente
+      this.scheduleDebouncedRemoteRefresh();
     }
   }
 
   async executeOperation(op) {
-    const orgId = op.orgId || (window.authManager ? window.authManager.getOrganizationId() : null);
-    if (!orgId) {
-      throw new Error('Operação cancelada: organization_id ausente.');
-    }
+    const orgId = op.orgId || (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
     switch (op.type) {
       // 1. Venda de Cotas (Atômica Anti-Conflito com Suporte a Override Administrativo)

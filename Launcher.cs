@@ -39,11 +39,11 @@ namespace EldoradoPesca
                     return;
                 }
 
-                // Fallback: Start node server and open URL
-                string serverJs = Path.Combine(appDir, "server.js");
+                // Fallback: Start local node server and open URL if electron is missing
+                string serverJs = Path.Combine(appDir, "local_server.js");
                 if (File.Exists(serverJs))
                 {
-                    ProcessStartInfo nodePsi = new ProcessStartInfo("node.exe", "server.js");
+                    ProcessStartInfo nodePsi = new ProcessStartInfo("node.exe", "local_server.js");
                     nodePsi.WorkingDirectory = appDir;
                     nodePsi.CreateNoWindow = true;
                     nodePsi.UseShellExecute = false;

@@ -41,15 +41,25 @@ if (!gotTheLock) {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        backgroundThrottling: false // Keeps smooth performance when switching windows
+        backgroundThrottling: false, // Keeps smooth performance when switching windows
+        preload: path.join(__dirname, 'preload.js')
       },
       autoHideMenuBar: true
     });
 
     Menu.setApplicationMenu(null);
 
-    // Load backend server
-    mainWindow.loadURL('http://localhost:3000');
+    // Carrega servidor backend local ou fallback direto para index.html offline
+    const localIndexPath = path.join(__dirname, 'index.html');
+    mainWindow.loadURL('http://localhost:3000').catch(() => {
+      mainWindow.loadFile(localIndexPath);
+    });
+
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+      if (validatedURL && validatedURL.includes('localhost:3000')) {
+        mainWindow.loadFile(localIndexPath);
+      }
+    });
 
     // Show instantly once rendered
     mainWindow.once('ready-to-show', () => {
