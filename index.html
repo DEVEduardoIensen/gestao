@@ -52,6 +52,53 @@
         }
       } catch (e) {}
     })();
+
+    // PWA Auto-Update Imediato (Bypass de Cache HTTP em Mobile / Android Chrome)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function(reg) {
+        reg.update().catch(function() {});
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[PWA] Nova versão instalada. Ativando imediatamente...');
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          }
+        });
+      }).catch(function(err) {
+        console.warn('[PWA] Falha ao registrar Service Worker antecipado:', err);
+      });
+
+      var isPwaRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (!isPwaRefreshing) {
+          isPwaRefreshing = true;
+          console.log('[PWA] Nova versão assumiu o controle. Recarregando aplicação...');
+          window.location.reload();
+        }
+      });
+
+      navigator.serviceWorker.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'SW_ACTIVATED') {
+          if (!isPwaRefreshing) {
+            isPwaRefreshing = true;
+            console.log('[PWA] Versão ativada recebida:', event.data.version);
+            window.location.reload();
+          }
+        }
+      });
+
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+          navigator.serviceWorker.getRegistration().then(function(reg) {
+            if (reg) reg.update().catch(function() {});
+          });
+        }
+      });
+    }
   </script>
 </head>
 
@@ -821,6 +868,34 @@
           <div>
             <button type="button" class="btn btn-gold" onclick="openInviteMemberModal()" style="width: 100%; padding: 0.85rem; font-weight: 700; font-size: 0.9rem;">
               + Convidar Funcionário / Membro
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 3: Versão & Atualizações Automáticas PWA -->
+        <div class="card" style="background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
+              </div>
+              <span class="badge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.5.4 PRO</span>
+            </div>
+
+            <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
+              O aplicativo atualiza <strong>automaticamente em segundo plano</strong> a cada melhoria publicada, sem necessidade de desinstalar e reinstalar o app.
+            </p>
+
+            <div style="background: rgba(229, 193, 88, 0.05); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: var(--radius-sm); padding: 0.9rem 1rem; margin-bottom: 1.25rem;">
+              <div style="font-size: 0.75rem; color: var(--text-dim); line-height: 1.4;">
+                Se você fez uma alteração no painel e deseja forçar o carregamento imediato no celular agora:
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button type="button" class="btn btn-gold" id="btnForceCheckUpdate" onclick="forceCheckAppUpdate()" style="width: 100%; padding: 0.85rem; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+              <span>🔄</span> Verificar e Atualizar Agora
             </button>
           </div>
         </div>

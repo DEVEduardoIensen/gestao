@@ -110,6 +110,9 @@ function updateDbStatusBadge(status) {
 }
 
 async function initAppState() {
+  // Inicializa escuta de PWA e verificação de Service Worker imediatamente (antes do Auth Guard)
+  initSyncAndPwaHandlers();
+
   const isMobileInstalled = window.authManager && typeof window.authManager.isMobileInstalledApp === 'function' && window.authManager.isMobileInstalledApp();
 
   // 1. Recupera sessão do usuário se houver
@@ -240,9 +243,6 @@ async function initAppState() {
     updateDbStatusBadge(navigator.onLine ? 'synced' : 'offline');
   }
 
-  // 5. Ativa escutas de conectividade e Service Worker
-  initSyncAndPwaHandlers();
-
   // Verifica se há pedido de recuperação de senha ativo
   if (window.authManager && window.authManager.isPasswordRecovery) {
     openModal('modalResetPassword');
@@ -308,9 +308,9 @@ window.addEventListener('beforeunload', () => {
 });
 
 function initSyncAndPwaHandlers() {
-  // Service Worker Registration com auto-update imediato
+  // Service Worker Registration com auto-update imediato e bypass de cache HTTP
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').then(reg => {
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
       console.log('[PWA] Service Worker registrado com sucesso:', reg.scope);
 
       // Força verificação imediata de atualizações no servidor/Vercel
@@ -345,7 +345,11 @@ function initSyncAndPwaHandlers() {
     // Mensagens diretas do SW
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'SW_ACTIVATED') {
-        console.log('[PWA] Versão ativada:', event.data.version);
+        console.log('[PWA] Versão ativada recebida:', event.data.version);
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       }
     });
 
@@ -383,6 +387,68 @@ function initSyncAndPwaHandlers() {
     });
   }
 }
+
+/**
+ * Força verificação e atualização imediata do PWA
+ * Usado pelo botão no painel de administração para evitar reinstalações manuais
+ */
+window.forceCheckAppUpdate = async function() {
+  const btn = document.getElementById('btnForceCheckUpdate');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Verificando...';
+  }
+  showToast('Verificando se há atualizações na nuvem...', 'info');
+
+  if (!navigator.onLine) {
+    showToast('Você está offline. Conecte-se à internet para atualizar.', 'warning');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+    return;
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await reg.update();
+        if (reg.waiting) {
+          showToast('Nova versão encontrada! Aplicando atualização...', 'success');
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          setTimeout(() => window.location.reload(), 600);
+          return;
+        }
+      }
+
+      // Limpa caches antigos obsoletos
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(name => {
+            if (name !== 'eldorado-pwa-v2.5.4') {
+              return caches.delete(name);
+            }
+          })
+        );
+      }
+
+      showToast('O aplicativo já está na versão mais recente (v2.5.4)!', 'success');
+    } else {
+      window.location.reload();
+    }
+  } catch (err) {
+    console.warn('[PWA] Erro ao buscar atualizações:', err);
+    showToast('Erro ao verificar atualizações: ' + (err.message || err), 'warning');
+  }
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+};
 
 function updateAuthUi() {
   const label = document.getElementById('headerAuthLabel');
