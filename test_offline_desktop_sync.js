@@ -63,7 +63,7 @@ assert(syncCode.includes("document.addEventListener('visibilitychange'"), 'sync_
 // 5. Service Worker - Caching Offline Resiliente
 console.log('\n5. Verificando sw.js (Cache PWA v2.6.0):');
 const swCode = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
-assert(swCode.includes('eldorado-pwa-v2.6.0'), 'sw.js atualizado para a versão de cache v2.6.0');
+assert(swCode.includes('eldorado-pwa-v2.6.0') || swCode.includes('eldorado-pwa-v2.7.0'), 'sw.js atualizado para a versão de cache v2.6.0 ou superior (v2.7.0)');
 assert(swCode.includes('ignoreSearch: true'), 'sw.js ignora query strings (cache match resiliente offline)');
 
 // 6. Electron Main Process

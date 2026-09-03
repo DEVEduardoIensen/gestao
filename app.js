@@ -241,13 +241,102 @@ async function initAppState() {
   }
 }
 
-// Mescla dados remotos recebidos do Supabase / Realtime na memória e no cache local
+// Mescla dados remotos recebidos do Supabase / Realtime na memória e no cache local (Smart Merge)
 window.mergeRemoteData = async function(remoteData) {
   if (!remoteData) return;
   const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
   if (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays || remoteData.settings) {
     const sanitized = sanitizeAppData(remoteData);
+
+    // SMART MERGE: Protege e preserva alterações locais ainda não sincronizadas no Outbox
+    if (window.localDB) {
+      try {
+        const pendingOps = await window.localDB.getPendingOperations(orgId);
+        if (Array.isArray(pendingOps) && pendingOps.length > 0) {
+          console.log(`[SmartMerge] Preservando ${pendingOps.length} operações locais pendentes contra sobrescrita...`);
+          pendingOps.forEach(op => {
+            if (!op.payload) return;
+
+            // 1. Preservar Cotas Modificadas Localmente
+            if (op.type === 'SELL_NUMBERS' && Array.isArray(sanitized.raffles)) {
+              const targetRaffle = sanitized.raffles.find(r => r.id === op.payload.raffleId);
+              if (targetRaffle && Array.isArray(targetRaffle.numbers) && Array.isArray(op.payload.numbers)) {
+                op.payload.numbers.forEach(num => {
+                  const item = targetRaffle.numbers.find(n => n.num === num);
+                  if (item) {
+                    item.status = op.payload.status;
+                    item.name = op.payload.buyerName || '';
+                    item.reservedAt = op.payload.reservedAt;
+                    item.paidAt = op.payload.paidAt;
+                  }
+                });
+              }
+            } else if (op.type === 'BATCH_SET_NUMBERS' && Array.isArray(sanitized.raffles)) {
+              const targetRaffle = sanitized.raffles.find(r => r.id === op.payload.raffleId);
+              if (targetRaffle && Array.isArray(targetRaffle.numbers) && Array.isArray(op.payload.numbersList)) {
+                op.payload.numbersList.forEach(n => {
+                  const item = targetRaffle.numbers.find(num => num.num === n.num);
+                  if (item) {
+                    item.status = n.status;
+                    item.name = n.name || '';
+                    item.reservedAt = n.reservedAt;
+                    item.paidAt = n.paidAt;
+                  }
+                });
+              }
+            }
+            // 2. Preservar Vales & Prêmios Modificados Localmente
+            else if (op.type === 'UPDATE_VALE' && Array.isArray(sanitized.valesAndPrizes)) {
+              const idx = sanitized.valesAndPrizes.findIndex(v => v.id === op.payload.id);
+              if (idx >= 0) sanitized.valesAndPrizes[idx] = { ...sanitized.valesAndPrizes[idx], ...op.payload };
+              else sanitized.valesAndPrizes.unshift(op.payload);
+            } else if (op.type === 'DELETE_VALE' && Array.isArray(sanitized.valesAndPrizes)) {
+              sanitized.valesAndPrizes = sanitized.valesAndPrizes.filter(v => v.id !== op.payload.id);
+            }
+            // 3. Preservar Agendamentos de Pesca Modificados Localmente
+            else if (op.type === 'BOOK_FISHING' && Array.isArray(sanitized.fishingBookings)) {
+              const idx = sanitized.fishingBookings.findIndex(f => f.id === op.payload.id);
+              if (idx >= 0) sanitized.fishingBookings[idx] = { ...sanitized.fishingBookings[idx], ...op.payload };
+              else sanitized.fishingBookings.push(op.payload);
+            } else if (op.type === 'DELETE_FISHING_BOOKING' && Array.isArray(sanitized.fishingBookings)) {
+              sanitized.fishingBookings = sanitized.fishingBookings.filter(f => f.id !== op.payload.id);
+            }
+            // 4. Preservar Locações do Rancho Modificadas Localmente
+            else if (op.type === 'BOOK_RANCHO' && Array.isArray(sanitized.ranchoBookings)) {
+              const idx = sanitized.ranchoBookings.findIndex(r => r.id === op.payload.id);
+              if (idx >= 0) sanitized.ranchoBookings[idx] = { ...sanitized.ranchoBookings[idx], ...op.payload };
+              else sanitized.ranchoBookings.push(op.payload);
+            } else if (op.type === 'DELETE_RANCHO_BOOKING' && Array.isArray(sanitized.ranchoBookings)) {
+              sanitized.ranchoBookings = sanitized.ranchoBookings.filter(r => r.id !== op.payload.id);
+            }
+            // 5. Preservar Ponto do Eduardo
+            else if (op.type === 'SET_EDUARDO_DAY' && Array.isArray(sanitized.eduardoWorkDays)) {
+              const idx = sanitized.eduardoWorkDays.findIndex(d => d.date === op.payload.date);
+              if (idx >= 0) sanitized.eduardoWorkDays[idx] = { ...sanitized.eduardoWorkDays[idx], ...op.payload };
+              else sanitized.eduardoWorkDays.push(op.payload);
+            } else if (op.type === 'DELETE_EDUARDO_DAY' && Array.isArray(sanitized.eduardoWorkDays)) {
+              sanitized.eduardoWorkDays = sanitized.eduardoWorkDays.filter(d => d.date !== op.payload.date);
+            }
+            // 6. Preservar Criação/Edição de Rifa
+            else if ((op.type === 'CREATE_RAFFLE' || op.type === 'UPDATE_RAFFLE') && Array.isArray(sanitized.raffles)) {
+              const idx = sanitized.raffles.findIndex(r => r.id === op.payload.id);
+              if (idx >= 0) sanitized.raffles[idx] = { ...sanitized.raffles[idx], ...op.payload };
+              else sanitized.raffles.unshift(op.payload);
+            } else if (op.type === 'DELETE_RAFFLE' && Array.isArray(sanitized.raffles)) {
+              sanitized.raffles = sanitized.raffles.filter(r => r.id !== op.payload.id);
+            }
+            // 7. Preservar Configurações
+            else if (op.type === 'UPDATE_SETTINGS') {
+              if (!sanitized.settings) sanitized.settings = {};
+              sanitized.settings[op.payload.key] = op.payload.value;
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[SmartMerge] Nota sobre verificação de fila pendente:', err);
+      }
+    }
 
     // Preserva seleção de rifa ativa se ainda existir
     if (sanitized.raffles && sanitized.raffles.length > 0) {
@@ -301,6 +390,13 @@ async function saveState(syncOperation = null) {
       if (window.syncEngine) {
         window.syncEngine.processQueue();
       }
+
+      // Notifica o Service Worker para agendamento de sincronização imediata ou em segundo plano
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
+        try {
+          navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' });
+        } catch (e) {}
+      }
     }
   }
 
@@ -309,6 +405,7 @@ async function saveState(syncOperation = null) {
 
   updateGlobalStats();
 }
+
 
 let localStorageBackupTimer = null;
 function scheduleLocalStorageBackup(orgId) {

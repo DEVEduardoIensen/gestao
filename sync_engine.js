@@ -18,45 +18,90 @@ class SyncEngine {
   }
 
   init() {
-    window.addEventListener('online', () => {
-      console.log('[SyncEngine] Conexão restabelecida! Iniciando sincronização...');
-      this.isOnline = true;
-      this.updateStatus('syncing');
-      this.initRealtimeSubscription();
-      this.processQueue();
-    });
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('online', () => {
+        console.log('[SyncEngine] Conexão restabelecida! Iniciando sincronização...');
+        this.isOnline = true;
+        this.updateStatus('syncing');
+        this.initRealtimeSubscription();
+        this.processQueue();
+      });
 
-    window.addEventListener('offline', () => {
-      console.log('[SyncEngine] Conexão perdida. Modo offline ativado.');
-      this.isOnline = false;
-      this.updateStatus('offline');
-    });
+      window.addEventListener('offline', () => {
+        console.log('[SyncEngine] Conexão perdida. Modo offline ativado.');
+        this.isOnline = false;
+        this.updateStatus('offline');
+      });
+
+      window.addEventListener('pageshow', () => {
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          this.isOnline = true;
+          this.processQueue();
+        }
+      });
+
+      window.addEventListener('focus', () => {
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          this.isOnline = true;
+          this.initRealtimeSubscription();
+          this.processQueue();
+        }
+      });
+    }
 
     // Ao focar na janela ou voltar de segundo plano, processa fila pendente
     if (typeof document !== 'undefined' && document.addEventListener) {
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && this.isOnline) {
+        if (document.visibilityState === 'visible' && ((typeof navigator !== 'undefined' && navigator.onLine) || this.isOnline)) {
+          this.isOnline = true;
           this.initRealtimeSubscription();
           this.processQueue();
         }
       });
     }
 
-    if (typeof window !== 'undefined' && window.addEventListener) {
-      window.addEventListener('focus', () => {
-        if (this.isOnline) {
-          this.initRealtimeSubscription();
-          this.processQueue();
+    // Escuta canal BroadcastChannel para atualizações em segundo plano vindas do Service Worker
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        this.broadcastChannel = new BroadcastChannel('eldorado-sync-channel');
+        this.broadcastChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'BACKGROUND_SYNC_COMPLETE') {
+            console.log('[SyncEngine] Notificação de Background Sync recebida do Service Worker.');
+            this.scheduleDebouncedRemoteRefresh();
+          }
+        };
+      }
+    } catch (e) {}
+
+    // Escuta mensagens diretas do Service Worker (Mobile PWA)
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'BACKGROUND_SYNC_COMPLETE') {
+          console.log('[SyncEngine] Notificação direta do Service Worker recebida.');
+          this.scheduleDebouncedRemoteRefresh();
         }
       });
     }
 
-    // Processamento periódico a cada 15 segundos se estiver online
+    // Escuta gatilho de sincronização em segundo plano do Electron Desktop (System Tray)
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.onTriggerBackgroundSync === 'function') {
+      window.electronAPI.onTriggerBackgroundSync(() => {
+        console.log('[SyncEngine] Sinal de sincronização em segundo plano recebido do Electron Desktop.');
+        if (typeof navigator !== 'undefined' && navigator.onLine) this.isOnline = true;
+        this.processQueue();
+      });
+    }
+
+    // Auto-recuperação e processamento periódico a cada 10 segundos
     this.syncInterval = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine && !this.isOnline) {
+        this.isOnline = true;
+        this.initRealtimeSubscription();
+      }
       if (this.isOnline && !this.isSyncing) {
         this.processQueue();
       }
-    }, 15000);
+    }, 10000);
 
     // Inicializa Realtime imediatamente se online
     if (this.isOnline) {
@@ -138,6 +183,9 @@ class SyncEngine {
     this.listeners.forEach(cb => {
       try { cb(this.status, this.conflicts); } catch (e) { console.error(e); }
     });
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.notifySyncStatus === 'function') {
+      try { window.electronAPI.notifySyncStatus(this.status); } catch (e) {}
+    }
   }
 
   // --- BUSCAR DADOS COMPLETOS DO SUPABASE PARA O TENANT ---
@@ -339,67 +387,86 @@ class SyncEngine {
 
   // --- PROCESSAR FILA OUTBOX ---
   async processQueue() {
-    if (this.isSyncing || !this.isOnline || !window.supabaseClient) return;
-
-    const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
-
-    this.isSyncing = true;
-    const pendingOps = await window.localDB.getPendingOperations(orgId);
-
-    if (pendingOps.length === 0) {
-      this.isSyncing = false;
-      this.updateStatus(this.conflicts.length > 0 ? 'conflict' : 'synced');
-      return;
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      this.isOnline = true;
     }
 
-    this.updateStatus('syncing');
+    // Se já estiver em processamento, retorna a promessa ativa para os chamadores aguardarem
+    if (this.isSyncing) {
+      return this._activeQueuePromise || Promise.resolve();
+    }
 
-    for (const op of pendingOps) {
-      // Se a operação já está marcada como conflito não resolvido, pula para o próximo item
-      if (op.status === 'conflict') {
-        continue;
-      }
+    if (!this.isOnline || !window.supabaseClient) {
+      return Promise.resolve();
+    }
 
-      // Backoff exponencial para retentativas de falha
-      if (op.retryCount > 0 && op.lastAttempt) {
-        const delay = Math.min(1000 * Math.pow(2, Math.min(op.retryCount, 6)), 60000);
-        if (Date.now() - op.lastAttempt < delay) {
-          continue;
-        }
-      }
+    this._activeQueuePromise = (async () => {
+      this.isSyncing = true;
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
       try {
-        await window.localDB.updateOperationStatus(op.id, 'syncing');
-        op.lastAttempt = Date.now();
+        const pendingOps = await window.localDB.getPendingOperations(orgId);
 
-        const result = await this.executeOperation(op);
-
-        if (result === true || (result && result.success)) {
-          await window.localDB.removeOperation(op.id);
-          // Remove de eventuais conflitos resolvidos
-          this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
-        } else if (result && result.conflict) {
-          // Conflito registrado — mantem na fila para decisão do operador
-          console.warn('[SyncEngine] Conflito retornado pelo servidor:', result);
+        if (pendingOps.length === 0) {
+          this.updateStatus(this.conflicts.length > 0 ? 'conflict' : 'synced');
+          return;
         }
-      } catch (err) {
-        console.error(`[SyncEngine] Falha ao sincronizar operação ${op.id} (${op.type}):`, err);
-        await window.localDB.updateOperationStatus(op.id, 'failed', err.message || 'Erro de rede');
-      }
-    }
 
-    this.isSyncing = false;
-    const remaining = await window.localDB.getPendingOperations(orgId);
-    const hasConflicts = remaining.some(o => o.status === 'conflict');
-    if (!this.isOnline) {
-      this.updateStatus('offline');
-    } else if (hasConflicts) {
-      this.updateStatus('conflict');
-    } else {
-      this.updateStatus('synced');
-      // Sincronização concluída com sucesso: atualiza estado remoto suavemente
-      this.scheduleDebouncedRemoteRefresh();
-    }
+        this.updateStatus('syncing');
+
+        for (const op of pendingOps) {
+          // Se a operação já está marcada como conflito não resolvido, pula para o próximo item
+          if (op.status === 'conflict') {
+            continue;
+          }
+
+          // Backoff exponencial para retentativas de falha
+          if (op.retryCount > 0 && op.lastAttempt) {
+            const delay = Math.min(1000 * Math.pow(2, Math.min(op.retryCount, 6)), 60000);
+            if (Date.now() - op.lastAttempt < delay) {
+              continue;
+            }
+          }
+
+          try {
+            await window.localDB.updateOperationStatus(op.id, 'syncing');
+            op.lastAttempt = Date.now();
+
+            const result = await this.executeOperation(op);
+
+            if (result === true || (result && result.success)) {
+              await window.localDB.removeOperation(op.id);
+              // Remove de eventuais conflitos resolvidos
+              this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
+            } else if (result && result.conflict) {
+              // Conflito registrado — mantem na fila para decisão do operador
+              console.warn('[SyncEngine] Conflito retornado pelo servidor:', result);
+            }
+          } catch (err) {
+            console.error(`[SyncEngine] Falha ao sincronizar operação ${op.id} (${op.type}):`, err);
+            await window.localDB.updateOperationStatus(op.id, 'failed', err.message || 'Erro de rede');
+          }
+        }
+
+        const remaining = await window.localDB.getPendingOperations(orgId);
+        const hasConflicts = remaining.some(o => o.status === 'conflict');
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          this.isOnline = false;
+          this.updateStatus('offline');
+        } else if (hasConflicts) {
+          this.updateStatus('conflict');
+        } else {
+          this.updateStatus('synced');
+          // Sincronização concluída com sucesso: atualiza estado remoto suavemente
+          this.scheduleDebouncedRemoteRefresh();
+        }
+      } finally {
+        this.isSyncing = false;
+        this._activeQueuePromise = null;
+      }
+    })();
+
+    return this._activeQueuePromise;
   }
 
   async executeOperation(op) {

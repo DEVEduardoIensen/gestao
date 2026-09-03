@@ -191,6 +191,19 @@ class LocalDatabase {
     };
 
     await this.put('sync_queue', operation);
+
+    // Registra tag de Background Sync no Service Worker (Mobile PWA & Navegador)
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(reg => {
+        if ('sync' in reg) {
+          reg.sync.register('eldorado-outbox-sync').catch(() => {});
+        }
+        if ('periodicSync' in reg) {
+          reg.periodicSync.register('eldorado-periodic-sync', { minInterval: 15 * 60 * 1000 }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
     return operation;
   }
 
