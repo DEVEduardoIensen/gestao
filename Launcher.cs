@@ -27,9 +27,10 @@ namespace EldoradoPesca
 
                 if (File.Exists(electronExe))
                 {
+                    string mainScript = Path.Combine(appDir, "main.js");
                     ProcessStartInfo psi = new ProcessStartInfo();
                     psi.FileName = electronExe;
-                    psi.Arguments = string.Format("\"{0}\"", appDir);
+                    psi.Arguments = string.Format("\"{0}\"", File.Exists(mainScript) ? mainScript : appDir);
                     psi.WorkingDirectory = appDir;
                     psi.UseShellExecute = false;
                     psi.CreateNoWindow = true;
