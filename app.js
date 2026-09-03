@@ -54,6 +54,12 @@ function sanitizeAppData(data) {
   }
   if (!Array.isArray(data.raffles)) {
     data.raffles = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.raffles)) ? INITIAL_SAMPLE_DATA.raffles : [];
+  } else {
+    data.raffles.forEach(r => {
+      if (r && r.title) {
+        r.title = r.title.replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, '').trim();
+      }
+    });
   }
   if (!Array.isArray(data.valesAndPrizes)) {
     data.valesAndPrizes = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.valesAndPrizes)) ? INITIAL_SAMPLE_DATA.valesAndPrizes : [];
@@ -1003,7 +1009,8 @@ function renderRaffleDropdown() {
   (appData.raffles || []).forEach(r => {
     const opt = document.createElement("option");
     opt.value = r.id;
-    opt.textContent = `${r.title} - ${r.totalNumbers} Cotas`;
+    const cleanTitle = (r.title || "Ação").replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, "").trim();
+    opt.textContent = `${cleanTitle} - ${r.totalNumbers} Cotas`;
     if (String(r.id) === String(activeRaffleId)) {
       opt.selected = true;
     }
@@ -1039,7 +1046,8 @@ function renderRaffleView() {
   }
 
   // Header Details
-  if (titleEl) titleEl.textContent = raffle.title || "Ação Eldorado Pesca";
+  const cleanTitle = (raffle.title || "Ação Eldorado Pesca").replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, "").trim();
+  if (titleEl) titleEl.textContent = cleanTitle;
   if (badgeEl) badgeEl.textContent = raffle.subtitle || "AÇÃO RÁPIDA";
   if (priceEl) priceEl.textContent = formatCurrency(raffle.pricePerNumber || 25);
   if (rulesEl) rulesEl.textContent = `Frete a parte - Envio para todo o Brasil.`;
@@ -5324,7 +5332,8 @@ function removeDynamicPrizeRow(btn) {
 
 async function saveRaffleForm() {
   const editId = document.getElementById("rfEditId").value;
-  const title = document.getElementById("rfTitle").value.trim();
+  const rawTitle = document.getElementById("rfTitle").value.trim();
+  const title = rawTitle.replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, "").trim();
   const price = parseFloat(document.getElementById("rfPrice").value);
   const totalNums = parseInt(document.getElementById("rfTotalNumbers").value, 10);
 
