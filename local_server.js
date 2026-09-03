@@ -1207,6 +1207,7 @@ const server = http.createServer((req, res) => {
     }
 
     const ext = path.extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
     const headers = { 'Content-Type': contentType };
     if (['.html', '.js', '.css'].includes(ext)) {
       headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
