@@ -18,6 +18,8 @@ backups/
 *.log
 .DS_Store
 Thumbs.db
+scratch_*
+scratch/
 
 # IDE & OS
 .vscode/
