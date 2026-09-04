@@ -174,12 +174,15 @@ class LocalDatabase {
   async saveAuthSession(session, orgId) {
     if (!session || !orgId) return;
     try {
+      const token = session.access_token;
+      // Garante que apenas JWTs válidos com 3 partes sejam persistidos
+      const validToken = (typeof token === 'string' && token.trim().split('.').length === 3) ? token.trim() : null;
       await this.put('settings', {
         organization_id: orgId,
         key: '_auth_session',
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        expires_at: session.expires_at,
+        access_token: validToken,
+        refresh_token: session.refresh_token || null,
+        expires_at: session.expires_at || null,
         user_id: session.user?.id || null,
         timestamp: Date.now()
       });
@@ -206,16 +209,38 @@ class LocalDatabase {
     // Captura token de autenticação e refresh token do usuário para autorizar o Service Worker
     let authToken = op.authToken || null;
     let refreshToken = op.refreshToken || null;
+    const isValidJwt = (t) => typeof t === 'string' && t.trim().split('.').length === 3;
+
     try {
-      if (!authToken && window.authManager && window.authManager.session) {
+      if (!isValidJwt(authToken) && window.authManager && window.authManager.session) {
         authToken = window.authManager.session.access_token;
         refreshToken = window.authManager.session.refresh_token;
-      } else if (!authToken && window.supabaseClient && window.supabaseClient.auth) {
+      }
+      
+      if (!isValidJwt(authToken) && window.supabaseClient && window.supabaseClient.auth) {
         const sess = (await window.supabaseClient.auth.getSession()).data?.session;
-        if (sess) {
+        if (sess && isValidJwt(sess.access_token)) {
           authToken = sess.access_token;
           refreshToken = sess.refresh_token;
         }
+      }
+
+      if (!isValidJwt(authToken) && typeof localStorage !== 'undefined') {
+        const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+        if (sbKey) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(sbKey) || '{}');
+            if (parsed && isValidJwt(parsed.access_token)) {
+              authToken = parsed.access_token;
+              refreshToken = parsed.refresh_token;
+            }
+          } catch (e) {}
+        }
+      }
+
+      // Normaliza para null se não for um JWT autêntico
+      if (!isValidJwt(authToken)) {
+        authToken = null;
       }
     } catch (e) {}
 
@@ -243,14 +268,25 @@ class LocalDatabase {
 
     // Registra tag de Background Sync no Service Worker (Mobile PWA & Navegador)
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(reg => {
+      const armSync = (reg) => {
+        if (!reg) return;
         if ('sync' in reg) {
           reg.sync.register('eldorado-outbox-sync').catch(() => {});
+          reg.sync.register('sync-outbox').catch(() => {});
         }
         if ('periodicSync' in reg) {
           reg.periodicSync.register('eldorado-periodic-sync', { minInterval: 15 * 60 * 1000 }).catch(() => {});
         }
-      }).catch(() => {});
+      };
+      navigator.serviceWorker.ready.then(armSync).catch(() => {});
+      if (typeof navigator.serviceWorker.getRegistration === 'function') {
+        navigator.serviceWorker.getRegistration().then(armSync).catch(() => {});
+      }
+      if (navigator.serviceWorker.controller) {
+        try {
+          navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' });
+        } catch (e) {}
+      }
     }
 
     return operation;

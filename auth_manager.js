@@ -149,6 +149,22 @@ class AuthManager {
   }
 
   async ensureDirectInstalledSession() {
+    // Tenta encontrar um token Supabase autêntico no localStorage se existir
+    let realToken = null;
+    let realRefreshToken = null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+        if (sbKey) {
+          const parsed = JSON.parse(localStorage.getItem(sbKey) || '{}');
+          if (parsed && typeof parsed.access_token === 'string' && parsed.access_token.trim().split('.').length === 3) {
+            realToken = parsed.access_token.trim();
+            realRefreshToken = parsed.refresh_token;
+          }
+        }
+      }
+    } catch (e) {}
+
     // 1. Tenta restaurar cache local existente
     if (this.restoreCachedOrganizations()) {
       if (!this.user) {
@@ -157,7 +173,11 @@ class AuthManager {
           email: 'app@eldoradopesca.com',
           user_metadata: { role: 'owner' }
         };
-        this.session = { user: this.user, access_token: 'pwa-app-token' };
+        this.session = {
+          user: this.user,
+          access_token: realToken || null,
+          refresh_token: realRefreshToken || null
+        };
       }
       return;
     }
@@ -186,7 +206,11 @@ class AuthManager {
             email: 'app@eldoradopesca.com',
             user_metadata: { role: 'owner' }
           };
-          this.session = { user: this.user, access_token: 'pwa-app-token' };
+          this.session = {
+            user: this.user,
+            access_token: realToken || null,
+            refresh_token: realRefreshToken || null
+          };
           return;
         }
       } catch (err) {
@@ -207,7 +231,11 @@ class AuthManager {
         email: 'app@eldoradopesca.com',
         user_metadata: { role: 'owner' }
       };
-      this.session = { user: this.user, access_token: 'pwa-app-token' };
+      this.session = {
+        user: this.user,
+        access_token: realToken || null,
+        refresh_token: realRefreshToken || null
+      };
     }
   }
 

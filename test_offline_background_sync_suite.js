@@ -41,7 +41,7 @@ assert(preloadCode.includes('notifySyncStatus'), 'preload.js expõe notifySyncSt
 console.log('\n2. Verificando Service Worker (W3C Background Sync API & Dispatcher):');
 const swCode = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
 
-assert(swCode.includes('eldorado-pwa-v2.7.2'), 'sw.js atualizado para versão v2.7.2');
+assert(swCode.includes('eldorado-pwa-v2.8.3'), 'sw.js atualizado para versão v2.8.3');
 assert(swCode.includes("self.addEventListener('sync'"), 'sw.js escuta evento "sync" do sistema operacional');
 assert(swCode.includes("self.addEventListener('periodicsync'"), 'sw.js escuta evento "periodicsync"');
 assert(swCode.includes('eldorado-outbox-sync'), 'sw.js trata tag eldorado-outbox-sync');
@@ -49,6 +49,7 @@ assert(swCode.includes('processBackgroundOutboxSync'), 'sw.js implementa process
 assert(swCode.includes('openLocalIndexedDB'), 'sw.js lê fila diretamente do IndexedDB em background');
 assert(swCode.includes('sell_raffle_numbers_atomic'), 'sw.js despacha vendas de cotas para o Supabase');
 assert(swCode.includes('BroadcastChannel'), 'sw.js notifica abas abertas sobre término do sync');
+assert(swCode.includes('swSupabaseFetch'), 'sw.js implementa swSupabaseFetch com resiliência e fallback automático');
 
 // 3. Persistência e Enfileiramento no Dexie / IndexedDB
 console.log('\n3. Verificando db_dexie.js (Registro de Background Sync no Outbox):');
@@ -77,15 +78,16 @@ assert(appCode.includes('targetRaffle.numbers'), 'Smart Merge protege cotas modi
 assert(appCode.includes('sanitized.valesAndPrizes'), 'Smart Merge protege vales locais');
 assert(appCode.includes('sanitized.fishingBookings'), 'Smart Merge protege agendamentos locais');
 assert(appCode.includes('TRIGGER_SYNC'), 'saveState dispara TRIGGER_SYNC para o Service Worker');
+assert(appCode.includes('armBackgroundSyncOnExit'), 'app.js arma background sync na saída e no bloqueio de tela');
 
 // 6. Versões do Pacote e Arquivo Principal
-console.log('\n6. Verificando Consistência de Versões (v2.7.2):');
+console.log('\n6. Verificando Consistência de Versões (v2.8.3):');
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 const htmlCode = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 
-assert(pkg.version === '2.7.2', 'package.json está na versão 2.7.2');
-assert(htmlCode.includes('app.js?v=2.7.2'), 'index.html referencia app.js?v=2.7.2');
-assert(htmlCode.includes('styles.css?v=2.7.2'), 'index.html referencia styles.css?v=2.7.2');
+assert(pkg.version === '2.8.3', 'package.json está na versão 2.8.3');
+assert(htmlCode.includes(`app.js?v=${pkg.version}`), `index.html referencia app.js?v=${pkg.version}`);
+assert(htmlCode.includes(`styles.css?v=${pkg.version}`), `index.html referencia styles.css?v=${pkg.version}`);
 
 console.log('\n============================================================');
 console.log(`  RESULTADO: ${passed} passaram, ${failed} falharam.`);

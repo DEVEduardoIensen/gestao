@@ -523,14 +523,37 @@ function initSyncAndPwaHandlers() {
       }
     });
 
-    // Checa atualizações toda vez que o usuário voltar ao app no celular
+    // Checa atualizações ao voltar e arma o Background Sync ao sair ou bloquear o celular
+    const armBackgroundSyncOnExit = () => {
+      if ('serviceWorker' in navigator) {
+        const arm = (reg) => {
+          if (!reg) return;
+          if ('sync' in reg) {
+            reg.sync.register('eldorado-outbox-sync').catch(() => {});
+            reg.sync.register('sync-outbox').catch(() => {});
+          }
+          if ('periodicSync' in reg) {
+            reg.periodicSync.register('eldorado-periodic-sync', { minInterval: 15 * 60 * 1000 }).catch(() => {});
+          }
+        };
+        navigator.serviceWorker.ready.then(arm).catch(() => {});
+        if (typeof navigator.serviceWorker.getRegistration === 'function') {
+          navigator.serviceWorker.getRegistration().then(arm).catch(() => {});
+        }
+      }
+    };
+
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         navigator.serviceWorker.getRegistration().then(reg => {
           if (reg) reg.update().catch(() => {});
         });
+      } else if (document.visibilityState === 'hidden') {
+        armBackgroundSyncOnExit();
       }
     });
+    window.addEventListener('pagehide', armBackgroundSyncOnExit);
+    window.addEventListener('freeze', armBackgroundSyncOnExit);
   }
 
   // Escuta mudanças de status no SyncEngine
