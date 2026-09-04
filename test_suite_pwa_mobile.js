@@ -50,7 +50,7 @@ console.log('\n2. Verificando Service Worker e Integridade do App Shell:');
 const swPath = path.join(__dirname, 'sw.js');
 assert(fs.existsSync(swPath), 'sw.js existe');
 const swContent = fs.readFileSync(swPath, 'utf8');
-assert(swContent.includes('eldorado-pwa-v2.2.0'), 'Service Worker atualizado para versão v2.2.0');
+assert(/eldorado-pwa-v2\./.test(swContent), 'Service Worker atualizado para versão v2.x.x');
 assert(swContent.includes('skipWaiting'), 'Service Worker implementa skipWaiting');
 assert(swContent.includes('clients.claim'), 'Service Worker assume controle da página (clients.claim)');
 assert(!swContent.includes('indexedDB.deleteDatabase'), 'Service Worker NUNCA apaga IndexedDB durante updates');

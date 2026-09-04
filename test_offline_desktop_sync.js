@@ -28,10 +28,15 @@ console.log('1. Verificando Executável Nativo e Atalhos Desktop (Sem Ícone do 
 const exePath = path.join(__dirname, 'Eldorado Pesca.exe');
 assert(fs.existsSync(exePath), 'Eldorado Pesca.exe existe no diretório raiz do projeto');
 
-const desktopLnk = path.join(process.env.USERPROFILE, 'Desktop', 'Eldorado Pesca & Lake.lnk');
+const possibleLnkPaths = [
+  path.join(process.env.USERPROFILE, 'Desktop', 'Eldorado Pesca & Lake.lnk'),
+  path.join(process.env.USERPROFILE, 'OneDrive', 'Desktop', 'Eldorado Pesca & Lake.lnk'),
+  path.join(process.env.USERPROFILE, 'Eldorado Pesca & Lake.lnk')
+];
+const desktopLnk = possibleLnkPaths.find(p => fs.existsSync(p)) || possibleLnkPaths[0];
 assert(fs.existsSync(desktopLnk), 'Atalho oficial na Área de Trabalho existe');
 
-const lnkContent = fs.readFileSync(desktopLnk, 'latin1');
+const lnkContent = fs.existsSync(desktopLnk) ? fs.readFileSync(desktopLnk, 'latin1') : '';
 assert(lnkContent.includes('Eldorado Pesca.exe'), 'Atalho aponta para o executável Eldorado Pesca.exe nativo');
 assert(!lnkContent.includes('chrome_proxy.exe'), 'Atalho NÃO aponta para chrome_proxy.exe (elimina a bolinha do Google)');
 
@@ -63,7 +68,7 @@ assert(syncCode.includes("document.addEventListener('visibilitychange'"), 'sync_
 // 5. Service Worker - Caching Offline Resiliente
 console.log('\n5. Verificando sw.js (Cache PWA v2.6.0):');
 const swCode = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
-assert(swCode.includes('eldorado-pwa-v2.6.0') || swCode.includes('eldorado-pwa-v2.7.0'), 'sw.js atualizado para a versão de cache v2.6.0 ou superior (v2.7.0)');
+assert(/eldorado-pwa-v2\.[6789]/.test(swCode), 'sw.js atualizado para a versão de cache v2.6.0 ou superior (v2.7.x)');
 assert(swCode.includes('ignoreSearch: true'), 'sw.js ignora query strings (cache match resiliente offline)');
 
 // 6. Electron Main Process

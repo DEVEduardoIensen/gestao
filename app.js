@@ -1487,9 +1487,9 @@ function renderRaffleNumbersGrid() {
 
     let statusTag = "";
     if (item.status === "paid") {
-      statusTag = `<span class="num-status-tag" style="color: var(--status-paid-text);">Pago</span>`;
+      statusTag = `<span class="num-status-tag" title="Pago" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {
-      statusTag = `<span class="num-status-tag tag-reserved" style="color: var(--primary-gold);"><span class="status-text-full">Reservado</span><span class="status-text-short">Res.</span></span>`;
+      statusTag = `<span class="num-status-tag tag-reserved" title="Reservado" style="color: var(--primary-gold);"><span class="status-text-full">Reservado</span><span class="status-text-short">Res.</span></span>`;
     }
 
     if (wonPrize) {

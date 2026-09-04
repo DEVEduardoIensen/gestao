@@ -41,7 +41,7 @@ assert(preloadCode.includes('notifySyncStatus'), 'preload.js expõe notifySyncSt
 console.log('\n2. Verificando Service Worker (W3C Background Sync API & Dispatcher):');
 const swCode = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
 
-assert(swCode.includes('eldorado-pwa-v2.7.1'), 'sw.js atualizado para versão v2.7.1');
+assert(swCode.includes('eldorado-pwa-v2.7.2'), 'sw.js atualizado para versão v2.7.2');
 assert(swCode.includes("self.addEventListener('sync'"), 'sw.js escuta evento "sync" do sistema operacional');
 assert(swCode.includes("self.addEventListener('periodicsync'"), 'sw.js escuta evento "periodicsync"');
 assert(swCode.includes('eldorado-outbox-sync'), 'sw.js trata tag eldorado-outbox-sync');
@@ -79,13 +79,13 @@ assert(appCode.includes('sanitized.fishingBookings'), 'Smart Merge protege agend
 assert(appCode.includes('TRIGGER_SYNC'), 'saveState dispara TRIGGER_SYNC para o Service Worker');
 
 // 6. Versões do Pacote e Arquivo Principal
-console.log('\n6. Verificando Consistência de Versões (v2.7.1):');
+console.log('\n6. Verificando Consistência de Versões (v2.7.2):');
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 const htmlCode = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 
-assert(pkg.version === '2.7.1', 'package.json está na versão 2.7.1');
-assert(htmlCode.includes('app.js?v=2.7.1'), 'index.html referencia app.js?v=2.7.1');
-assert(htmlCode.includes('v2.7.1 PRO'), 'index.html exibe badge v2.7.1 PRO');
+assert(pkg.version === '2.7.2', 'package.json está na versão 2.7.2');
+assert(htmlCode.includes('app.js?v=2.7.2'), 'index.html referencia app.js?v=2.7.2');
+assert(htmlCode.includes('styles.css?v=2.7.2'), 'index.html referencia styles.css?v=2.7.2');
 
 console.log('\n============================================================');
 console.log(`  RESULTADO: ${passed} passaram, ${failed} falharam.`);

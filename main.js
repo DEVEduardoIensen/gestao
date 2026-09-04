@@ -55,6 +55,14 @@ if (!gotTheLock) {
             }
           }
         },
+        {
+          label: 'Recarregar Sistema (F5)',
+          click: () => {
+            if (mainWindow && mainWindow.webContents) {
+              mainWindow.webContents.reloadIgnoringCache();
+            }
+          }
+        },
         { type: 'separator' },
         {
           label: 'Sair do Sistema',
@@ -129,6 +137,19 @@ if (!gotTheLock) {
       }
     });
 
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F5' || (input.control && input.key.toLowerCase() === 'r')) {
+        if (input.shift || (input.control && input.key === 'F5')) {
+          mainWindow.webContents.reloadIgnoringCache();
+        } else {
+          mainWindow.webContents.reload();
+        }
+      }
+      if ((input.control && input.shift && input.key.toLowerCase() === 'i') || input.key === 'F12') {
+        mainWindow.webContents.toggleDevTools();
+      }
+    });
+
     // Exibe a janela assim que estiver renderizada
     mainWindow.once('ready-to-show', () => {
       mainWindow.show();
@@ -179,6 +200,10 @@ if (!gotTheLock) {
       mainWindow.show();
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+      // Recarrega automaticamente para obter a versão e os dados mais recentes
+      if (mainWindow.webContents) {
+        mainWindow.webContents.reload();
+      }
     }
   });
 

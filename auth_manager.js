@@ -81,6 +81,10 @@ class AuthManager {
     }
   }
 
+  getOrganizationId() {
+    return this.currentOrg?.id || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || this.getDefaultOrgId();
+  }
+
   getDefaultOrgId() {
     return (typeof SUPABASE_CONFIG !== 'undefined' && SUPABASE_CONFIG.DEFAULT_ORG_ID) ? SUPABASE_CONFIG.DEFAULT_ORG_ID : (this.currentOrg?.id || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || '');
   }
