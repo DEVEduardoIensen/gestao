@@ -126,18 +126,17 @@ class AuthManager {
     );
     const search = (typeof window !== 'undefined' && window.location ? window.location.search : '') || '';
     const hash = (typeof window !== 'undefined' && window.location ? window.location.hash : '') || '';
-    const hasPwaParams = search.includes('source=pwa') || search.includes('mode=standalone') || search.includes('platform=mobile') || search.includes('platform=desktop') || hash.includes('pwa');
-    const isMarkedInstalled = typeof localStorage !== 'undefined' && (
-      localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' ||
-      localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true' ||
-      localStorage.getItem('ELDORADO_DESKTOP_INSTALLED') === 'true'
-    );
+    const hasPwaParams = search.includes('source=pwa') || search.includes('mode=standalone') || search.includes('platform=mobile') || hash.includes('pwa');
     const isMobileDevice = typeof navigator !== 'undefined' && (
       /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
       (typeof window !== 'undefined' && window.innerWidth <= 820 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
     );
+    const isMarkedInstalled = typeof localStorage !== 'undefined' && (
+      localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' ||
+      localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true'
+    );
 
-    return !!(isStandalone || hasPwaParams || isMarkedInstalled || (isMobileDevice && isMarkedInstalled));
+    return !!(isStandalone || hasPwaParams || (isMobileDevice && isMarkedInstalled));
   }
 
   isStandaloneOrInstalled() {
@@ -260,17 +259,18 @@ class AuthManager {
       } else if (this.isStandaloneOrInstalled() || this.isDesktopApp() || this.isMobileInstalledApp()) {
         await this.ensureDirectInstalledSession();
       } else {
-        if (!this.restoreCachedOrganizations()) {
-          const masterOrg = this.getDefaultMasterOrganization();
-          this.currentOrg = masterOrg;
-          this.organizations = [masterOrg];
-        }
+        this.user = null;
+        this.session = null;
+        this.currentOrg = null;
+        this.organizations = [];
       }
       return this.session;
     } catch (e) {
       console.warn('[AuthManager] Falha ao recuperar sessão inicial via rede. Tentando cache offline:', e);
-      if (!this.restoreCachedOrganizations()) {
-        await this.ensureDirectInstalledSession();
+      if (this.isStandaloneOrInstalled() || this.isDesktopApp() || this.isMobileInstalledApp()) {
+        if (!this.restoreCachedOrganizations()) {
+          await this.ensureDirectInstalledSession();
+        }
       }
       return this.session;
     }
@@ -484,9 +484,6 @@ class AuthManager {
 
   isAuthenticated() {
     if (this.isStandaloneOrInstalled() || this.isDesktopApp() || this.isMobileInstalledApp()) {
-      return true;
-    }
-    if (this.currentOrg && this.currentOrg.id) {
       return true;
     }
     return !!(this.user && this.currentOrg && this.currentOrg.id);

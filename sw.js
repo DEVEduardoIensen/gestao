@@ -1,10 +1,10 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.8.3 — Cache do App Shell + W3C Background Sync API
+ * Versão 2.8.4 — Cache do App Shell + W3C Background Sync API
  * Sincronização automática em segundo plano ao ligar o Wi-Fi sem precisar abrir o app.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.8.3';
+const CACHE_NAME = 'eldorado-pwa-v2.8.4';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';

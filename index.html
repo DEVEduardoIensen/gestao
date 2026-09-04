@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.8.3">
+  <link rel="stylesheet" href="styles.css?v=2.8.4">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -38,24 +38,28 @@
           window.matchMedia('(display-mode: minimal-ui)').matches
         )) || window.navigator.standalone === true;
         var search = window.location.search || '';
-        var hasPwaParam = search.indexOf('source=pwa') !== -1 || search.indexOf('mode=standalone') !== -1 || search.indexOf('platform=mobile') !== -1 || search.indexOf('platform=desktop') !== -1;
-        var isMarked = localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_DESKTOP_INSTALLED') === 'true';
+        var hasPwaParam = search.indexOf('source=pwa') !== -1 || search.indexOf('mode=standalone') !== -1 || search.indexOf('platform=mobile') !== -1;
+        var isMobileDevice = typeof navigator !== 'undefined' && (
+          /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+          (typeof window !== 'undefined' && window.innerWidth <= 820 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
+        );
+        var isMarked = isMobileDevice && (localStorage.getItem('ELDORADO_MOBILE_INSTALLED') === 'true' || localStorage.getItem('ELDORADO_PWA_INSTALLED') === 'true');
         var isElectron = (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.indexOf('Electron') !== -1);
         var isLocal = (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-        var isDesktop = isElectron || isLocal || (isStandalone && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+        var isDesktop = isElectron || isLocal || (isStandalone && !isMobileDevice);
 
         if (isDesktop) {
           window.__ELDORADO_IS_DESKTOP_APP = true;
         }
 
-        var isMobileApp = isStandalone || hasPwaParam || isMarked || isDesktop;
+        var isMobileApp = isStandalone || hasPwaParam || isMarked;
         if (isMobileApp) {
           window.__ELDORADO_IS_MOBILE_APP = true;
         }
 
-        // Se NÃO for app instalado/desktop e NÃO possuir credencial/organização salva, ativa bloqueio visual
-        var hasSavedAuth = localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || localStorage.getItem('sb-tfttmfbfzyymuwiwpxyw-auth-token');
-        if (!isMobileApp && !hasSavedAuth) {
+        // Se NÃO for app instalado/desktop e NÃO possuir sessão de login ativa salva, ativa bloqueio visual antes de pintar o HTML
+        var hasSavedAuth = !!localStorage.getItem('sb-tfttmfbfzyymuwiwpxyw-auth-token');
+        if (!isMobileApp && !isDesktop && !hasSavedAuth) {
           document.documentElement.classList.add('show-auth-gate');
         }
       } catch (e) {}
@@ -897,7 +901,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.8.2 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.8.4 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -2313,10 +2317,10 @@
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
   <script src="db_dexie.js"></script>
-  <script src="auth_manager.js?v=2.8.3"></script>
-  <script src="sync_engine.js?v=2.8.3"></script>
+  <script src="auth_manager.js?v=2.8.4"></script>
+  <script src="sync_engine.js?v=2.8.4"></script>
   <script src="sample-data.js"></script>
-  <script src="app.js?v=2.8.3"></script>
+  <script src="app.js?v=2.8.4"></script>
 </body>
 
 </html>
