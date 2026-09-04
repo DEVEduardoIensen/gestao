@@ -147,7 +147,7 @@ body {
 .brand-logo-img {
   height: 48px;
   width: auto;
-  max-width: 65px;
+  max-width: 72px;
   object-fit: contain;
   filter: drop-shadow(0 2px 8px rgba(229, 193, 88, 0.25));
   display: block;
@@ -1777,9 +1777,9 @@ body {
     width: 100%;
   }
   .brand-logo-img {
-    height: 26px !important;
+    height: 38px !important;
     width: auto !important;
-    max-width: 36px !important;
+    max-width: 55px !important;
   }
   .brand-title {
     font-size: 0.95rem !important;
@@ -3035,12 +3035,13 @@ html.show-auth-gate .offline-bar {
 }
 
 .auth-gate-logo {
-  width: 76px;
-  height: 76px;
+  width: 96px;
+  height: auto;
+  max-height: 80px;
   object-fit: contain;
   margin: 0 auto 0.75rem auto;
   display: block;
-  filter: drop-shadow(0 4px 12px rgba(229, 193, 88, 0.3));
+  filter: drop-shadow(0 4px 14px rgba(229, 193, 88, 0.35));
 }
 
 .auth-gate-title {
