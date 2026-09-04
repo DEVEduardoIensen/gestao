@@ -31,7 +31,7 @@ const appJsContent = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
 // Extrai a função getHighestRaffle do app.js
 const sandbox = {};
 vm.createContext(sandbox);
-const fnMatch = appJsContent.match(/function getHighestRaffle\(raffles\)[\s\S]*?return highest \|\| raffles\[0\];\s*\}/);
+const fnMatch = appJsContent.match(/function getHighestRaffle\(raffles\)[\s\S]*?return highest \|\| (?:raffles|pool)\[0\];\s*\}/);
 assert(fnMatch, 'Função getHighestRaffle extraída com sucesso de app.js');
 
 if (fnMatch) {

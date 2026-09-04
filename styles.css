@@ -433,10 +433,104 @@ body {
   color: #060a13;
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 .btn-whatsapp:hover {
   background: #20ba5a;
   transform: translateY(-1px);
+}
+
+.btn-whatsapp-available {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  font-weight: 700;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.btn-whatsapp-available:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-whatsapp-subtle {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.btn-whatsapp-subtle:hover {
+  background: rgba(16, 185, 129, 0.25);
+  color: #ffffff;
+}
+
+.btn-whatsapp-send {
+  background: #25d366;
+  color: #060a13;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.btn-whatsapp-send:hover {
+  background: #20ba5a;
+  transform: translateY(-1px);
+}
+
+/* Modal Export Format Pills */
+.export-format-pills-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.export-format-pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.export-format-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.export-format-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+.export-format-pill.active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #34d399;
+  font-weight: 700;
+}
+
+.badge-available-count {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .btn-danger {
@@ -1789,7 +1883,7 @@ body {
     border: 1px solid #334155 !important;
     color: #f1f5f9 !important;
   }
-  .btn-whatsapp {
+  .btn-whatsapp, .btn-whatsapp-available, .btn-whatsapp-send {
     background: #15803d !important;
     border: 1px solid #22c55e !important;
     color: #ffffff !important;

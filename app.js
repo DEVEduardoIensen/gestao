@@ -596,16 +596,17 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
+        const activeCache = 'eldorado-pwa-v2.8.0';
         await Promise.all(
           cacheNames.map(name => {
-            if (name !== 'eldorado-pwa-v2.6.0') {
+            if (name !== activeCache) {
               return caches.delete(name);
             }
           })
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.6.0)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.8.0 PRO)!', 'success');
     } else {
       window.location.reload();
     }
@@ -2200,6 +2201,152 @@ function doCopyExportWhatsApp() {
     showToast("Texto copiado!", "success");
   });
 }
+
+/* ==========================================================================
+   WhatsApp Cotas Livres / Disponíveis Exporter
+   ========================================================================== */
+let currentAvailableExportFormat = 'full';
+
+function getAvailableRaffleNumbers(raffle) {
+  if (!raffle || !Array.isArray(raffle.numbers)) return [];
+  // Cotas que NÃO estão reservadas nem pagas
+  return raffle.numbers.filter(item => item.status !== "paid" && item.status !== "reserved");
+}
+
+function generateAvailableWhatsAppText(raffle, format = 'full') {
+  if (!raffle) return "Nenhuma ação selecionada.";
+  
+  const availableItems = getAvailableRaffleNumbers(raffle);
+  const totalNumbers = raffle.totalNumbers || (raffle.numbers ? raffle.numbers.length : 0);
+  const availCount = availableItems.length;
+
+  if (availCount === 0) {
+    return `*NÚMEROS LIVRES:*\nNenhum número livre no momento.`;
+  }
+
+  // Padronização com zeros à esquerda (ex: 01, 07, 09...)
+  const padLength = totalNumbers >= 100 ? 3 : 2;
+  const formatNum = (n) => String(n).padStart(padLength, '0');
+  const numsFormatted = availableItems.map(item => formatNum(item.num)).join(', ');
+
+  if (format === 'compact') {
+    // Apenas a lista de números disponíveis sem cabeçalho
+    return numsFormatted;
+  }
+
+  if (format === 'lines') {
+    // Estilo linha por linha
+    let output = `*NÚMEROS LIVRES:*\n`;
+    availableItems.forEach(item => {
+      output += `${formatNum(item.num)} -\n`;
+    });
+    return output;
+  }
+
+  // Padrão solicitado: SOMENTE *NÚMEROS LIVRES:* e os números
+  return `*NÚMEROS LIVRES:*\n${numsFormatted}`;
+}
+
+function openExportAvailableWhatsAppModal(format) {
+  const raffle = getActiveRaffle();
+  if (!raffle) {
+    showToast("Selecione uma ação ativa primeiro.", "warning");
+    return;
+  }
+
+  if (format) {
+    currentAvailableExportFormat = format;
+  }
+
+  const availableItems = getAvailableRaffleNumbers(raffle);
+  const badge = document.getElementById("badgeAvailableModalCount");
+  if (badge) {
+    badge.textContent = `${availableItems.length} livres`;
+  }
+
+  // Sincroniza pills de formato e atualiza texto
+  switchAvailableExportFormat(currentAvailableExportFormat);
+  openModal("modalExportAvailableWhatsApp");
+
+  // Auto-cópia para a área de transferência com toast de confirmação
+  const textarea = document.getElementById("textareaAvailableExport");
+  if (textarea && textarea.value) {
+    textarea.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textarea.value).then(() => {
+        showToast("Cotas livres copiadas!", "success");
+      }).catch(() => {});
+    }
+  }
+}
+
+function switchAvailableExportFormat(format) {
+  currentAvailableExportFormat = format;
+
+  const pills = {
+    full: document.getElementById("btnFormatFull"),
+    compact: document.getElementById("btnFormatCompact"),
+    lines: document.getElementById("btnFormatLines")
+  };
+  Object.keys(pills).forEach(key => {
+    if (pills[key]) {
+      if (key === format) pills[key].classList.add("active");
+      else pills[key].classList.remove("active");
+    }
+  });
+
+  const raffle = getActiveRaffle();
+  const textarea = document.getElementById("textareaAvailableExport");
+  if (textarea && raffle) {
+    textarea.value = generateAvailableWhatsAppText(raffle, currentAvailableExportFormat);
+  }
+}
+
+function doCopyAvailableWhatsApp() {
+  const textarea = document.getElementById("textareaAvailableExport");
+  if (!textarea) return;
+
+  const text = textarea.value;
+  if (!text) {
+    showToast("Nenhum texto disponível para cópia.", "warning");
+    return;
+  }
+
+  textarea.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("Cotas livres copiadas para o WhatsApp!", "success");
+    }).catch(() => {
+      document.execCommand("copy");
+      showToast("Cotas livres copiadas!", "success");
+    });
+  } else {
+    document.execCommand("copy");
+    showToast("Cotas livres copiadas!", "success");
+  }
+}
+
+function doSendAvailableWhatsApp() {
+  const textarea = document.getElementById("textareaAvailableExport");
+  if (!textarea) return;
+
+  const text = textarea.value;
+  if (!text) {
+    showToast("Nenhum texto para enviar.", "warning");
+    return;
+  }
+
+  const encoded = encodeURIComponent(text);
+  const url = `https://api.whatsapp.com/send?text=${encoded}`;
+  window.open(url, "_blank");
+}
+
+window.getAvailableRaffleNumbers = getAvailableRaffleNumbers;
+window.generateAvailableWhatsAppText = generateAvailableWhatsAppText;
+window.openExportAvailableWhatsAppModal = openExportAvailableWhatsAppModal;
+window.switchAvailableExportFormat = switchAvailableExportFormat;
+window.doCopyAvailableWhatsApp = doCopyAvailableWhatsApp;
+window.doSendAvailableWhatsApp = doSendAvailableWhatsApp;
 
 /* ==========================================================================
    TAB 2: VALES-COMPRAS & PRÊMIOS PENDENTES
@@ -5907,6 +6054,16 @@ function setupEventListeners() {
   // WhatsApp Modals
   document.getElementById("btnProcessImportWhatsApp").addEventListener("click", processWhatsAppImport);
   document.getElementById("btnDoCopyExportWhatsApp").addEventListener("click", doCopyExportWhatsApp);
+  
+  // WhatsApp Available Numbers Listeners
+  const btnExportAvail = document.getElementById("btnExportAvailableWhatsApp");
+  if (btnExportAvail) btnExportAvail.addEventListener("click", () => openExportAvailableWhatsAppModal());
+  const btnSideAvail = document.getElementById("btnSideExportAvailable");
+  if (btnSideAvail) btnSideAvail.addEventListener("click", () => openExportAvailableWhatsAppModal());
+  const btnDoCopyAvail = document.getElementById("btnDoCopyAvailableWhatsApp");
+  if (btnDoCopyAvail) btnDoCopyAvail.addEventListener("click", doCopyAvailableWhatsApp);
+  const btnDoSendAvail = document.getElementById("btnDoSendAvailableWhatsApp");
+  if (btnDoSendAvail) btnDoSendAvail.addEventListener("click", doSendAvailableWhatsApp);
 
   // Vales & Prêmios
   document.getElementById("inputSearchVales").addEventListener("input", renderValesView);
