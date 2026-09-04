@@ -113,7 +113,7 @@ if (!gotTheLock) {
       backgroundColor: '#060a13',
       title: 'Eldorado Pesca & Lake - Sistema de Gestão',
       icon: iconPath,
-      show: false,
+      show: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -197,8 +197,8 @@ if (!gotTheLock) {
   // Foca e restaura caso o usuário tente abrir um segundo atalho na Área de Trabalho
   app.on('second-instance', () => {
     if (mainWindow) {
-      mainWindow.show();
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
       // Recarrega automaticamente para obter a versão e os dados mais recentes
       if (mainWindow.webContents) {

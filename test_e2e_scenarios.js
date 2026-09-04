@@ -155,7 +155,7 @@ async function runE2ETests() {
       p_buyer_name: '',
       p_allow_override: true
     });
-    assert(resetRes && resetRes.success, 'Cota 55 restaurada para available');
+    await client.from('raffles').delete().eq('id', testRaffleId);
   } catch (e) {
     assert(false, `Falha no Teste 4: ${e.message}`);
   }

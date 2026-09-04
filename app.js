@@ -40,21 +40,32 @@ let activeTab = "tab-rifas";
 // Helper: Seleciona sempre a ação de maior numeração (cota mais recente/atual)
 function getHighestRaffle(raffles) {
   if (!Array.isArray(raffles) || raffles.length === 0) return null;
+  // Filtra ações de teste
+  const validRaffles = raffles.filter(r => {
+    if (!r) return false;
+    const title = (r.title || '').toLowerCase();
+    const id = (r.id || '').toLowerCase();
+    return !title.includes('teste') && !id.includes('test');
+  });
+  const pool = validRaffles.length > 0 ? validRaffles : raffles;
+
   let highest = null;
   let maxNum = -1;
-  raffles.forEach(r => {
+  pool.forEach(r => {
     let num = -1;
-    const raw = `${r.number || ''} ${r.title || ''} ${r.id || ''}`;
-    const match = raw.match(/(\d+)/);
-    if (match) {
-      num = parseInt(match[1], 10);
+    const titleMatch = (r.title || '').match(/(\d+)\s*°?/);
+    const numMatch = (String(r.number || '')).match(/(\d+)/);
+    if (titleMatch) {
+      num = parseInt(titleMatch[1], 10);
+    } else if (numMatch) {
+      num = parseInt(numMatch[1], 10);
     }
     if (num > maxNum) {
       maxNum = num;
       highest = r;
     }
   });
-  return highest || raffles[0];
+  return highest || pool[0];
 }
 let currentValesFilter = "all";
 let currentFishingFilter = "all";
@@ -76,6 +87,13 @@ function sanitizeAppData(data) {
   if (!Array.isArray(data.raffles)) {
     data.raffles = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.raffles)) ? INITIAL_SAMPLE_DATA.raffles : [];
   } else {
+    // Filtra e descarta rifas de teste da fila e do cache local
+    data.raffles = data.raffles.filter(r => {
+      if (!r) return false;
+      const id = (r.id || '').toLowerCase();
+      const title = (r.title || '').toLowerCase();
+      return !id.includes('test') && !title.includes('teste');
+    });
     data.raffles.forEach(r => {
       if (r && r.title) {
         r.title = r.title.replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, '').trim();
@@ -858,6 +876,8 @@ window.openAccessHub = openAccessHub;
 function proceedToDashboard() {
   const postHub = document.getElementById('postLoginHubScreen');
   if (postHub) postHub.style.display = 'none';
+  const gateScreen = document.getElementById('authGateScreen');
+  if (gateScreen) gateScreen.style.display = 'none';
   document.documentElement.classList.remove('show-auth-gate');
   sessionStorage.setItem('ELDORADO_POST_LOGIN_DONE', 'true');
 }
