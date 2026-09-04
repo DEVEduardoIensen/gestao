@@ -1,10 +1,10 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.7.0 — Cache do App Shell + W3C Background Sync API
+ * Versão 2.7.1 — Cache do App Shell + W3C Background Sync API
  * Sincronização automática em segundo plano ao ligar o Wi-Fi sem precisar abrir o app.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.7.0';
+const CACHE_NAME = 'eldorado-pwa-v2.7.1';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
@@ -136,7 +136,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ==========================================================================
-// W3C Background Sync API & Periodic Sync (Disparo Automático ao Ligar Wi-Fi)
+// W3C Background Sync API, Periodic Sync & Evento Online
 // ==========================================================================
 
 self.addEventListener('sync', (event) => {
@@ -151,6 +151,11 @@ self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'eldorado-periodic-sync') {
     event.waitUntil(processBackgroundOutboxSync());
   }
+});
+
+self.addEventListener('online', () => {
+  console.log('[Service Worker] Evento online detectado no Service Worker');
+  processBackgroundOutboxSync().catch(() => {});
 });
 
 /**
@@ -172,7 +177,7 @@ async function processBackgroundOutboxSync() {
 
     for (const op of pendingOps) {
       try {
-        const success = await dispatchOpToSupabase(op);
+        const success = await dispatchOpToSupabase(op, db);
         if (success) {
           await removeOpFromDB(db, op.id);
           processedCount++;
@@ -240,10 +245,59 @@ function removeOpFromDB(db, opId) {
   });
 }
 
-async function dispatchOpToSupabase(op) {
+function getAuthTokenFromDB(db, op) {
+  if (op && op.authToken) return Promise.resolve(op.authToken);
+  return new Promise((resolve) => {
+    try {
+      if (!db || !db.objectStoreNames.contains('settings')) return resolve(null);
+      const tx = db.transaction('settings', 'readonly');
+      const store = tx.objectStore('settings');
+      const orgId = op.orgId || '00000000-0000-0000-0000-000000000001';
+      const req = store.get([orgId, '_auth_session']);
+      req.onsuccess = () => {
+        const item = req.result;
+        resolve(item?.access_token || null);
+      };
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function refreshSupabaseTokenInSW(refreshToken) {
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.access_token || null;
+    }
+  } catch (e) {
+    console.warn('[Service Worker] Falha ao renovar token:', e);
+  }
+  return null;
+}
+
+async function dispatchOpToSupabase(op, db) {
+  let token = op.authToken;
+  if (!token && db) {
+    token = await getAuthTokenFromDB(db, op);
+  }
+  if (!token) {
+    token = SUPABASE_KEY;
+  }
+
   const headers = {
     'apikey': SUPABASE_KEY,
-    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
   };
 
@@ -252,9 +306,9 @@ async function dispatchOpToSupabase(op) {
   switch (op.type) {
     case 'SELL_NUMBERS': {
       const { raffleId, numbers, status, buyerName, reservedAt, paidAt, allowOverride } = op.payload;
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sell_raffle_numbers_atomic`, {
+      const makeRpcRequest = (authHeader) => fetch(`${SUPABASE_URL}/rest/v1/rpc/sell_raffle_numbers_atomic`, {
         method: 'POST',
-        headers,
+        headers: { ...headers, 'Authorization': authHeader },
         body: JSON.stringify({
           p_org_id: orgId,
           p_raffle_id: raffleId,
@@ -266,7 +320,23 @@ async function dispatchOpToSupabase(op) {
           p_allow_override: allowOverride !== undefined ? !!allowOverride : true
         })
       });
-      return res.ok;
+
+      let res = await makeRpcRequest(headers['Authorization']);
+      if (res.status === 401 && op.refreshToken) {
+        const refreshed = await refreshSupabaseTokenInSW(op.refreshToken);
+        if (refreshed) {
+          headers['Authorization'] = `Bearer ${refreshed}`;
+          res = await makeRpcRequest(headers['Authorization']);
+        }
+      }
+
+      if (!res.ok) return false;
+      const json = await res.json().catch(() => null);
+      if (json && json.success === false) {
+        console.warn('[Service Worker] RPC sell_raffle_numbers_atomic retornou conflito/erro:', json);
+        return false;
+      }
+      return true;
     }
 
     case 'BATCH_SET_NUMBERS': {

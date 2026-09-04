@@ -33,8 +33,29 @@ let appData = {
 };
 
 // UI State
-let activeRaffleId = "rifa-107";
+let activeRaffleId = null;
+let userSelectedRaffleExplicitly = false;
 let activeTab = "tab-rifas";
+
+// Helper: Seleciona sempre a ação de maior numeração (cota mais recente/atual)
+function getHighestRaffle(raffles) {
+  if (!Array.isArray(raffles) || raffles.length === 0) return null;
+  let highest = null;
+  let maxNum = -1;
+  raffles.forEach(r => {
+    let num = -1;
+    const raw = `${r.number || ''} ${r.title || ''} ${r.id || ''}`;
+    const match = raw.match(/(\d+)/);
+    if (match) {
+      num = parseInt(match[1], 10);
+    }
+    if (num > maxNum) {
+      maxNum = num;
+      highest = r;
+    }
+  });
+  return highest || raffles[0];
+}
 let currentValesFilter = "all";
 let currentFishingFilter = "all";
 let currentRanchoFilter = "all";
@@ -201,12 +222,17 @@ async function initAppState() {
     });
   }
 
-  // Define rifa ativa imediatamente para renderização rápida se ainda não estiver definida
+  // Define rifa ativa imediatamente para renderização rápida (sempre a ação mais alta se não escolhida manualmente)
   if (appData.raffles && appData.raffles.length > 0) {
-    const stillExists = activeRaffleId && appData.raffles.some(r => String(r.id) === String(activeRaffleId));
-    if (!stillExists) {
-      const active = appData.raffles.find(r => r.status === 'active') || appData.raffles[0];
-      activeRaffleId = active.id;
+    if (!userSelectedRaffleExplicitly) {
+      const highest = getHighestRaffle(appData.raffles);
+      activeRaffleId = highest ? highest.id : appData.raffles[0].id;
+    } else {
+      const stillExists = activeRaffleId && appData.raffles.some(r => String(r.id) === String(activeRaffleId));
+      if (!stillExists) {
+        const highest = getHighestRaffle(appData.raffles);
+        activeRaffleId = highest ? highest.id : appData.raffles[0].id;
+      }
     }
   } else {
     activeRaffleId = null;
@@ -338,12 +364,17 @@ window.mergeRemoteData = async function(remoteData) {
       }
     }
 
-    // Preserva seleção de rifa ativa se ainda existir
+    // Define rifa ativa (prioriza a ação mais alta se não escolhida manualmente ou se a atual não existir mais)
     if (sanitized.raffles && sanitized.raffles.length > 0) {
-      const stillExists = activeRaffleId && sanitized.raffles.some(r => String(r.id) === String(activeRaffleId));
-      if (!stillExists) {
-        const active = sanitized.raffles.find(r => r.status === 'active') || sanitized.raffles[0];
-        activeRaffleId = active.id;
+      if (!userSelectedRaffleExplicitly) {
+        const highest = getHighestRaffle(sanitized.raffles);
+        activeRaffleId = highest ? highest.id : sanitized.raffles[0].id;
+      } else {
+        const stillExists = activeRaffleId && sanitized.raffles.some(r => String(r.id) === String(activeRaffleId));
+        if (!stillExists) {
+          const highest = getHighestRaffle(sanitized.raffles);
+          activeRaffleId = highest ? highest.id : sanitized.raffles[0].id;
+        }
       }
     }
 
@@ -1135,13 +1166,21 @@ async function resolveConflictFromUI(opId, action) {
 
 function getActiveRaffle() {
   if (!appData.raffles || appData.raffles.length === 0) return null;
-  const found = appData.raffles.find(r => String(r.id) === String(activeRaffleId));
-  if (found) return found;
+  if (activeRaffleId) {
+    const found = appData.raffles.find(r => String(r.id) === String(activeRaffleId));
+    if (found) return found;
+  }
+  const highest = getHighestRaffle(appData.raffles);
+  if (highest) {
+    activeRaffleId = highest.id;
+    return highest;
+  }
   return appData.raffles[0];
 }
 
 function onSelectActiveRaffle(raffleId) {
   if (!raffleId) return;
+  userSelectedRaffleExplicitly = true;
   activeRaffleId = String(raffleId);
   renderRaffleView();
   updateGlobalStats();
@@ -1450,7 +1489,7 @@ function renderRaffleNumbersGrid() {
     if (item.status === "paid") {
       statusTag = `<span class="num-status-tag" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {
-      statusTag = `<span class="num-status-tag" style="color: var(--primary-gold);">Reservado</span>`;
+      statusTag = `<span class="num-status-tag tag-reserved" style="color: var(--primary-gold);"><span class="status-text-full">Reservado</span><span class="status-text-short">Res.</span></span>`;
     }
 
     if (wonPrize) {

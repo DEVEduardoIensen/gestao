@@ -1,6 +1,6 @@
 {
   "name": "eldorado-pesca-manager",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "main": "main.js",
   "description": "Sistema de Gestao Eldorado Pesca e Eldorado Lake (Web PWA + Supabase)",
   "scripts": {

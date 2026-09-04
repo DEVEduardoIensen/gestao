@@ -45,18 +45,39 @@ class AuthManager {
 
         if (this.user) {
           await this.loadUserOrganizations();
+          if (window.localDB && session) {
+            window.localDB.saveAuthSession(session, this.getOrganizationId());
+          }
         } else if (event === 'SIGNED_OUT') {
           this.currentOrg = null;
           this.organizations = [];
           localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
           localStorage.removeItem('ELDORADO_CACHED_ORGS');
+          if (window.localDB) {
+            window.localDB.saveAuthSession(null, this.getDefaultOrgId());
+          }
         } else {
           // Não limpa cache em caso de desconexão ou inicialização offline
           this.restoreCachedOrganizations();
         }
 
+        if (window.localDB && session) {
+          window.localDB.saveAuthSession(session, this.getOrganizationId());
+        }
+
         this.notifyListeners(event, session);
       });
+
+      // Tenta carregar e sincronizar a sessão existente com o IndexedDB
+      this.client.auth.getSession().then(({ data }) => {
+        if (data && data.session) {
+          this.session = data.session;
+          this.user = data.session.user;
+          if (window.localDB) {
+            window.localDB.saveAuthSession(data.session, this.getOrganizationId());
+          }
+        }
+      }).catch(() => {});
     }
   }
 

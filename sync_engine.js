@@ -92,16 +92,19 @@ class SyncEngine {
       });
     }
 
-    // Auto-recuperação e processamento periódico a cada 10 segundos
+    // Auto-recuperação e processamento periódico a cada 5 segundos
     this.syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isOnline) {
         this.isOnline = true;
         this.initRealtimeSubscription();
       }
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        this.isOnline = true;
+      }
       if (this.isOnline && !this.isSyncing) {
         this.processQueue();
       }
-    }, 10000);
+    }, 5000);
 
     // Inicializa Realtime imediatamente se online
     if (this.isOnline) {

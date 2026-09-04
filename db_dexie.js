@@ -170,6 +170,32 @@ class LocalDatabase {
     });
   }
 
+  // --- PERSISTÊNCIA DE SESSÃO AUTH PARA O SERVICE WORKER ---
+  async saveAuthSession(session, orgId) {
+    if (!session || !orgId) return;
+    try {
+      await this.put('settings', {
+        organization_id: orgId,
+        key: '_auth_session',
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: session.expires_at,
+        user_id: session.user?.id || null,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      console.warn('[LocalDB] Falha ao salvar auth_session no IndexedDB:', e);
+    }
+  }
+
+  async getAuthSession(orgId) {
+    try {
+      return await this.get('settings', [orgId, '_auth_session']);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // --- FILA DE SINCRONIZAÇÃO OUTBOX ---
   async enqueueOperation(op) {
     const orgId = op.orgId || (window.authManager ? window.authManager.getOrganizationId() : null);
@@ -177,9 +203,27 @@ class LocalDatabase {
       throw new Error('[LocalDB] Impossível enfileirar operação sem organization_id válido.');
     }
 
+    // Captura token de autenticação e refresh token do usuário para autorizar o Service Worker
+    let authToken = op.authToken || null;
+    let refreshToken = op.refreshToken || null;
+    try {
+      if (!authToken && window.authManager && window.authManager.session) {
+        authToken = window.authManager.session.access_token;
+        refreshToken = window.authManager.session.refresh_token;
+      } else if (!authToken && window.supabaseClient && window.supabaseClient.auth) {
+        const sess = (await window.supabaseClient.auth.getSession()).data?.session;
+        if (sess) {
+          authToken = sess.access_token;
+          refreshToken = sess.refresh_token;
+        }
+      }
+    } catch (e) {}
+
     const operation = {
       id: op.id || ('op-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6)),
       orgId: orgId,
+      authToken: authToken,
+      refreshToken: refreshToken,
       type: op.type,
       tableName: op.tableName,
       recordId: op.recordId,
@@ -191,6 +235,11 @@ class LocalDatabase {
     };
 
     await this.put('sync_queue', operation);
+
+    // Salva também snapshot de sessão atualizada no store de settings para o Service Worker
+    if (authToken && orgId) {
+      this.saveAuthSession({ access_token: authToken, refresh_token: refreshToken }, orgId).catch(() => {});
+    }
 
     // Registra tag de Background Sync no Service Worker (Mobile PWA & Navegador)
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
