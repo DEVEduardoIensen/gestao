@@ -483,6 +483,12 @@ function initSyncAndPwaHandlers() {
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
       console.log('[PWA] Service Worker registrado com sucesso:', reg.scope);
 
+      // Se já houver um worker esperando, força ativação imediata
+      if (reg.waiting) {
+        console.log('[PWA] Worker em espera detectado no app.js. Ativando...');
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
       // Força verificação imediata de atualizações no servidor/Vercel
       reg.update().catch(() => {});
 
@@ -491,7 +497,7 @@ function initSyncAndPwaHandlers() {
         const newWorker = reg.installing;
         if (newWorker) {
           newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            if (newWorker.state === 'installed') {
               console.log('[PWA] Nova versão instalada. Ativando imediatamente...');
               newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
@@ -555,6 +561,48 @@ function initSyncAndPwaHandlers() {
     window.addEventListener('pagehide', armBackgroundSyncOnExit);
     window.addEventListener('freeze', armBackgroundSyncOnExit);
   }
+
+  // Ação global do botão "Verificar e Atualizar Agora" na aba Administração
+  window.forceCheckAppUpdate = async function() {
+    const btn = document.getElementById('btnForceCheckUpdate');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Verificando no servidor...';
+    }
+
+    // Se for Electron Desktop
+    if (window.__ELDORADO_IS_ELECTRON || window.__ELDORADO_IS_DESKTOP_APP) {
+      if (window.electronAPI && typeof window.electronAPI.reloadApp === 'function') {
+        window.electronAPI.reloadApp();
+        return;
+      }
+      window.location.reload();
+      return;
+    }
+
+    // Se for PWA / Web
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+          if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          await reg.update();
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          for (const k of keys) {
+            await caches.delete(k);
+          }
+        }
+      }
+      window.location.reload();
+    } catch (e) {
+      console.warn('[PWA] Erro ao forçar atualização:', e);
+      window.location.reload();
+    }
+  };
 
   // Escuta mudanças de status no SyncEngine
   if (window.syncEngine) {

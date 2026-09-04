@@ -68,12 +68,16 @@
     // PWA Auto-Update Imediato (Bypass de Cache HTTP em Mobile / Android Chrome)
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function(reg) {
+        if (reg.waiting) {
+          console.log('[PWA] Service Worker em espera detectado. Ativando...');
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
         reg.update().catch(function() {});
         reg.addEventListener('updatefound', function() {
           var newWorker = reg.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', function() {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              if (newWorker.state === 'installed') {
                 console.log('[PWA] Nova versão instalada. Ativando imediatamente...');
                 newWorker.postMessage({ type: 'SKIP_WAITING' });
               }

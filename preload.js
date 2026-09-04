@@ -16,6 +16,9 @@ try {
     },
     notifySyncStatus: (status) => {
       ipcRenderer.send('update-sync-status', status);
+    },
+    reloadApp: () => {
+      ipcRenderer.send('reload-app');
     }
   });
 } catch (e) {

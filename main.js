@@ -194,6 +194,13 @@ if (!gotTheLock) {
     }
   });
 
+  // Listener para recarregar o aplicativo
+  ipcMain.on('reload-app', () => {
+    if (mainWindow) {
+      mainWindow.webContents.reload();
+    }
+  });
+
   // Foca e restaura caso o usuário tente abrir um segundo atalho na Área de Trabalho
   app.on('second-instance', () => {
     if (mainWindow) {
