@@ -3,11 +3,13 @@
  * Normalização centralizada e consistente para Web, Service Worker, Node e IndexedDB.
  */
 
-function normalizeRaffle(r) {
+function normalizeRaffle(r, isPartial = false) {
   if (!r || typeof r !== 'object') return null;
 
-  const rawPrizes = Array.isArray(r.prizes) ? r.prizes : [];
-  const rawNumbers = Array.isArray(r.numbers) ? r.numbers : [];
+  const hasExplicitPrizes = Array.isArray(r.prizes);
+  const rawPrizes = hasExplicitPrizes ? r.prizes : [];
+  const hasExplicitNumbers = Array.isArray(r.numbers);
+  const rawNumbers = hasExplicitNumbers ? r.numbers : [];
 
   const total = parseInt(r.totalNumbers ?? r.total_numbers, 10) || (rawNumbers.length > 0 ? rawNumbers.length : 60);
 
@@ -53,28 +55,37 @@ function normalizeRaffle(r) {
   }
 
   const rawPrice = r.pricePerNumber ?? r.price_per_number;
-  const price = typeof rawPrice === 'number' ? rawPrice : (parseFloat(rawPrice) || 0);
+  const price = (rawPrice !== undefined && rawPrice !== null)
+    ? (typeof rawPrice === 'number' ? rawPrice : (parseFloat(rawPrice) || 0))
+    : undefined;
 
-  return {
+  const result = {
     id: String(r.id),
     organization_id: r.organization_id || r.orgId || undefined,
-    number: String(r.number || '').trim(),
-    title: String(r.title || '').replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, '').trim(),
-    subtitle: String(r.subtitle || 'AÇÃO RÁPIDA').trim(),
+    number: r.number !== undefined ? String(r.number || '').trim() : undefined,
+    title: r.title !== undefined ? String(r.title || '').replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, '').trim() : undefined,
+    subtitle: r.subtitle !== undefined ? String(r.subtitle || 'AÇÃO RÁPIDA').trim() : undefined,
     pricePerNumber: price,
     totalNumbers: total,
     reservationTimeoutHours: parseInt(r.reservationTimeoutHours ?? r.reservation_timeout_hours, 10) || 24,
-    pixKey: String(r.pixKey ?? r.pix_key ?? '').trim(),
-    pixOwner: String(r.pixOwner ?? r.pix_owner ?? '').trim(),
-    shippingNote: String(r.shippingNote ?? r.shipping_note ?? '').trim(),
-    liveDrawNote: String(r.liveDrawNote ?? r.live_draw_note ?? '').trim(),
-    privateContact: String(r.privateContact ?? r.private_contact ?? '').trim(),
-    rules: String(r.rules || '').trim(),
+    pixKey: r.pixKey !== undefined ? String(r.pixKey ?? r.pix_key ?? '').trim() : undefined,
+    pixOwner: r.pixOwner !== undefined ? String(r.pixOwner ?? r.pix_owner ?? '').trim() : undefined,
+    shippingNote: r.shippingNote !== undefined ? String(r.shippingNote ?? r.shipping_note ?? '').trim() : undefined,
+    liveDrawNote: r.liveDrawNote !== undefined ? String(r.liveDrawNote ?? r.live_draw_note ?? '').trim() : undefined,
+    privateContact: r.privateContact !== undefined ? String(r.privateContact ?? r.private_contact ?? '').trim() : undefined,
+    rules: r.rules !== undefined ? String(r.rules || '').trim() : undefined,
     status: r.status || 'active',
-    createdAt: r.createdAt ?? r.created_at ?? new Date().toISOString(),
-    prizes: normalizedPrizes,
-    numbers: normalizedNumbers
+    createdAt: r.createdAt ?? r.created_at ?? new Date().toISOString()
   };
+
+  if (hasExplicitPrizes || !isPartial) {
+    result.prizes = normalizedPrizes;
+  }
+  if (hasExplicitNumbers || !isPartial) {
+    result.numbers = normalizedNumbers;
+  }
+
+  return result;
 }
 
 if (typeof module !== 'undefined' && module.exports) {

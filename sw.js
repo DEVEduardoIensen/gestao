@@ -1,6 +1,6 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.8.5 — Cache do App Shell + W3C Background Sync API
+ * Versão 2.8.6 — Cache do App Shell + W3C Background Sync API
  * Sincronização autônoma em segundo plano via Wi-Fi/dados móveis com blindagem de autenticação,
  * sincronização completa de raffle_prizes, cotas e resolução de conflitos.
  */
@@ -11,7 +11,7 @@ try {
   console.warn('[Service Worker] normalize_raffle.js carregado inline/fallback');
 }
 
-const CACHE_NAME = 'eldorado-pwa-v2.8.5';
+const CACHE_NAME = 'eldorado-pwa-v2.8.6';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
@@ -131,8 +131,9 @@ self.addEventListener('fetch', (event) => {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
         }
-        return networkResponse;
-      }).catch(() => {});
+      }).catch((err) => {
+        return cachedResponse;
+      });
 
       return cachedResponse || fetchPromise;
     })
@@ -145,26 +146,28 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('sync', (event) => {
   console.log('[Service Worker] Evento sync recebido do SO:', event.tag);
-  if (!event.tag || event.tag === 'eldorado-outbox-sync' || event.tag === 'sync-outbox' || event.tag.includes('outbox') || event.tag.includes('sync')) {
-    event.waitUntil(processBackgroundOutboxSync());
+  if (!event.tag || event.tag === 'eldorado-outbox-sync' || event.tag === 'sync-outbox' || event.tag === 'sync' || event.tag.includes('outbox') || event.tag.includes('sync')) {
+    event.waitUntil(processBackgroundOutboxSync(true));
   }
 });
 
 self.addEventListener('periodicsync', (event) => {
   console.log('[Service Worker] Evento periodicSync recebido do SO:', event.tag);
-  event.waitUntil(processBackgroundOutboxSync());
+  event.waitUntil(processBackgroundOutboxSync(true));
 });
 
 self.addEventListener('online', () => {
   console.log('[Service Worker] Evento online detectado no Service Worker');
-  processBackgroundOutboxSync().catch(() => {});
+  processBackgroundOutboxSync(false).catch((err) => {
+    console.warn('[Service Worker] Falha ao processar outbox no evento online:', err);
+  });
 });
 
 /**
  * Abre o IndexedDB local e despacha a fila Outbox para o Supabase
  */
-async function processBackgroundOutboxSync() {
-  console.log('[Service Worker] Executando sincronização de segundo plano via Wi-Fi...');
+async function processBackgroundOutboxSync(isExplicitSyncEvent = true) {
+  console.log(`[Service Worker] Executando sincronização de segundo plano (isExplicitSyncEvent=${isExplicitSyncEvent})...`);
   try {
     const db = await openLocalIndexedDB();
     const pendingOps = await getPendingOpsFromDB(db);
@@ -183,8 +186,9 @@ async function processBackgroundOutboxSync() {
         continue;
       }
 
-      // Backoff exponencial para retentativas de falha
-      if (op.retryCount > 0 && op.lastAttempt) {
+      // Backoff exponencial para retentativas de falha SOMENTE em chamadas periódicas/espontâneas
+      // No evento de sync explícito do SO, executamos imediatamente pois o SO acabou de detectar conectividade
+      if (!isExplicitSyncEvent && op.retryCount > 0 && op.lastAttempt) {
         const delay = Math.min(1000 * Math.pow(2, Math.min(op.retryCount, 6)), 60000);
         if (Date.now() - op.lastAttempt < delay) {
           continue;
@@ -222,9 +226,20 @@ async function processBackgroundOutboxSync() {
       }
     }
 
-    // Se houve falha de rede sem processar nenhum item, lança erro para o SO reagendar o sync
-    if (hadNetworkError && processedCount === 0) {
-      throw new Error('[Service Worker] Falha transitória de rede durante o background sync.');
+    // Se ainda restam operações pendentes ou que falharam por rede, solicita novo ciclo ao SO
+    const remainingOps = await getPendingOpsFromDB(db).catch(() => []);
+    if (remainingOps && remainingOps.length > 0) {
+      console.log(`[Service Worker] Fila ainda contém ${remainingOps.length} operações não sincronizadas. Solicitando novo agendamento ao SO.`);
+      if (self.registration && self.registration.sync) {
+        try {
+          await self.registration.sync.register('eldorado-outbox-sync');
+        } catch (rErr) {
+          console.warn('[Service Worker] Falha ao re-registrar eldorado-outbox-sync:', rErr);
+        }
+      }
+      if (hadNetworkError && processedCount === 0) {
+        throw new Error(`[Service Worker] Falha transitória de rede durante o background sync (${remainingOps.length} pendentes).`);
+      }
     }
   } catch (e) {
     console.error('[Service Worker] Falha no processBackgroundOutboxSync:', e);
@@ -235,7 +250,7 @@ async function processBackgroundOutboxSync() {
 function openLocalIndexedDB() {
   return new Promise((resolve, reject) => {
     try {
-      const req = indexedDB.open('EldoradoPesca_v2', 3);
+      const req = indexedDB.open('EldoradoPesca_v2');
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error || new Error('Falha ao abrir IndexedDB no Service Worker'));
       req.onblocked = () => reject(new Error('IndexedDB bloqueado no Service Worker'));
@@ -281,8 +296,17 @@ function updateOpStatusInDB(db, opId, status, error = null) {
         const op = req.result;
         if (op) {
           op.status = status;
-          if (error !== undefined) op.error = error;
-          if (status === 'syncing') op.retryCount = (op.retryCount || 0) + 1;
+          if (error !== undefined && error !== null) {
+            op.error = error;
+            op.lastError = error;
+          }
+          if (status === 'failed' || status === 'retrying') {
+            op.retryCount = (op.retryCount || 0) + 1;
+            op.lastAttempt = Date.now();
+          }
+          if (status === 'syncing') {
+            op.lastAttempt = Date.now();
+          }
           store.put(op);
         }
         resolve(true);
@@ -310,6 +334,49 @@ function removeOpFromDB(db, opId) {
 
 function isValidJwt(token) {
   return typeof token === 'string' && token.trim().split('.').length === 3;
+}
+
+function isJwtExpired(token) {
+  if (!isValidJwt(token)) return true;
+  try {
+    const parts = token.trim().split('.');
+    if (parts.length !== 3) return true;
+    let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4 !== 0) b64 += '=';
+    const jsonStr = atob(b64);
+    const payload = JSON.parse(jsonStr);
+    if (!payload.exp) return false;
+    // Considera expirado se faltar menos de 60 segundos para vencer
+    return (payload.exp * 1000) <= (Date.now() + 60000);
+  } catch (e) {
+    return true;
+  }
+}
+
+async function updateTokensInPendingOps(db, orgId, accessToken, refreshToken) {
+  if (!db || !orgId || !accessToken) return;
+  return new Promise((resolve) => {
+    try {
+      if (!db.objectStoreNames.contains('sync_queue')) return resolve(false);
+      const tx = db.transaction('sync_queue', 'readwrite');
+      const store = tx.objectStore('sync_queue');
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const ops = req.result || [];
+        ops.forEach(op => {
+          if (op.orgId === orgId && (op.status === 'pending' || op.status === 'failed' || op.status === 'syncing')) {
+            op.authToken = accessToken;
+            if (refreshToken) op.refreshToken = refreshToken;
+            store.put(op);
+          }
+        });
+        resolve(true);
+      };
+      req.onerror = () => resolve(false);
+    } catch (e) {
+      resolve(false);
+    }
+  });
 }
 
 async function getAuthSessionFromDB(db, orgId) {
@@ -394,16 +461,19 @@ async function swSupabaseFetch(url, options = {}, op = null, db = null) {
   let token = (op && isValidJwt(op.authToken)) ? op.authToken.trim() : null;
   let refreshToken = op?.refreshToken || null;
 
-  if (!token && db) {
+  if ((!token || isJwtExpired(token)) && db) {
     const sessionObj = await getAuthSessionFromDB(db, orgId);
-    if (sessionObj && isValidJwt(sessionObj.access_token)) {
+    if (sessionObj && isValidJwt(sessionObj.access_token) && !isJwtExpired(sessionObj.access_token)) {
       token = sessionObj.access_token.trim();
+      refreshToken = refreshToken || sessionObj.refresh_token;
+    } else if (sessionObj?.refresh_token) {
       refreshToken = refreshToken || sessionObj.refresh_token;
     }
   }
 
-  // Se não possuir JWT mas tiver refreshToken, tenta renovação prévia
-  if (!token && refreshToken) {
+  // Se o token estiver expirado ou ausente, mas tivermos refresh_token, renova imediatamente antes da chamada
+  if ((!token || isJwtExpired(token)) && refreshToken) {
+    console.log('[Service Worker] JWT expirado ou ausente. Renovando token proativamente antes do fetch...');
     const refreshData = await refreshSupabaseTokenInSW(refreshToken);
     if (refreshData && isValidJwt(refreshData.access_token)) {
       token = refreshData.access_token.trim();
@@ -414,6 +484,7 @@ async function swSupabaseFetch(url, options = {}, op = null, db = null) {
       }
       if (db) {
         await persistRefreshedTokensInDB(db, orgId, token, refreshToken, refreshData.expires_at);
+        await updateTokensInPendingOps(db, orgId, token, refreshToken);
       }
     }
   }
@@ -448,6 +519,7 @@ async function swSupabaseFetch(url, options = {}, op = null, db = null) {
       }
       if (db) {
         await persistRefreshedTokensInDB(db, orgId, token, refreshToken, refreshData.expires_at);
+        await updateTokensInPendingOps(db, orgId, token, refreshToken);
       }
       baseHeaders['Authorization'] = `Bearer ${token}`;
       res = await fetch(url, { ...options, headers: baseHeaders });
@@ -529,23 +601,24 @@ async function dispatchOpToSupabase(op, db) {
     case 'CREATE_RAFFLE':
     case 'UPDATE_RAFFLE': {
       const r = (typeof normalizeRaffle === 'function') ? normalizeRaffle(op.payload) : op.payload;
+      const isCreate = (op.type === 'CREATE_RAFFLE');
       const row = {
         id: r.id,
-        organization_id: orgId,
-        number: String(r.number || ''),
-        title: r.title,
-        subtitle: r.subtitle || '',
-        price_per_number: parseFloat(r.pricePerNumber) || 0,
-        total_numbers: parseInt(r.totalNumbers, 10) || 60,
-        reservation_timeout_hours: parseInt(r.reservationTimeoutHours, 10) || 24,
-        pix_key: r.pixKey || '',
-        pix_owner: r.pixOwner || '',
-        shipping_note: r.shippingNote || '',
-        live_draw_note: r.liveDrawNote || '',
-        private_contact: r.privateContact || '',
-        rules: r.rules || '',
-        status: r.status || 'active'
+        organization_id: orgId
       };
+      if (r.number !== undefined || isCreate) row.number = String(r.number || '');
+      if (r.title !== undefined || isCreate) row.title = r.title || 'Ação Eldorado Pesca';
+      if (r.subtitle !== undefined || isCreate) row.subtitle = r.subtitle || '';
+      if (r.pricePerNumber !== undefined || isCreate) row.price_per_number = parseFloat(r.pricePerNumber) || 0;
+      if (r.totalNumbers !== undefined || isCreate) row.total_numbers = parseInt(r.totalNumbers, 10) || 60;
+      if (r.reservationTimeoutHours !== undefined || isCreate) row.reservation_timeout_hours = parseInt(r.reservationTimeoutHours, 10) || 24;
+      if (r.pixKey !== undefined || isCreate) row.pix_key = r.pixKey || '';
+      if (r.pixOwner !== undefined || isCreate) row.pix_owner = r.pixOwner || '';
+      if (r.shippingNote !== undefined || isCreate) row.shipping_note = r.shippingNote || '';
+      if (r.liveDrawNote !== undefined || isCreate) row.live_draw_note = r.liveDrawNote || '';
+      if (r.privateContact !== undefined || isCreate) row.private_contact = r.privateContact || '';
+      if (r.rules !== undefined || isCreate) row.rules = r.rules || '';
+      if (r.status !== undefined || isCreate) row.status = r.status || 'active';
 
       // 1. Upsert na tabela raffles
       const resRaffle = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffles?on_conflict=organization_id,id`, {
@@ -826,6 +899,8 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
   if (event.data && event.data.type === 'TRIGGER_SYNC') {
-    processBackgroundOutboxSync().catch(() => {});
+    processBackgroundOutboxSync().catch((err) => {
+      console.warn('[Service Worker] TRIGGER_SYNC falhou no processamento:', err);
+    });
   }
 });

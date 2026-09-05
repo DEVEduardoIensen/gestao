@@ -239,6 +239,9 @@ class AuthManager {
   }
 
   async checkInitialSession() {
+    // 1. Restaura SEMPRE o cache offline antes de qualquer chamada de rede (latência zero no offline)
+    this.restoreCachedOrganizations();
+
     if (!this.client) {
       await this.ensureDirectInstalledSession();
       return this.session;
@@ -250,12 +253,22 @@ class AuthManager {
       this.user = session ? session.user : null;
 
       // Verifica se a URL contém hash de recuperação
-      if (window.location.hash && window.location.hash.includes('type=recovery')) {
+      if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('type=recovery')) {
         this.isPasswordRecovery = true;
       }
 
       if (this.user) {
-        await this.loadUserOrganizations();
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          console.log('[AuthManager] Inicialização offline: usando cache de organizações sem chamada de rede.');
+        } else {
+          // Em rede instável ou mobile, limita espera a 1.5s para não travar a renderização inicial
+          await Promise.race([
+            this.loadUserOrganizations(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de consulta de organizações')), 1500))
+          ]).catch(e => {
+            console.log('[AuthManager] Consulta remota de organizações postergada:', e.message);
+          });
+        }
       } else if (this.isStandaloneOrInstalled() || this.isDesktopApp() || this.isMobileInstalledApp()) {
         await this.ensureDirectInstalledSession();
       } else {

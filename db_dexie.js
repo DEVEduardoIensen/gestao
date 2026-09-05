@@ -200,8 +200,8 @@ class LocalDatabase {
   }
 
   // --- FILA DE SINCRONIZAÇÃO OUTBOX ---
-  async enqueueOperation(op) {
-    const orgId = op.orgId || (window.authManager ? window.authManager.getOrganizationId() : null);
+  async enqueueOperation(op, explicitOrgId = null) {
+    const orgId = op.orgId || op.organization_id || explicitOrgId || (typeof window !== 'undefined' && window.authManager ? window.authManager.getOrganizationId() : null) || (typeof localStorage !== 'undefined' ? localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') : null);
     if (!orgId) {
       throw new Error('[LocalDB] Impossível enfileirar operação sem organization_id válido.');
     }
@@ -242,7 +242,9 @@ class LocalDatabase {
       if (!isValidJwt(authToken)) {
         authToken = null;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[LocalDB] Aviso ao resolver credenciais para operação:', e);
+    }
 
     const operation = {
       id: op.id || ('op-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6)),
@@ -263,28 +265,60 @@ class LocalDatabase {
 
     // Salva também snapshot de sessão atualizada no store de settings para o Service Worker
     if (authToken && orgId) {
-      this.saveAuthSession({ access_token: authToken, refresh_token: refreshToken }, orgId).catch(() => {});
+      try {
+        await this.saveAuthSession({ access_token: authToken, refresh_token: refreshToken }, orgId);
+      } catch (e) {
+        console.warn('[LocalDB] Erro ao salvar sessão de auth para SW:', e);
+      }
     }
 
-    // Registra tag de Background Sync no Service Worker (Mobile PWA & Navegador)
+    // Registra tag de Background Sync no Service Worker (Mobile PWA & Navegador) de forma aguardada
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      const armSync = (reg) => {
-        if (!reg) return;
-        if ('sync' in reg) {
-          reg.sync.register('eldorado-outbox-sync').catch(() => {});
-          reg.sync.register('sync-outbox').catch(() => {});
-        }
-        if ('periodicSync' in reg) {
-          reg.periodicSync.register('eldorado-periodic-sync', {
-            minInterval: 15 * 60 * 1000
-          }).catch(() => {});
-        }
-      };
+      try {
+        const regPromise = navigator.serviceWorker.ready || (navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration() : null);
+        const reg = await Promise.race([
+          regPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('SW ready timeout')), 2500))
+        ]).catch(err => {
+          console.log('[LocalDB] Service Worker pronto não respondeu a tempo:', err.message);
+          return null;
+        });
 
-      if (navigator.serviceWorker.ready) {
-        navigator.serviceWorker.ready.then(armSync).catch(() => {});
-      } else if (navigator.serviceWorker.getRegistration) {
-        navigator.serviceWorker.getRegistration().then(armSync).catch(() => {});
+        if (reg) {
+          if ('sync' in reg) {
+            try {
+              await reg.sync.register('eldorado-outbox-sync');
+              console.log('[LocalDB] Background Sync registrado com sucesso no SO: eldorado-outbox-sync');
+            } catch (err) {
+              console.warn('[LocalDB] Falha ao registrar tag eldorado-outbox-sync:', err);
+            }
+            try {
+              await reg.sync.register('sync-outbox');
+            } catch (err) {
+              console.warn('[LocalDB] Falha ao registrar tag sync-outbox:', err);
+            }
+            try {
+              await reg.sync.register('sync');
+            } catch (err) {
+              console.warn('[LocalDB] Falha ao registrar tag sync:', err);
+            }
+          } else {
+            console.log('[LocalDB] Background Sync API (sync) não suportada pelo navegador atual.');
+          }
+
+          if ('periodicSync' in reg) {
+            try {
+              await reg.periodicSync.register('eldorado-periodic-sync', {
+                minInterval: 15 * 60 * 1000
+              });
+              console.log('[LocalDB] Periodic Background Sync registrado com sucesso no SO.');
+            } catch (pErr) {
+              console.log('[LocalDB] Periodic Background Sync indisponível ou negado:', pErr.message);
+            }
+          }
+        }
+      } catch (swErr) {
+        console.warn('[LocalDB] Erro no registro de Background Sync do SO:', swErr);
       }
     }
 
@@ -299,25 +333,29 @@ class LocalDatabase {
     return all
       .filter(op => {
         const matchesOrg = !targetOrg || op.orgId === targetOrg;
-        // Auto-recupera operações 'syncing' abandonadas (ex: app fechado pelo SO ou crash há mais de 25s)
-        const isAbandonedSyncing = (op.status === 'syncing' && (!op.lastAttempt || (now - op.lastAttempt > 25000)));
+        // Auto-recupera operações 'syncing' abandonadas (ex: app fechado pelo SO ou crash há mais de 15s)
+        const isAbandonedSyncing = (op.status === 'syncing' && (!op.lastAttempt || (now - op.lastAttempt > 15000)));
         const matchesStatus = op.status === 'pending' || op.status === 'conflict' || op.status === 'failed' || isAbandonedSyncing;
         return matchesOrg && matchesStatus;
       })
       .sort((a, b) => a.timestamp - b.timestamp);
   }
 
-  async recoverAbandonedOperations(timeoutMs = 25000) {
+  async recoverAbandonedOperations(timeoutMs = 15000) {
     let recoveredCount = 0;
     try {
       const all = await this.getAll('sync_queue');
       const now = Date.now();
       for (const op of all) {
-        if (op.status === 'syncing' && (!op.lastAttempt || (now - op.lastAttempt > timeoutMs))) {
+        const opTime = op.lastAttempt || op.syncStartedAt || 0;
+        if (op.status === 'syncing' && (timeoutMs === 0 || !opTime || (now - opTime > timeoutMs))) {
           op.status = 'pending';
           await this.put('sync_queue', op);
           recoveredCount++;
         }
+      }
+      if (recoveredCount > 0) {
+        console.log(`[LocalDB] ${recoveredCount} operações em status 'syncing' abandonadas foram recuperadas para 'pending'.`);
       }
     } catch (e) {
       console.warn('[LocalDB] Erro ao recuperar operações syncing:', e);
@@ -333,8 +371,17 @@ class LocalDatabase {
     const op = await this.get('sync_queue', opId);
     if (op) {
       op.status = status;
-      if (error !== undefined) op.error = error;
-      if (status === 'syncing') op.retryCount = (op.retryCount || 0) + 1;
+      if (error !== undefined && error !== null) {
+        op.error = error;
+        op.lastError = error;
+      }
+      if (status === 'failed' || status === 'retrying') {
+        op.retryCount = (op.retryCount || 0) + 1;
+        op.lastAttempt = Date.now();
+      }
+      if (status === 'syncing') {
+        op.lastAttempt = Date.now();
+      }
       if (extra && typeof extra === 'object') {
         Object.assign(op, extra);
       }
@@ -342,7 +389,7 @@ class LocalDatabase {
     }
   }
 
-  // Carrega todos os dados do banco IndexedDB filtrando ESTRITAMENTE pela organização
+  // Carrega todos os dados do banco IndexedDB filtrando ESTRITAMENTE pela organização e expurgando deletados
   async loadFullAppData(orgId) {
     if (!orgId) {
       return {
@@ -355,22 +402,39 @@ class LocalDatabase {
       };
     }
 
-    const [settingsList, raffles, valesAndPrizes, fishingBookings, ranchoBookings, eduardoWorkDays] = await Promise.all([
+    const [settingsList, raffles, valesAndPrizes, fishingBookings, ranchoBookings, eduardoWorkDays, pendingOps] = await Promise.all([
       this.getAll('settings'),
       this.getAll('raffles'),
       this.getAll('vales_prizes'),
       this.getAll('fishing_bookings'),
       this.getAll('rancho_bookings'),
-      this.getAll('eduardo_work_days')
+      this.getAll('eduardo_work_days'),
+      this.getPendingOperations(orgId).catch(() => [])
     ]);
 
-    // Filtra estritamente pelo organization_id
-    const orgSettingsList = settingsList.filter(s => s.organization_id === orgId);
-    const orgRaffles = raffles.filter(r => r.organization_id === orgId);
-    const orgVales = valesAndPrizes.filter(v => v.organization_id === orgId);
-    const orgFishing = fishingBookings.filter(f => f.organization_id === orgId);
-    const orgRancho = ranchoBookings.filter(r => r.organization_id === orgId);
-    const orgEduardo = eduardoWorkDays.filter(d => d.organization_id === orgId);
+    // Extrai IDs que estão pendentes de exclusão no Outbox
+    const deletedRaffleIds = new Set();
+    const deletedValeIds = new Set();
+    const deletedFishingIds = new Set();
+    const deletedRanchoIds = new Set();
+    const deletedEduardoDates = new Set();
+
+    (pendingOps || []).forEach(op => {
+      if (!op || !op.payload) return;
+      if (op.type === 'DELETE_RAFFLE') deletedRaffleIds.add(String(op.payload.id || op.recordId));
+      if (op.type === 'DELETE_VALE') deletedValeIds.add(String(op.payload.id || op.recordId));
+      if (op.type === 'DELETE_FISHING_BOOKING') deletedFishingIds.add(String(op.payload.id || op.recordId));
+      if (op.type === 'DELETE_RANCHO_BOOKING') deletedRanchoIds.add(String(op.payload.id || op.recordId));
+      if (op.type === 'DELETE_EDUARDO_DAY') deletedEduardoDates.add(String(op.payload.date || op.recordId));
+    });
+
+    // Filtra estritamente pelo organization_id e exclui qualquer registro com deleção pendente
+    const orgSettingsList = settingsList.filter(s => s.organization_id === orgId && !String(s.key || '').startsWith('_'));
+    const orgRaffles = raffles.filter(r => r.organization_id === orgId && !deletedRaffleIds.has(String(r.id)));
+    const orgVales = valesAndPrizes.filter(v => v.organization_id === orgId && !deletedValeIds.has(String(v.id)));
+    const orgFishing = fishingBookings.filter(f => f.organization_id === orgId && !deletedFishingIds.has(String(f.id)));
+    const orgRancho = ranchoBookings.filter(r => r.organization_id === orgId && !deletedRanchoIds.has(String(r.id)));
+    const orgEduardo = eduardoWorkDays.filter(d => d.organization_id === orgId && !deletedEduardoDates.has(String(d.date)));
 
     const normalizedRaffles = orgRaffles.map(r => {
       if (typeof normalizeRaffle === 'function') {
@@ -392,59 +456,151 @@ class LocalDatabase {
     };
   }
 
-  // Salva todo o snapshot do appData no IndexedDB vinculado ao organization_id
+  // Salva todo o snapshot do appData no IndexedDB vinculado ao organization_id com RECONCILIAÇÃO REAL (deleta registros excluídos)
   async saveFullAppData(appData, orgId) {
     if (!appData || !orgId) return;
 
-    // Settings
+    // 1. Settings
     if (appData.settings && typeof appData.settings === 'object') {
-      const settingEntries = Object.entries(appData.settings).map(([k, v]) => ({
-        key: k,
-        value: v,
-        organization_id: orgId
-      }));
-      await this.putBatch('settings', settingEntries);
+      try {
+        const existingSettings = (await this.getAll('settings')).filter(s => s.organization_id === orgId);
+        const targetKeys = new Set(Object.keys(appData.settings));
+        for (const s of existingSettings) {
+          if (!String(s.key || '').startsWith('_') && !targetKeys.has(s.key)) {
+            await this.delete('settings', [orgId, s.key]);
+          }
+        }
+        const settingEntries = Object.entries(appData.settings).map(([k, v]) => ({
+          key: k,
+          value: v,
+          organization_id: orgId
+        }));
+        if (settingEntries.length > 0) {
+          await this.putBatch('settings', settingEntries);
+        }
+      } catch (err) {
+        console.warn('[LocalDB] Erro ao sincronizar settings:', err);
+      }
     }
 
-    // Raffles
-    if (Array.isArray(appData.raffles) && appData.raffles.length > 0) {
-      const normalizedRaffles = appData.raffles.map(r => {
-        const norm = typeof normalizeRaffle === 'function' ? normalizeRaffle(r) : r;
-        return { ...norm, organization_id: orgId };
-      });
-      await this.putBatch('raffles', normalizedRaffles);
+    // 2. Raffles
+    if (Array.isArray(appData.raffles)) {
+      try {
+        const existingRaffles = (await this.getAll('raffles')).filter(r => r.organization_id === orgId);
+        const currentIds = new Set(appData.raffles.map(r => String(r.id)));
+        for (const r of existingRaffles) {
+          if (!currentIds.has(String(r.id))) {
+            console.log(`[LocalDB] Reconciliação: deletando rifa excluída do IndexedDB: ${r.id} (${r.title || ''})`);
+            await this.delete('raffles', r.id);
+          }
+        }
+        if (appData.raffles.length > 0) {
+          const normalizedRaffles = appData.raffles.map(r => {
+            const norm = typeof normalizeRaffle === 'function' ? normalizeRaffle(r) : r;
+            return { ...norm, organization_id: orgId };
+          });
+          await this.putBatch('raffles', normalizedRaffles);
+        }
+      } catch (err) {
+        console.warn('[LocalDB] Erro ao reconciliar raffles:', err);
+      }
     }
 
-    // Vales & Prêmios
-    if (Array.isArray(appData.valesAndPrizes) && appData.valesAndPrizes.length > 0) {
-      await this.putBatch('vales_prizes', appData.valesAndPrizes.map(v => ({ ...v, organization_id: orgId })));
+    // 3. Vales & Prêmios
+    const valesList = appData.valesAndPrizes || appData.valesPrizes;
+    if (Array.isArray(valesList)) {
+      try {
+        const existingVales = (await this.getAll('vales_prizes')).filter(v => v.organization_id === orgId);
+        const currentIds = new Set(valesList.map(v => String(v.id)));
+        for (const v of existingVales) {
+          if (!currentIds.has(String(v.id))) {
+            console.log(`[LocalDB] Reconciliação: deletando vale excluído do IndexedDB: ${v.id}`);
+            await this.delete('vales_prizes', v.id);
+          }
+        }
+        if (valesList.length > 0) {
+          await this.putBatch('vales_prizes', valesList.map(v => ({ ...v, organization_id: orgId })));
+        }
+      } catch (err) {
+        console.warn('[LocalDB] Erro ao reconciliar vales_prizes:', err);
+      }
     }
 
-    // Fishing
-    if (Array.isArray(appData.fishingBookings) && appData.fishingBookings.length > 0) {
-      await this.putBatch('fishing_bookings', appData.fishingBookings.map(f => ({ ...f, organization_id: orgId })));
+    // 4. Fishing Bookings
+    if (Array.isArray(appData.fishingBookings)) {
+      try {
+        const existingFishing = (await this.getAll('fishing_bookings')).filter(f => f.organization_id === orgId);
+        const currentIds = new Set(appData.fishingBookings.map(f => String(f.id)));
+        for (const f of existingFishing) {
+          if (!currentIds.has(String(f.id))) {
+            console.log(`[LocalDB] Reconciliação: deletando pesca excluída do IndexedDB: ${f.id}`);
+            await this.delete('fishing_bookings', f.id);
+          }
+        }
+        if (appData.fishingBookings.length > 0) {
+          await this.putBatch('fishing_bookings', appData.fishingBookings.map(f => ({ ...f, organization_id: orgId })));
+        }
+      } catch (err) {
+        console.warn('[LocalDB] Erro ao reconciliar fishing_bookings:', err);
+      }
     }
 
-    // Rancho
-    if (Array.isArray(appData.ranchoBookings) && appData.ranchoBookings.length > 0) {
-      await this.putBatch('rancho_bookings', appData.ranchoBookings.map(r => ({ ...r, organization_id: orgId })));
+    // 5. Rancho Bookings
+    if (Array.isArray(appData.ranchoBookings)) {
+      try {
+        const existingRancho = (await this.getAll('rancho_bookings')).filter(r => r.organization_id === orgId);
+        const currentIds = new Set(appData.ranchoBookings.map(r => String(r.id)));
+        for (const r of existingRancho) {
+          if (!currentIds.has(String(r.id))) {
+            console.log(`[LocalDB] Reconciliação: deletando locação rancho excluída do IndexedDB: ${r.id}`);
+            await this.delete('rancho_bookings', r.id);
+          }
+        }
+        if (appData.ranchoBookings.length > 0) {
+          await this.putBatch('rancho_bookings', appData.ranchoBookings.map(r => ({ ...r, organization_id: orgId })));
+        }
+      } catch (err) {
+        console.warn('[LocalDB] Erro ao reconciliar rancho_bookings:', err);
+      }
     }
 
-    // Eduardo
-    if (Array.isArray(appData.eduardoWorkDays) && appData.eduardoWorkDays.length > 0) {
-      await this.putBatch('eduardo_work_days', appData.eduardoWorkDays.map(d => ({ ...d, organization_id: orgId })));
+    // 6. Eduardo Work Days (keyPath: ['organization_id', 'date'])
+    if (Array.isArray(appData.eduardoWorkDays)) {
+      try {
+        const existingEduardo = (await this.getAll('eduardo_work_days')).filter(d => d.organization_id === orgId);
+        const currentDates = new Set(appData.eduardoWorkDays.map(d => String(d.date)));
+        for (const d of existingEduardo) {
+          if (!currentDates.has(String(d.date))) {
+            console.log(`[LocalDB] Reconciliação: deletando ponto do Eduardo excluído do IndexedDB: ${d.date}`);
+            await this.delete('eduardo_work_days', [orgId, d.date]);
+          }
+        }
+        if (appData.eduardoWorkDays.length > 0) {
+          await this.putBatch('eduardo_work_days', appData.eduardoWorkDays.map(d => ({ ...d, organization_id: orgId })));
+        }
+      } catch (err) {
+        console.warn('[LocalDB] Erro ao reconciliar eduardo_work_days:', err);
+      }
     }
   }
 
   // Helper para exclusão pontual no IndexedDB
   async deleteRecord(storeName, key) {
     try {
+      await this.ready();
       await this.delete(storeName, key);
+      console.log(`[LocalDB] Registro ${JSON.stringify(key)} deletado com sucesso de ${storeName}.`);
     } catch (e) {
-      console.warn(`[LocalDB] Falha ao deletar ${key} de ${storeName}:`, e);
+      console.warn(`[LocalDB] Falha ao deletar ${JSON.stringify(key)} de ${storeName}:`, e);
     }
   }
 }
 
 // Singleton global
-window.localDB = new LocalDatabase();
+const localDB = (typeof window !== 'undefined' && window.localDB) ? window.localDB : new LocalDatabase();
+if (typeof window !== 'undefined') {
+  window.localDB = localDB;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { LocalDatabase, localDB };
+}

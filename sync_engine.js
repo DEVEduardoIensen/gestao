@@ -615,23 +615,26 @@ class SyncEngine {
       case 'CREATE_RAFFLE':
       case 'UPDATE_RAFFLE': {
         const r = typeof normalizeRaffle === 'function' ? normalizeRaffle(op.payload) : op.payload;
-        const { error: rError } = await window.supabaseClient.from('raffles').upsert({
-          organization_id: orgId,
+        const isCreate = (op.type === 'CREATE_RAFFLE');
+        const row = {
           id: r.id,
-          number: String(r.number || ''),
-          title: r.title,
-          subtitle: r.subtitle || '',
-          price_per_number: parseFloat(r.pricePerNumber) || 0,
-          total_numbers: parseInt(r.totalNumbers, 10) || 60,
-          reservation_timeout_hours: parseInt(r.reservationTimeoutHours, 10) || 24,
-          pix_key: r.pixKey || '',
-          pix_owner: r.pixOwner || '',
-          shipping_note: r.shippingNote || '',
-          live_draw_note: r.liveDrawNote || '',
-          private_contact: r.privateContact || '',
-          rules: r.rules || '',
-          status: r.status || 'active'
-        }, { onConflict: 'organization_id,id' });
+          organization_id: orgId
+        };
+        if (r.number !== undefined || isCreate) row.number = String(r.number || '');
+        if (r.title !== undefined || isCreate) row.title = r.title || 'Ação Eldorado Pesca';
+        if (r.subtitle !== undefined || isCreate) row.subtitle = r.subtitle || '';
+        if (r.pricePerNumber !== undefined || isCreate) row.price_per_number = parseFloat(r.pricePerNumber) || 0;
+        if (r.totalNumbers !== undefined || isCreate) row.total_numbers = parseInt(r.totalNumbers, 10) || 60;
+        if (r.reservationTimeoutHours !== undefined || isCreate) row.reservation_timeout_hours = parseInt(r.reservationTimeoutHours, 10) || 24;
+        if (r.pixKey !== undefined || isCreate) row.pix_key = r.pixKey || '';
+        if (r.pixOwner !== undefined || isCreate) row.pix_owner = r.pixOwner || '';
+        if (r.shippingNote !== undefined || isCreate) row.shipping_note = r.shippingNote || '';
+        if (r.liveDrawNote !== undefined || isCreate) row.live_draw_note = r.liveDrawNote || '';
+        if (r.privateContact !== undefined || isCreate) row.private_contact = r.privateContact || '';
+        if (r.rules !== undefined || isCreate) row.rules = r.rules || '';
+        if (r.status !== undefined || isCreate) row.status = r.status || 'active';
+
+        const { error: rError } = await window.supabaseClient.from('raffles').upsert(row, { onConflict: 'organization_id,id' });
         if (rError) throw rError;
 
         // Sincronização estrita e bidirecional de prêmios (raffle_prizes)

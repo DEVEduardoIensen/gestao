@@ -40,14 +40,8 @@ let activeTab = "tab-rifas";
 // Helper: Seleciona sempre a ação de maior numeração (cota mais recente/atual)
 function getHighestRaffle(raffles) {
   if (!Array.isArray(raffles) || raffles.length === 0) return null;
-  // Filtra ações de teste
-  const validRaffles = raffles.filter(r => {
-    if (!r) return false;
-    const title = (r.title || '').toLowerCase();
-    const id = (r.id || '').toLowerCase();
-    return !title.includes('teste') && !id.includes('test');
-  });
-  const pool = validRaffles.length > 0 ? validRaffles : raffles;
+  const pool = raffles.filter(r => !!r);
+  if (pool.length === 0) return null;
 
   let highest = null;
   let maxNum = -1;
@@ -87,13 +81,7 @@ function sanitizeAppData(data) {
   if (!Array.isArray(data.raffles)) {
     data.raffles = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.raffles)) ? INITIAL_SAMPLE_DATA.raffles : [];
   } else {
-    // Filtra e descarta rifas de teste da fila e do cache local
-    data.raffles = data.raffles.filter(r => {
-      if (!r) return false;
-      const id = (r.id || '').toLowerCase();
-      const title = (r.title || '').toLowerCase();
-      return !id.includes('test') && !title.includes('teste');
-    });
+    data.raffles = data.raffles.filter(r => !!r);
     data.raffles.forEach(r => {
       if (r && r.title) {
         r.title = r.title.replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, '').trim();
@@ -365,11 +353,22 @@ window.mergeRemoteData = async function(remoteData) {
             }
             // 6. Preservar Criação/Edição de Rifa
             else if ((op.type === 'CREATE_RAFFLE' || op.type === 'UPDATE_RAFFLE') && Array.isArray(sanitized.raffles)) {
-              const idx = sanitized.raffles.findIndex(r => r.id === op.payload.id);
-              if (idx >= 0) sanitized.raffles[idx] = { ...sanitized.raffles[idx], ...op.payload };
-              else sanitized.raffles.unshift(op.payload);
+              const idx = sanitized.raffles.findIndex(r => String(r.id) === String(op.payload.id));
+              if (idx >= 0) {
+                const existing = sanitized.raffles[idx];
+                const preservedPrizes = Array.isArray(op.payload.prizes) ? op.payload.prizes : existing.prizes;
+                const preservedNumbers = Array.isArray(op.payload.numbers) ? op.payload.numbers : existing.numbers;
+                sanitized.raffles[idx] = {
+                  ...existing,
+                  ...op.payload,
+                  prizes: preservedPrizes,
+                  numbers: preservedNumbers
+                };
+              } else {
+                sanitized.raffles.unshift(op.payload);
+              }
             } else if (op.type === 'DELETE_RAFFLE' && Array.isArray(sanitized.raffles)) {
-              sanitized.raffles = sanitized.raffles.filter(r => r.id !== op.payload.id);
+              sanitized.raffles = sanitized.raffles.filter(r => String(r.id) !== String(op.payload.id));
             }
             // 7. Preservar Configurações
             else if (op.type === 'UPDATE_SETTINGS') {
@@ -530,28 +529,45 @@ function initSyncAndPwaHandlers() {
       }
     });
 
-    // Checa atualizações ao voltar e arma o Background Sync ao sair ou bloquear o celular
-    const armBackgroundSyncOnExit = () => {
-      if ('serviceWorker' in navigator) {
-        const arm = (reg) => {
-          if (!reg) return;
-          if ('sync' in reg) {
-            reg.sync.register('eldorado-outbox-sync').catch(() => {});
-            reg.sync.register('sync-outbox').catch(() => {});
+    // Checa atualizações ao voltar e arma o Background Sync de forma assíncrona garantida ao sair ou bloquear o celular
+    const armBackgroundSyncOnExit = async () => {
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          const reg = await (navigator.serviceWorker.ready || (navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration() : Promise.resolve(null)));
+          if (reg && 'sync' in reg) {
+            await Promise.allSettled([
+              reg.sync.register('eldorado-outbox-sync'),
+              reg.sync.register('sync-outbox'),
+              reg.sync.register('sync')
+            ]);
+            console.log('[PWA] Background Sync tags registradas ao sair do app.');
           }
-          if ('periodicSync' in reg) {
-            reg.periodicSync.register('eldorado-periodic-sync', { minInterval: 15 * 60 * 1000 }).catch(() => {});
+          if (reg && 'periodicSync' in reg) {
+            try {
+              await reg.periodicSync.register('eldorado-periodic-sync', { minInterval: 15 * 60 * 1000 });
+            } catch (e) {}
           }
-        };
-        navigator.serviceWorker.ready.then(arm).catch(() => {});
-        if (typeof navigator.serviceWorker.getRegistration === 'function') {
-          navigator.serviceWorker.getRegistration().then(arm).catch(() => {});
+        } catch (err) {
+          console.warn('[PWA] Falha ao armar Background Sync ao sair:', err);
         }
+      }
+    };
+
+    const triggerForegroundSync = () => {
+      console.log('[PWA] Aplicativo ativo/visível: acionando sincronização imediata da fila outbox...');
+      if (window.syncEngine && typeof window.syncEngine.processQueue === 'function') {
+        window.syncEngine.processQueue();
+      }
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
+        try {
+          navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' });
+        } catch (e) {}
       }
     };
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
+        triggerForegroundSync();
         navigator.serviceWorker.getRegistration().then(reg => {
           if (reg) reg.update().catch(() => {});
         });
@@ -559,51 +575,11 @@ function initSyncAndPwaHandlers() {
         armBackgroundSyncOnExit();
       }
     });
+    window.addEventListener('online', triggerForegroundSync);
+    window.addEventListener('focus', triggerForegroundSync);
     window.addEventListener('pagehide', armBackgroundSyncOnExit);
     window.addEventListener('freeze', armBackgroundSyncOnExit);
   }
-
-  // Ação global do botão "Verificar e Atualizar Agora" na aba Administração
-  window.forceCheckAppUpdate = async function() {
-    const btn = document.getElementById('btnForceCheckUpdate');
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span> Verificando no servidor...';
-    }
-
-    // Se for Electron Desktop
-    if (window.__ELDORADO_IS_ELECTRON || window.__ELDORADO_IS_DESKTOP_APP) {
-      if (window.electronAPI && typeof window.electronAPI.reloadApp === 'function') {
-        window.electronAPI.reloadApp();
-        return;
-      }
-      window.location.reload();
-      return;
-    }
-
-    // Se for PWA / Web
-    try {
-      if ('serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (reg) {
-          if (reg.waiting) {
-            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          }
-          await reg.update();
-        }
-        if ('caches' in window) {
-          const keys = await caches.keys();
-          for (const k of keys) {
-            await caches.delete(k);
-          }
-        }
-      }
-      window.location.reload();
-    } catch (e) {
-      console.warn('[PWA] Erro ao forçar atualização:', e);
-      window.location.reload();
-    }
-  };
 
   // Escuta mudanças de status no SyncEngine
   if (window.syncEngine) {
@@ -643,6 +619,16 @@ window.forceCheckAppUpdate = async function() {
   }
   showToast('Verificando se há atualizações na nuvem...', 'info');
 
+  // Se for Electron Desktop
+  if (window.__ELDORADO_IS_ELECTRON || window.__ELDORADO_IS_DESKTOP_APP) {
+    if (window.electronAPI && typeof window.electronAPI.reloadApp === 'function') {
+      window.electronAPI.reloadApp();
+      return;
+    }
+    window.location.reload();
+    return;
+  }
+
   if (!navigator.onLine) {
     showToast('Você está offline. Conecte-se à internet para atualizar.', 'warning');
     if (btn) {
@@ -668,7 +654,7 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const activeCache = 'eldorado-pwa-v2.8.4';
+        const activeCache = 'eldorado-pwa-v2.8.6';
         await Promise.all(
           cacheNames.map(name => {
             if (name !== activeCache) {
@@ -678,7 +664,7 @@ window.forceCheckAppUpdate = async function() {
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.8.4 PRO)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.8.6 PRO)!', 'success');
     } else {
       window.location.reload();
     }
@@ -2449,6 +2435,9 @@ async function removeLinkedFishingBookings(prizeId, customerName = null) {
   if (toDelete.length > 0) {
     appData.fishingBookings = (appData.fishingBookings || []).filter(b => !toDelete.some(del => del.id === b.id));
     for (const b of toDelete) {
+      if (window.localDB && typeof window.localDB.deleteRecord === 'function') {
+        await window.localDB.deleteRecord('fishing_bookings', b.id);
+      }
       await saveState({
         type: "DELETE_FISHING_BOOKING",
         tableName: "fishing_bookings",
@@ -3389,6 +3378,10 @@ async function deleteValeItem(id) {
     await removeLinkedFishingBookings(id, name);
 
     appData.valesAndPrizes = appData.valesAndPrizes.filter(v => v.id !== id);
+
+    if (window.localDB && typeof window.localDB.deleteRecord === 'function') {
+      await window.localDB.deleteRecord('vales_prizes', id);
+    }
 
     await saveState({
       type: "DELETE_VALE",
@@ -4605,6 +4598,10 @@ async function deleteFishingBooking(bookingId) {
 
     appData.fishingBookings = (appData.fishingBookings || []).filter(item => item.id !== bookingId);
 
+    if (window.localDB && typeof window.localDB.deleteRecord === 'function') {
+      await window.localDB.deleteRecord('fishing_bookings', bookingId);
+    }
+
     await saveState({
       type: "DELETE_FISHING_BOOKING",
       tableName: "fishing_bookings",
@@ -5328,6 +5325,10 @@ async function deleteRanchoBooking(id) {
 
   appData.ranchoBookings = (appData.ranchoBookings || []).filter(item => item.id !== id);
 
+  if (window.localDB && typeof window.localDB.deleteRecord === 'function') {
+    await window.localDB.deleteRecord('rancho_bookings', id);
+  }
+
   await saveState({
     type: "DELETE_RANCHO_BOOKING",
     tableName: "rancho_bookings",
@@ -5581,6 +5582,14 @@ async function deleteEduardoDay() {
   const dateVal = document.getElementById("eduardoInputDate").value;
   appData.eduardoWorkDays = appData.eduardoWorkDays.filter(d => d.date !== dateVal);
   
+  if (window.localDB && window.currentOrgId && dateVal) {
+    try {
+      await window.localDB.deleteRecord('eduardo_work_days', [window.currentOrgId, dateVal]);
+    } catch (e) {
+      console.warn('[Eduardo] Erro ao deletar do store local:', e);
+    }
+  }
+
   await saveState({
     type: "DELETE_EDUARDO_DAY",
     tableName: "eduardo_work_days",
@@ -6037,6 +6046,10 @@ async function confirmDeleteRaffle() {
     activeRaffleId = nextActive.id;
   } else {
     activeRaffleId = null;
+  }
+
+  if (window.localDB && typeof window.localDB.deleteRecord === 'function') {
+    await window.localDB.deleteRecord('raffles', raffleId);
   }
 
   await saveState({
