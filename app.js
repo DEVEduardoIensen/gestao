@@ -99,6 +99,7 @@ function sanitizeAppData(data) {
         r.title = r.title.replace(/\s*\((?:ativa|ativas|finalizada|finalizadas)\)/gi, '').trim();
       }
     });
+    data.raffles = data.raffles.map(r => (typeof normalizeRaffle === 'function') ? normalizeRaffle(r) : r);
   }
   if (!Array.isArray(data.valesAndPrizes)) {
     data.valesAndPrizes = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.valesAndPrizes)) ? INITIAL_SAMPLE_DATA.valesAndPrizes : [];
@@ -1258,16 +1259,24 @@ async function resolveConflictFromUI(opId, action) {
 
 function getActiveRaffle() {
   if (!appData.raffles || appData.raffles.length === 0) return null;
+  let raffle = null;
   if (activeRaffleId) {
     const found = appData.raffles.find(r => String(r.id) === String(activeRaffleId));
-    if (found) return found;
+    if (found) raffle = found;
   }
-  const highest = getHighestRaffle(appData.raffles);
-  if (highest) {
-    activeRaffleId = highest.id;
-    return highest;
+  if (!raffle) {
+    const highest = getHighestRaffle(appData.raffles);
+    if (highest) {
+      activeRaffleId = highest.id;
+      raffle = highest;
+    } else {
+      raffle = appData.raffles[0];
+    }
   }
-  return appData.raffles[0];
+  if (raffle && typeof normalizeRaffle === 'function') {
+    raffle = normalizeRaffle(raffle);
+  }
+  return raffle;
 }
 
 function onSelectActiveRaffle(raffleId) {
@@ -1474,8 +1483,10 @@ function renderRaffleView() {
       `;
       prizesListEl.appendChild(prizeDiv);
     });
+  } else if (raffle._prizesLoadError) {
+    prizesListEl.innerHTML = `<div style="font-size: 0.8rem; color: #f59e0b; padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border-radius: 4px;">⚠️ Prêmios indisponíveis offline no momento.</div>`;
   } else {
-    prizesListEl.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-dim);">Nenhum prêmio cadastrado.</div>`;
+    prizesListEl.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-dim);">Nenhum prêmio cadastrado nesta ação.</div>`;
   }
 
   // Render Number Grid
@@ -2227,20 +2238,22 @@ function openExportWhatsAppModal() {
 }
 
 function generateWhatsAppText(raffle) {
-  let output = `*${raffle.title || '107° AÇÃO ELDORADO PESCA'}*\n\n`;
-  output += `*${raffle.subtitle || 'AÇÃO RÁPIDA '}*\n\n`;
+  if (!raffle) return "";
+  const r = (typeof normalizeRaffle === 'function') ? normalizeRaffle(raffle) : raffle;
+  let output = `*${r.title || '107° AÇÃO ELDORADO PESCA'}*\n\n`;
+  output += `*${r.subtitle || 'AÇÃO RÁPIDA '}*\n\n`;
   output += `LEIAM COM ATENÇÃO, MUITA ATENÇÃO!\n\n`;
   output += `OS NUMEROS SÓ FICARÃO DISPONIVEIS ATÉ 2️⃣ HORAS ⏰ APÓS O FECHAMENTO DA AÇÃO, SE NÃO OUVER PAGAMENTO VAMOS DISPONIBILIZAR NOVAMENTE PARA OS DEMAIS. \n\n`;
   output += `*NAO COPIAR E COLAR, APENAS FALAR O NÚMERO.*\n\n`;
 
   // Prizes
-  if (raffle.prizes && raffle.prizes.length > 0) {
-    raffle.prizes.forEach((p, i) => {
+  if (r.prizes && r.prizes.length > 0) {
+    r.prizes.forEach((p, i) => {
       output += `💥*${p.position || (i + 1)}°* ${p.description}\n\n`;
     });
   }
 
-  output += `‼️*R$ ${raffle.pricePerNumber ? raffle.pricePerNumber.toFixed(2).replace('.', ',') : '25,00'} cada número*‼️\n\n`;
+  output += `‼️*R$ ${r.pricePerNumber ? r.pricePerNumber.toFixed(2).replace('.', ',') : '25,00'} cada número*‼️\n\n`;
   output += `*Pix 42999162340* \n`;
   output += `ELDORADO PESCA LTDA\n\n`;
   output += `Frete a parte - Envio para todo o Brasil.\n\n`;
@@ -2249,7 +2262,7 @@ function generateWhatsAppText(raffle) {
   output += `Sorteio será quando o último número for pago, avisarei aqui no grupo.\n\n`;
 
   // Numbers list 1 to N
-  raffle.numbers.forEach(item => {
+  (r.numbers || []).forEach(item => {
     if (item.status === "paid") {
       output += `${item.num}-${item.name}✅\n`;
     } else if (item.status === "reserved" && item.name) {
@@ -2424,7 +2437,7 @@ window.doSendAvailableWhatsApp = doSendAvailableWhatsApp;
    ========================================================================== */
 
 /* Função Auxiliar: Remove agendamento vinculado da Agenda de Pesca caso o ganhador mude de ideia ou altere a opção */
-function removeLinkedFishingBookings(prizeId, customerName = null) {
+async function removeLinkedFishingBookings(prizeId, customerName = null) {
   if (!prizeId && !customerName) return;
   const targetName = customerName ? customerName.trim().toUpperCase() : null;
   const toDelete = (appData.fishingBookings || []).filter(b => {
@@ -2435,14 +2448,14 @@ function removeLinkedFishingBookings(prizeId, customerName = null) {
 
   if (toDelete.length > 0) {
     appData.fishingBookings = (appData.fishingBookings || []).filter(b => !toDelete.some(del => del.id === b.id));
-    toDelete.forEach(b => {
-      saveState({
+    for (const b of toDelete) {
+      await saveState({
         type: "DELETE_FISHING_BOOKING",
         tableName: "fishing_bookings",
         recordId: b.id,
         payload: { id: b.id }
       });
-    });
+    }
   }
 }
 
@@ -2910,11 +2923,11 @@ async function saveEditedValePrize() {
   if (newChoice === "pending_choice") {
     item.type = "dual_choice";
     item.status = "pending_choice";
-    removeLinkedFishingBookings(item.id, oldName);
+    await removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "diaria") {
     item.type = "dual_choice";
     item.status = "pending_schedule";
-    removeLinkedFishingBookings(item.id, oldName);
+    await removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "scheduled") {
     item.type = "dual_choice";
     item.status = "scheduled";
@@ -2928,7 +2941,7 @@ async function saveEditedValePrize() {
     item.status = "active";
     item.initialAmount = customAmount;
     item.currentBalance = customAmount;
-    removeLinkedFishingBookings(item.id, oldName);
+    await removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "pending_pickup") {
     item.type = "premio_fisico";
     item.status = "pending_pickup";
@@ -2937,12 +2950,12 @@ async function saveEditedValePrize() {
     item.differencePaid = 0;
     item.exchangeNotes = null;
     item.exchangedAt = null;
-    removeLinkedFishingBookings(item.id, oldName);
+    await removeLinkedFishingBookings(item.id, oldName);
   } else if (newChoice === "delivered") {
     item.status = "delivered";
     item.deliveredAt = item.deliveredAt || new Date().toISOString();
     if (oldStatus !== "scheduled") {
-      removeLinkedFishingBookings(item.id, oldName);
+      await removeLinkedFishingBookings(item.id, oldName);
     }
   }
 
@@ -2973,7 +2986,7 @@ async function choosePrizeOption(valeId, choice) {
     item.notes = `Ganhador optou pelo Vale-Compras (${formatCurrency(amount)})`;
 
     // Remove automaticamente qualquer agendamento vinculado do calendário de pesca
-    removeLinkedFishingBookings(valeId, oldName);
+    await removeLinkedFishingBookings(valeId, oldName);
 
     await saveState({
       type: "UPDATE_VALE",
@@ -2991,7 +3004,7 @@ async function choosePrizeOption(valeId, choice) {
     item.notes = "Ganhador optou pela Diária de Pesca (Aguardando Agendamento)";
 
     // Remove agendamento anterior para escolha limpa de novas datas
-    removeLinkedFishingBookings(valeId, oldName);
+    await removeLinkedFishingBookings(valeId, oldName);
 
     await saveState({
       type: "UPDATE_VALE",
@@ -3008,7 +3021,7 @@ async function choosePrizeOption(valeId, choice) {
     item.status = "delivered";
     item.deliveredAt = getLocalDateStr();
     item.notes = "Ganhador retirou o prêmio físico na loja (Entregue)";
-    removeLinkedFishingBookings(valeId, oldName);
+    await removeLinkedFishingBookings(valeId, oldName);
 
     await saveState({
       type: "UPDATE_VALE",
@@ -3024,7 +3037,7 @@ async function choosePrizeOption(valeId, choice) {
     item.type = "premio_fisico";
     item.status = "pending_pickup";
     item.notes = "Ganhador optou pelo Prêmio Físico (Aguardando Retirada)";
-    removeLinkedFishingBookings(valeId, oldName);
+    await removeLinkedFishingBookings(valeId, oldName);
 
     await saveState({
       type: "UPDATE_VALE",
@@ -3042,7 +3055,7 @@ async function choosePrizeOption(valeId, choice) {
     item.notes = "Ganhador pendente de escolha";
 
     // Remove agendamento anterior para sair do calendário
-    removeLinkedFishingBookings(valeId, oldName);
+    await removeLinkedFishingBookings(valeId, oldName);
 
     await saveState({
       type: "UPDATE_VALE",
@@ -3373,7 +3386,7 @@ async function deleteValeItem(id) {
 
   if (confirm(`Deseja realmente excluir o registro de ${name}?`)) {
     // Remove qualquer agendamento vinculado da Agenda de Pesca
-    removeLinkedFishingBookings(id, name);
+    await removeLinkedFishingBookings(id, name);
 
     appData.valesAndPrizes = appData.valesAndPrizes.filter(v => v.id !== id);
 
@@ -5869,7 +5882,7 @@ async function saveRaffleForm() {
     return;
   }
 
-  // Gather dynamic prizes
+  // Gather dynamic prizes (opcional: a ação pode ser criada sem prêmios e ter prêmios adicionados depois)
   const dynamicInputs = document.querySelectorAll(".dynamic-prize-input");
   const prizesArray = [];
   dynamicInputs.forEach((input, idx) => {
@@ -5883,11 +5896,6 @@ async function saveRaffleForm() {
       });
     }
   });
-
-  if (prizesArray.length === 0) {
-    showToast("Adicione pelo menos um prêmio para a ação.", "warning");
-    return;
-  }
 
   // Se estiver EDITANDO a rifa ativa
   if (editId) {
@@ -5917,6 +5925,11 @@ async function saveRaffleForm() {
 
     targetRaffle.prizes = prizesArray;
 
+    if (typeof normalizeRaffle === 'function') {
+      const normalized = normalizeRaffle(targetRaffle);
+      Object.assign(targetRaffle, normalized);
+    }
+
     await saveState({
       type: "UPDATE_RAFFLE",
       tableName: "raffles",
@@ -5927,7 +5940,8 @@ async function saveRaffleForm() {
     renderRaffleDropdown();
     renderRaffleView();
     closeModal("modalRaffleForm");
-    showToast(`Ação "${title}" atualizada com sucesso!`, "success");
+    const prizeCountText = prizesArray.length > 0 ? ` com ${prizesArray.length} prêmio(s)` : ' (sem prêmios)';
+    showToast(`Ação "${title}" atualizada com sucesso${prizeCountText}!`, "success");
     return;
   }
 
@@ -5947,7 +5961,7 @@ async function saveRaffleForm() {
     });
   }
 
-  const newRaffle = {
+  let newRaffle = {
     id: "rifa-" + Date.now(),
     number: title.split(" ")[0] || "Nova",
     title: title,
@@ -5967,6 +5981,10 @@ async function saveRaffleForm() {
     numbers: numbersArray
   };
 
+  if (typeof normalizeRaffle === 'function') {
+    newRaffle = normalizeRaffle(newRaffle);
+  }
+
   appData.raffles.unshift(newRaffle);
   activeRaffleId = newRaffle.id;
   await saveState({
@@ -5978,7 +5996,8 @@ async function saveRaffleForm() {
   renderRaffleDropdown();
   renderRaffleView();
   closeModal("modalRaffleForm");
-  showToast(`Ação "${title}" criada com sucesso com ${prizesArray.length} prêmios!`, "success");
+  const prizeCountText = prizesArray.length > 0 ? ` com ${prizesArray.length} prêmios!` : '!';
+  showToast(`Ação "${title}" criada com sucesso${prizeCountText}`, "success");
 }
 
 /* ==========================================================================

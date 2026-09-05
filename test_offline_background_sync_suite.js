@@ -41,7 +41,8 @@ assert(preloadCode.includes('notifySyncStatus'), 'preload.js expõe notifySyncSt
 console.log('\n2. Verificando Service Worker (W3C Background Sync API & Dispatcher):');
 const swCode = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
 
-assert(swCode.includes('eldorado-pwa-v2.8.4'), 'sw.js atualizado para versão v2.8.4');
+const currentPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+assert(swCode.includes(`eldorado-pwa-v${currentPkg.version}`), `sw.js atualizado para versão v${currentPkg.version}`);
 assert(swCode.includes("self.addEventListener('sync'"), 'sw.js escuta evento "sync" do sistema operacional');
 assert(swCode.includes("self.addEventListener('periodicsync'"), 'sw.js escuta evento "periodicsync"');
 assert(swCode.includes('eldorado-outbox-sync'), 'sw.js trata tag eldorado-outbox-sync');
@@ -82,11 +83,11 @@ assert(appCode.includes('armBackgroundSyncOnExit'), 'app.js arma background sync
 assert(appCode.includes('forceCheckAppUpdate'), 'app.js implementa forceCheckAppUpdate para atualização forçada');
 
 // 6. Versões do Pacote e Arquivo Principal
-console.log('\n6. Verificando Consistência de Versões (v2.8.4):');
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+const pkg = currentPkg;
+console.log(`\n6. Verificando Consistência de Versões (v${pkg.version}):`);
 const htmlCode = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 
-assert(pkg.version === '2.8.4', 'package.json está na versão 2.8.4');
+assert(pkg.version === '2.8.5', 'package.json está na versão 2.8.5');
 assert(htmlCode.includes(`app.js?v=${pkg.version}`), `index.html referencia app.js?v=${pkg.version}`);
 assert(htmlCode.includes(`styles.css?v=${pkg.version}`), `index.html referencia styles.css?v=${pkg.version}`);
 

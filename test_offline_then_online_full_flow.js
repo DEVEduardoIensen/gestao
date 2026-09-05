@@ -41,15 +41,33 @@ async function runTest() {
   assert(authCode.includes('realToken = parsed.access_token.trim()'), 'auth_manager.js preserva apenas JWTs legítimos de 3 partes');
   assert(dexieCode.includes('isValidJwt(authToken)'), 'db_dexie.js valida tokens antes de enfileirar');
   assert(swCode.includes('isValidJwt'), 'sw.js valida tokens antes do despacho');
-  assert(swCode.includes('swSupabaseFetch'), 'sw.js possui wrapper swSupabaseFetch');
-  assert(swCode.includes("baseHeaders['Authorization'] = `Bearer ${SUPABASE_KEY}`"), 'sw.js faz fallback automático para SUPABASE_KEY em caso de 401');
+  assert(swCode.includes('refreshSupabaseTokenInSW'), 'sw.js possui renovação segura de token em background');
 
   // 2. Simulação: Usuário faz alteração OFFLINE no Mobile
   console.log('\n2. Simulando Operação Offline no Celular:');
-  const testRaffleId = 'rifa-1788455445020'; // 109° Ação Atual
+  const testRaffleId = 'rifa-flow-test-' + Date.now();
   const testNumber = 99; // Cota de teste
   const buyerName = 'Cliente Teste Mobile Offline';
   const orgId = SUPABASE_CONFIG.DEFAULT_ORG_ID;
+
+  // Garante a existência da rifa de teste no Supabase para não violar FK constraint
+  await fetch(`${SUPABASE_CONFIG.SUPABASE_URL}/rest/v1/raffles`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_CONFIG.SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_CONFIG.SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({
+      id: testRaffleId,
+      organization_id: orgId,
+      title: 'Rifa Teste Fluxo Offline',
+      total_numbers: 100,
+      price_per_number: 25.00,
+      status: 'active'
+    })
+  });
 
   // Simula estado do cliente offline
   const offlineOp = {
@@ -196,6 +214,16 @@ async function runTest() {
   }, brokenOp);
 
   assert(brokenRes.status === 200, `swSupabaseFetch interceptou token quebrado e executou com sucesso (Status: ${brokenRes.status})`);
+
+  // Teardown: Limpa a rifa de teste
+  await fetch(`${SUPABASE_CONFIG.SUPABASE_URL}/rest/v1/raffle_numbers?raffle_id=eq.${testRaffleId}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_CONFIG.SUPABASE_ANON_KEY}` }
+  });
+  await fetch(`${SUPABASE_CONFIG.SUPABASE_URL}/rest/v1/raffles?id=eq.${testRaffleId}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_CONFIG.SUPABASE_ANON_KEY}` }
+  });
 
   console.log('\n============================================================');
   console.log(`  RESULTADO FINAL: ${passed} passaram, ${failed} falharam.`);

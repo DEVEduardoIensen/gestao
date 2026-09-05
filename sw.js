@@ -1,10 +1,17 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.8.4 — Cache do App Shell + W3C Background Sync API
- * Sincronização automática em segundo plano ao ligar o Wi-Fi sem precisar abrir o app.
+ * Versão 2.8.5 — Cache do App Shell + W3C Background Sync API
+ * Sincronização autônoma em segundo plano via Wi-Fi/dados móveis com blindagem de autenticação,
+ * sincronização completa de raffle_prizes, cotas e resolução de conflitos.
  */
 
-const CACHE_NAME = 'eldorado-pwa-v2.8.4';
+try {
+  importScripts('./normalize_raffle.js');
+} catch (e) {
+  console.warn('[Service Worker] normalize_raffle.js carregado inline/fallback');
+}
+
+const CACHE_NAME = 'eldorado-pwa-v2.8.5';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
@@ -16,6 +23,7 @@ const APP_SHELL_ASSETS = [
   './index.html',
   './styles.css',
   './lib/supabase.js',
+  './normalize_raffle.js',
   './app.js',
   './db_dexie.js',
   './sync_engine.js',
@@ -62,7 +70,6 @@ self.addEventListener('activate', (event) => {
     }).then(() => {
       return self.clients.claim();
     }).then(() => {
-      // Notifica todas as janelas/PWA abertas de que a nova versão assumiu o controle
       return self.clients.matchAll({ type: 'window' }).then((clients) => {
         clients.forEach((client) => {
           client.postMessage({ type: 'SW_ACTIVATED', version: CACHE_NAME });
@@ -73,7 +80,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // Fetch Interceptor:
-// - Stale-While-Revalidate ultrarrápido para código da aplicação (abertura em ~5ms + update em background)
+// - Stale-While-Revalidate para código da aplicação
 // - Cache-First para imagens e ícones estáticos
 // - Bypass total para APIs do Supabase e chamadas REST
 self.addEventListener('fetch', (event) => {
@@ -96,7 +103,6 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/' ||
     url.pathname === '';
 
-  // Stale-While-Revalidate ultrarrápido para código da aplicação (abertura em ~5ms + update em background)
   if (isCoreAsset) {
     event.respondWith(
       caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
@@ -112,14 +118,12 @@ self.addEventListener('fetch', (event) => {
           }
         });
 
-        // Se estiver em cache, entrega imediatamente sem esperar a rede
         return cachedResponse || fetchPromise;
       })
     );
     return;
   }
 
-  // Cache-First com atualização em segundo plano para imagens e assets estáticos
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
@@ -157,7 +161,7 @@ self.addEventListener('online', () => {
 });
 
 /**
- * Abre o IndexedDB local e despacha diretamente a fila Outbox para o Supabase
+ * Abre o IndexedDB local e despacha a fila Outbox para o Supabase
  */
 async function processBackgroundOutboxSync() {
   console.log('[Service Worker] Executando sincronização de segundo plano via Wi-Fi...');
@@ -175,33 +179,50 @@ async function processBackgroundOutboxSync() {
     let hadNetworkError = false;
 
     for (const op of pendingOps) {
+      if (op.status === 'conflict') {
+        continue;
+      }
+
+      // Backoff exponencial para retentativas de falha
+      if (op.retryCount > 0 && op.lastAttempt) {
+        const delay = Math.min(1000 * Math.pow(2, Math.min(op.retryCount, 6)), 60000);
+        if (Date.now() - op.lastAttempt < delay) {
+          continue;
+        }
+      }
+
       try {
+        await updateOpStatusInDB(db, op.id, 'syncing');
+        op.lastAttempt = Date.now();
+
         const success = await dispatchOpToSupabase(op, db);
-        if (success) {
+        if (success === true) {
           await removeOpFromDB(db, op.id);
           processedCount++;
         }
       } catch (err) {
-        console.warn(`[Service Worker] Erro ao sincronizar op ${op.id}:`, err);
+        console.warn(`[Service Worker] Erro ao sincronizar op ${op.id} (${op.type}):`, err);
         hadNetworkError = true;
+        await updateOpStatusInDB(db, op.id, 'failed', err.message || 'Erro de rede em background');
       }
     }
 
     console.log(`[Service Worker] Concluídas ${processedCount} operações com sucesso em background.`);
 
-    // Notifica clientes abertos via BroadcastChannel ou PostMessage
-    const clients = await self.clients.matchAll({ type: 'window' });
-    clients.forEach((c) => {
-      c.postMessage({ type: 'BACKGROUND_SYNC_COMPLETE', processedCount });
-    });
+    if (processedCount > 0) {
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((c) => {
+        c.postMessage({ type: 'BACKGROUND_SYNC_COMPLETE', processedCount });
+      });
 
-    if (typeof BroadcastChannel !== 'undefined') {
-      const bc = new BroadcastChannel('eldorado-sync-channel');
-      bc.postMessage({ type: 'BACKGROUND_SYNC_COMPLETE', processedCount });
-      bc.close();
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('eldorado-sync-channel');
+        bc.postMessage({ type: 'BACKGROUND_SYNC_COMPLETE', processedCount });
+        bc.close();
+      }
     }
 
-    // Se houve erro de rede estrito sem processar nenhum item, lança erro para o navegador reagendar o sync
+    // Se houve falha de rede sem processar nenhum item, lança erro para o SO reagendar o sync
     if (hadNetworkError && processedCount === 0) {
       throw new Error('[Service Worker] Falha transitória de rede durante o background sync.');
     }
@@ -214,10 +235,10 @@ async function processBackgroundOutboxSync() {
 function openLocalIndexedDB() {
   return new Promise((resolve, reject) => {
     try {
-      const req = indexedDB.open('EldoradoPesca_v2');
+      const req = indexedDB.open('EldoradoPesca_v2', 3);
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('Falha ao abrir IndexedDB'));
-      req.onblocked = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('Falha ao abrir IndexedDB no Service Worker'));
+      req.onblocked = () => reject(new Error('IndexedDB bloqueado no Service Worker'));
     } catch (e) {
       reject(e);
     }
@@ -225,20 +246,26 @@ function openLocalIndexedDB() {
 }
 
 function getPendingOpsFromDB(db) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     try {
-      if (!db || !db.objectStoreNames || !db.objectStoreNames.contains('sync_queue')) return resolve([]);
+      if (!db || !db.objectStoreNames || !db.objectStoreNames.contains('sync_queue')) {
+        return reject(new Error('ObjectStore sync_queue inexistente no IndexedDB'));
+      }
       const tx = db.transaction('sync_queue', 'readonly');
       const store = tx.objectStore('sync_queue');
       const req = store.getAll();
       req.onsuccess = () => {
         const all = req.result || [];
-        const pending = all.filter(op => op.status === 'pending' || op.status === 'failed' || op.status === 'syncing');
+        const now = Date.now();
+        const pending = all.filter(op => {
+          const isAbandonedSyncing = (op.status === 'syncing' && (!op.lastAttempt || (now - op.lastAttempt > 25000)));
+          return op.status === 'pending' || op.status === 'failed' || isAbandonedSyncing;
+        }).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         resolve(pending);
       };
-      req.onerror = () => resolve([]);
+      req.onerror = () => reject(req.error || new Error('Erro ao ler sync_queue'));
     } catch (e) {
-      resolve([]);
+      reject(e);
     }
   });
 }
@@ -255,6 +282,7 @@ function updateOpStatusInDB(db, opId, status, error = null) {
         if (op) {
           op.status = status;
           if (error !== undefined) op.error = error;
+          if (status === 'syncing') op.retryCount = (op.retryCount || 0) + 1;
           store.put(op);
         }
         resolve(true);
@@ -267,15 +295,15 @@ function updateOpStatusInDB(db, opId, status, error = null) {
 }
 
 function removeOpFromDB(db, opId) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     try {
       const tx = db.transaction('sync_queue', 'readwrite');
       const store = tx.objectStore('sync_queue');
       const req = store.delete(opId);
       req.onsuccess = () => resolve(true);
-      req.onerror = () => resolve(false);
+      req.onerror = () => reject(req.error || new Error('Falha ao remover operação'));
     } catch (e) {
-      resolve(false);
+      reject(e);
     }
   });
 }
@@ -284,26 +312,49 @@ function isValidJwt(token) {
   return typeof token === 'string' && token.trim().split('.').length === 3;
 }
 
-async function getAuthTokenFromDB(db, op) {
-  if (op && isValidJwt(op.authToken)) return op.authToken.trim();
+async function getAuthSessionFromDB(db, orgId) {
+  if (!db || !orgId) return null;
   return new Promise((resolve) => {
     try {
-      if (!db || !db.objectStoreNames || !db.objectStoreNames.contains('settings')) return resolve(null);
+      if (!db.objectStoreNames || !db.objectStoreNames.contains('settings')) return resolve(null);
       const tx = db.transaction('settings', 'readonly');
       const store = tx.objectStore('settings');
-      const orgId = op?.orgId || '00000000-0000-0000-0000-000000000001';
       const req = store.get([orgId, '_auth_session']);
       req.onsuccess = () => {
         const item = req.result;
-        if (item && isValidJwt(item.access_token)) {
-          resolve(item.access_token.trim());
-        } else {
-          resolve(null);
-        }
+        resolve(item || null);
       };
       req.onerror = () => resolve(null);
     } catch (e) {
       resolve(null);
+    }
+  });
+}
+
+async function getAuthTokenFromDB(db, orgId) {
+  const session = await getAuthSessionFromDB(db, orgId);
+  return session ? (session.access_token || session.value || null) : null;
+}
+
+async function persistRefreshedTokensInDB(db, orgId, accessToken, refreshToken, expiresAt = null) {
+  if (!db || !orgId || !accessToken) return;
+  return new Promise((resolve) => {
+    try {
+      if (!db.objectStoreNames.contains('settings')) return resolve(false);
+      const tx = db.transaction('settings', 'readwrite');
+      const store = tx.objectStore('settings');
+      store.put({
+        organization_id: orgId,
+        key: '_auth_session',
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: expiresAt,
+        timestamp: Date.now()
+      });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch (e) {
+      resolve(false);
     }
   });
 }
@@ -321,7 +372,11 @@ async function refreshSupabaseTokenInSW(refreshToken) {
     });
     if (res.ok) {
       const data = await res.json();
-      return data.access_token || null;
+      return {
+        access_token: data.access_token || null,
+        refresh_token: data.refresh_token || null,
+        expires_at: data.expires_at || null
+      };
     }
   } catch (e) {
     console.warn('[Service Worker] Falha ao renovar token:', e);
@@ -329,19 +384,43 @@ async function refreshSupabaseTokenInSW(refreshToken) {
   return null;
 }
 
-// Wrapper seguro para chamadas REST/RPC no Supabase com resiliência de autenticação e fallback automático
+// Wrapper seguro para chamadas REST/RPC no Supabase com resiliência de autenticação e persistência de rotação
 async function swSupabaseFetch(url, options = {}, op = null, db = null) {
+  const orgId = op?.orgId;
+  if (!orgId) {
+    throw new Error('Impossível realizar requisição: organization_id ausente.');
+  }
+
   let token = (op && isValidJwt(op.authToken)) ? op.authToken.trim() : null;
+  let refreshToken = op?.refreshToken || null;
+
   if (!token && db) {
-    const dbToken = await getAuthTokenFromDB(db, op);
-    if (isValidJwt(dbToken)) {
-      token = dbToken;
+    const sessionObj = await getAuthSessionFromDB(db, orgId);
+    if (sessionObj && isValidJwt(sessionObj.access_token)) {
+      token = sessionObj.access_token.trim();
+      refreshToken = refreshToken || sessionObj.refresh_token;
     }
   }
 
-  // Fallback seguro: se não possuir token JWT autêntico, utiliza a chave anon pública do Supabase
+  // Se não possuir JWT mas tiver refreshToken, tenta renovação prévia
+  if (!token && refreshToken) {
+    const refreshData = await refreshSupabaseTokenInSW(refreshToken);
+    if (refreshData && isValidJwt(refreshData.access_token)) {
+      token = refreshData.access_token.trim();
+      refreshToken = refreshData.refresh_token || refreshToken;
+      if (op) {
+        op.authToken = token;
+        op.refreshToken = refreshToken;
+      }
+      if (db) {
+        await persistRefreshedTokensInDB(db, orgId, token, refreshToken, refreshData.expires_at);
+      }
+    }
+  }
+
+  // Se ainda assim não houver token autenticado, NUNCA usa SUPABASE_KEY anon fingindo ser usuário!
   if (!token) {
-    token = SUPABASE_KEY;
+    throw new Error('AUTH_REQUIRED: Operação offline aguardando login válido do usuário na organização.');
   }
 
   const baseHeaders = {
@@ -356,27 +435,37 @@ async function swSupabaseFetch(url, options = {}, op = null, db = null) {
     headers: baseHeaders
   });
 
-  // Se receber 401 e tiver refresh_token, tenta renovação
-  if (res.status === 401 && op && op.refreshToken) {
-    const refreshed = await refreshSupabaseTokenInSW(op.refreshToken);
-    if (refreshed && isValidJwt(refreshed)) {
-      baseHeaders['Authorization'] = `Bearer ${refreshed}`;
+  // Se receber 401 e tiver refresh_token, renova o token, persiste e retenta
+  if (res.status === 401 && refreshToken) {
+    console.log('[Service Worker] 401 recebido do Supabase. Renovando token via refresh_token...');
+    const refreshData = await refreshSupabaseTokenInSW(refreshToken);
+    if (refreshData && isValidJwt(refreshData.access_token)) {
+      token = refreshData.access_token.trim();
+      refreshToken = refreshData.refresh_token || refreshToken;
+      if (op) {
+        op.authToken = token;
+        op.refreshToken = refreshToken;
+      }
+      if (db) {
+        await persistRefreshedTokensInDB(db, orgId, token, refreshToken, refreshData.expires_at);
+      }
+      baseHeaders['Authorization'] = `Bearer ${token}`;
       res = await fetch(url, { ...options, headers: baseHeaders });
     }
   }
 
-  // Se persistir 401 e o token não foi a chave pública, executa fallback automático para SUPABASE_KEY
-  if (res.status === 401 && token !== SUPABASE_KEY) {
-    console.warn('[Service Worker] 401 com token de usuário. Executando fallback automático com SUPABASE_KEY...');
-    baseHeaders['Authorization'] = `Bearer ${SUPABASE_KEY}`;
-    res = await fetch(url, { ...options, headers: baseHeaders });
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`AUTH_ERROR_${res.status}: Permissão negada na nuvem. Sessão expirada ou sem acesso.`);
   }
 
   return res;
 }
 
 async function dispatchOpToSupabase(op, db) {
-  const orgId = op.orgId || '00000000-0000-0000-0000-000000000001';
+  const orgId = op.orgId;
+  if (!orgId) {
+    throw new Error(`[Service Worker] Operação ${op.id} bloqueada: sem organization_id.`);
+  }
 
   switch (op.type) {
     case 'SELL_NUMBERS': {
@@ -397,20 +486,19 @@ async function dispatchOpToSupabase(op, db) {
       }, op, db);
 
       if (!res.ok) {
-        console.warn('[Service Worker] Erro HTTP na RPC sell_raffle_numbers_atomic:', res.status);
-        return false;
+        throw new Error(`HTTP ${res.status} na RPC sell_raffle_numbers_atomic`);
       }
 
       const json = await res.json().catch(() => null);
       if (json && json.conflict) {
         console.warn('[Service Worker] Conflito detectado na RPC sell_raffle_numbers_atomic:', json);
         await updateOpStatusInDB(db, op.id, 'conflict', json.message || 'Conflito de cota detectado no servidor');
-        return true; // Considera despachado do outbox ativo para não travar outras operações
+        // Mantém na Outbox como conflito aguardando resolução humana
+        return false;
       }
 
       if (json && json.success === false) {
-        console.warn('[Service Worker] RPC retornou falha:', json);
-        return false;
+        throw new Error(json.error || json.message || 'RPC retornou falha');
       }
 
       return true;
@@ -434,7 +522,100 @@ async function dispatchOpToSupabase(op, db) {
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(rows)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar cotas em lote`);
+      return true;
+    }
+
+    case 'CREATE_RAFFLE':
+    case 'UPDATE_RAFFLE': {
+      const r = (typeof normalizeRaffle === 'function') ? normalizeRaffle(op.payload) : op.payload;
+      const row = {
+        id: r.id,
+        organization_id: orgId,
+        number: String(r.number || ''),
+        title: r.title,
+        subtitle: r.subtitle || '',
+        price_per_number: parseFloat(r.pricePerNumber) || 0,
+        total_numbers: parseInt(r.totalNumbers, 10) || 60,
+        reservation_timeout_hours: parseInt(r.reservationTimeoutHours, 10) || 24,
+        pix_key: r.pixKey || '',
+        pix_owner: r.pixOwner || '',
+        shipping_note: r.shippingNote || '',
+        live_draw_note: r.liveDrawNote || '',
+        private_contact: r.privateContact || '',
+        rules: r.rules || '',
+        status: r.status || 'active'
+      };
+
+      // 1. Upsert na tabela raffles
+      const resRaffle = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffles?on_conflict=organization_id,id`, {
+        method: 'POST',
+        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(row)
+      }, op, db);
+      if (!resRaffle.ok) throw new Error(`HTTP ${resRaffle.status} ao salvar dados da rifa`);
+
+      // 2. Sincronização estrita de raffle_prizes
+      if (Array.isArray(r.prizes)) {
+        if (r.prizes.length > 0) {
+          const prizeRecords = r.prizes.map((p, idx) => ({
+            organization_id: orgId,
+            raffle_id: r.id,
+            position: p.position || (idx + 1),
+            description: p.description || `${idx + 1}º Prêmio`,
+            winner_number: p.winnerNumber || null,
+            winner_name: p.winnerName || ''
+          }));
+          const resPrizes = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_prizes?on_conflict=organization_id,raffle_id,position`, {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify(prizeRecords)
+          }, op, db);
+          if (!resPrizes.ok) throw new Error(`HTTP ${resPrizes.status} ao sincronizar prêmios da rifa`);
+
+          // Remove prêmios obsoletos
+          const keepPositions = r.prizes.map((p, idx) => p.position || (idx + 1));
+          const resDelObsolete = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_prizes?organization_id=eq.${orgId}&raffle_id=eq.${encodeURIComponent(r.id)}&position=not.in.(${keepPositions.join(',')})`, {
+            method: 'DELETE'
+          }, op, db);
+          if (!resDelObsolete.ok) throw new Error(`HTTP ${resDelObsolete.status} ao remover prêmios obsoletos da rifa`);
+        } else {
+          // Rifa sem prêmios: remove todos os prêmios da rifa no Supabase
+          const resDelAll = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_prizes?organization_id=eq.${orgId}&raffle_id=eq.${encodeURIComponent(r.id)}`, {
+            method: 'DELETE'
+          }, op, db);
+          if (!resDelAll.ok) throw new Error(`HTTP ${resDelAll.status} ao limpar prêmios da rifa`);
+        }
+      }
+
+      // 3. Persiste cotas 1 a N se fornecidas
+      if (Array.isArray(r.numbers) && r.numbers.length > 0) {
+        const numbersRows = r.numbers.map(n => ({
+          organization_id: orgId,
+          raffle_id: r.id,
+          num: parseInt(n.num, 10) || n.num,
+          name: (n.status === 'available') ? '' : (n.name || ''),
+          status: n.status || 'available',
+          reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
+          paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
+        }));
+        const resNumbers = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_numbers?on_conflict=organization_id,raffle_id,num`, {
+          method: 'POST',
+          headers: { 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(numbersRows)
+        }, op, db);
+        if (!resNumbers.ok) throw new Error(`HTTP ${resNumbers.status} ao sincronizar cotas da rifa`);
+      }
+
+      return true;
+    }
+
+    case 'DELETE_RAFFLE': {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffles?organization_id=eq.${orgId}&id=eq.${encodeURIComponent(op.payload.id)}`, {
+        method: 'DELETE'
+      }, op, db);
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao excluir rifa`);
+      return true;
     }
 
     case 'CREATE_VALE':
@@ -459,19 +640,21 @@ async function dispatchOpToSupabase(op, db) {
         exchange_notes: v.exchangeNotes,
         exchanged_at: v.exchangedAt
       };
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vales_prizes?on_conflict=id`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vales_prizes?on_conflict=organization_id,id`, {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(row)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar vale`);
+      return true;
     }
 
     case 'DELETE_VALE': {
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vales_prizes?id=eq.${encodeURIComponent(op.payload.id)}`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vales_prizes?organization_id=eq.${orgId}&id=eq.${encodeURIComponent(op.payload.id)}`, {
         method: 'DELETE'
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao excluir vale`);
+      return true;
     }
 
     case 'ADD_VALE_TRANSACTION': {
@@ -486,12 +669,13 @@ async function dispatchOpToSupabase(op, db) {
         remaining_balance: tx.remainingBalance,
         registered_by: tx.registeredBy
       };
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vale_transactions?on_conflict=id`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vale_transactions?on_conflict=organization_id,id`, {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(row)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar transação de vale`);
+      return true;
     }
 
     case 'BOOK_FISHING':
@@ -526,19 +710,21 @@ async function dispatchOpToSupabase(op, db) {
         guide_name: b.guideName,
         status: b.status
       };
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/fishing_bookings?on_conflict=id`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/fishing_bookings?on_conflict=organization_id,id`, {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(row)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar agendamento de pesca`);
+      return true;
     }
 
     case 'DELETE_FISHING_BOOKING': {
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/fishing_bookings?id=eq.${encodeURIComponent(op.payload.id)}`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/fishing_bookings?organization_id=eq.${orgId}&id=eq.${encodeURIComponent(op.payload.id)}`, {
         method: 'DELETE'
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao excluir agendamento de pesca`);
+      return true;
     }
 
     case 'BOOK_RANCHO':
@@ -561,19 +747,21 @@ async function dispatchOpToSupabase(op, db) {
         notes: r.notes,
         status: r.status
       };
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rancho_bookings?on_conflict=id`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rancho_bookings?on_conflict=organization_id,id`, {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(row)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar locação do rancho`);
+      return true;
     }
 
     case 'DELETE_RANCHO_BOOKING': {
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rancho_bookings?id=eq.${encodeURIComponent(op.payload.id)}`, {
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rancho_bookings?organization_id=eq.${orgId}&id=eq.${encodeURIComponent(op.payload.id)}`, {
         method: 'DELETE'
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao excluir locação do rancho`);
+      return true;
     }
 
     case 'SET_EDUARDO_DAY': {
@@ -582,7 +770,8 @@ async function dispatchOpToSupabase(op, db) {
         const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/eduardo_work_days?organization_id=eq.${orgId}&date=eq.${encodeURIComponent(d.date)}`, {
           method: 'DELETE'
         }, op, db);
-        return res.ok;
+        if (!res.ok) throw new Error(`HTTP ${res.status} ao remover ponto do Eduardo`);
+        return true;
       }
       const row = {
         organization_id: orgId,
@@ -597,49 +786,16 @@ async function dispatchOpToSupabase(op, db) {
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(row)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar ponto do Eduardo`);
+      return true;
     }
 
     case 'DELETE_EDUARDO_DAY': {
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/eduardo_work_days?organization_id=eq.${orgId}&date=eq.${encodeURIComponent(op.payload.date)}`, {
         method: 'DELETE'
       }, op, db);
-      return res.ok;
-    }
-
-    case 'CREATE_RAFFLE':
-    case 'UPDATE_RAFFLE': {
-      const r = op.payload;
-      const row = {
-        id: r.id,
-        organization_id: orgId,
-        number: String(r.number || ''),
-        title: r.title,
-        subtitle: r.subtitle || '',
-        price_per_number: parseFloat(r.pricePerNumber) || 0,
-        total_numbers: parseInt(r.totalNumbers, 10) || 60,
-        reservation_timeout_hours: parseInt(r.reservationTimeoutHours, 10) || 24,
-        pix_key: r.pixKey || '',
-        pix_owner: r.pixOwner || '',
-        shipping_note: r.shippingNote || '',
-        live_draw_note: r.liveDrawNote || '',
-        private_contact: r.privateContact || '',
-        rules: r.rules || '',
-        status: r.status || 'active'
-      };
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffles?on_conflict=id`, {
-        method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
-        body: JSON.stringify(row)
-      }, op, db);
-      return res.ok;
-    }
-
-    case 'DELETE_RAFFLE': {
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${encodeURIComponent(op.payload.id)}`, {
-        method: 'DELETE'
-      }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao excluir ponto do Eduardo`);
+      return true;
     }
 
     case 'UPDATE_SETTINGS': {
@@ -654,21 +810,22 @@ async function dispatchOpToSupabase(op, db) {
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(row)
       }, op, db);
-      return res.ok;
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao atualizar settings`);
+      return true;
     }
 
     default:
       console.warn('[Service Worker] Operação desconhecida:', op.type);
-      return false;
+      throw new Error(`Operação não suportada pelo Service Worker: ${op.type}`);
   }
 }
 
-// Mensagens vindas da aplicação (ex: skipWaiting para aplicar atualização imediata)
+// Mensagens vindas da aplicação
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
   if (event.data && event.data.type === 'TRIGGER_SYNC') {
-    processBackgroundOutboxSync();
+    processBackgroundOutboxSync().catch(() => {});
   }
 });

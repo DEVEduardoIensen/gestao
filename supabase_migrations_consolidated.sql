@@ -564,10 +564,13 @@ BEGIN
   BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.raffles;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.raffle_numbers;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.raffle_prizes;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.vales_prizes;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.vale_transactions;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.fishing_bookings;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.rancho_bookings;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.eduardo_work_days;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
   EXCEPTION WHEN OTHERS THEN
     -- Publicação já continha as tabelas
     NULL;

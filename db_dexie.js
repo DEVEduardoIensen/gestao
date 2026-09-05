@@ -253,10 +253,10 @@ class LocalDatabase {
       tableName: op.tableName,
       recordId: op.recordId,
       payload: op.payload,
-      timestamp: Date.now(),
-      retryCount: 0,
-      status: 'pending', // 'pending' | 'syncing' | 'conflict' | 'failed'
-      error: null
+      timestamp: op.timestamp || Date.now(),
+      retryCount: op.retryCount || 0,
+      status: op.status || 'pending', // 'pending' | 'syncing' | 'conflict' | 'failed'
+      error: op.error || null
     };
 
     await this.put('sync_queue', operation);
@@ -275,46 +275,69 @@ class LocalDatabase {
           reg.sync.register('sync-outbox').catch(() => {});
         }
         if ('periodicSync' in reg) {
-          reg.periodicSync.register('eldorado-periodic-sync', { minInterval: 15 * 60 * 1000 }).catch(() => {});
+          reg.periodicSync.register('eldorado-periodic-sync', {
+            minInterval: 15 * 60 * 1000
+          }).catch(() => {});
         }
       };
-      navigator.serviceWorker.ready.then(armSync).catch(() => {});
-      if (typeof navigator.serviceWorker.getRegistration === 'function') {
+
+      if (navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(armSync).catch(() => {});
+      } else if (navigator.serviceWorker.getRegistration) {
         navigator.serviceWorker.getRegistration().then(armSync).catch(() => {});
-      }
-      if (navigator.serviceWorker.controller) {
-        try {
-          navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' });
-        } catch (e) {}
       }
     }
 
     return operation;
   }
 
-  async getPendingOperations(filterOrgId = null) {
+  // Busca operações pendentes da fila Outbox
+  async getPendingOperations(orgId = null) {
     const all = await this.getAll('sync_queue');
-    const orgId = filterOrgId || (window.authManager ? window.authManager.getOrganizationId() : null);
-    
+    const targetOrg = orgId || (typeof window !== 'undefined' && window.authManager ? window.authManager.getOrganizationId() : null);
+    const now = Date.now();
     return all
       .filter(op => {
-        const matchesOrg = !orgId || op.orgId === orgId;
-        const matchesStatus = op.status === 'pending' || op.status === 'conflict' || op.status === 'failed';
+        const matchesOrg = !targetOrg || op.orgId === targetOrg;
+        // Auto-recupera operações 'syncing' abandonadas (ex: app fechado pelo SO ou crash há mais de 25s)
+        const isAbandonedSyncing = (op.status === 'syncing' && (!op.lastAttempt || (now - op.lastAttempt > 25000)));
+        const matchesStatus = op.status === 'pending' || op.status === 'conflict' || op.status === 'failed' || isAbandonedSyncing;
         return matchesOrg && matchesStatus;
       })
       .sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  async recoverAbandonedOperations(timeoutMs = 25000) {
+    let recoveredCount = 0;
+    try {
+      const all = await this.getAll('sync_queue');
+      const now = Date.now();
+      for (const op of all) {
+        if (op.status === 'syncing' && (!op.lastAttempt || (now - op.lastAttempt > timeoutMs))) {
+          op.status = 'pending';
+          await this.put('sync_queue', op);
+          recoveredCount++;
+        }
+      }
+    } catch (e) {
+      console.warn('[LocalDB] Erro ao recuperar operações syncing:', e);
+    }
+    return recoveredCount;
   }
 
   async removeOperation(opId) {
     return this.delete('sync_queue', opId);
   }
 
-  async updateOperationStatus(opId, status, error = null) {
+  async updateOperationStatus(opId, status, error = null, extra = {}) {
     const op = await this.get('sync_queue', opId);
     if (op) {
       op.status = status;
       if (error !== undefined) op.error = error;
       if (status === 'syncing') op.retryCount = (op.retryCount || 0) + 1;
+      if (extra && typeof extra === 'object') {
+        Object.assign(op, extra);
+      }
       await this.put('sync_queue', op);
     }
   }
@@ -349,12 +372,19 @@ class LocalDatabase {
     const orgRancho = ranchoBookings.filter(r => r.organization_id === orgId);
     const orgEduardo = eduardoWorkDays.filter(d => d.organization_id === orgId);
 
+    const normalizedRaffles = orgRaffles.map(r => {
+      if (typeof normalizeRaffle === 'function') {
+        return normalizeRaffle(r);
+      }
+      return r;
+    });
+
     const settings = {};
     orgSettingsList.forEach(s => { settings[s.key] = s.value; });
 
     return {
       settings: Object.keys(settings).length > 0 ? settings : null,
-      raffles: orgRaffles.length > 0 ? orgRaffles : null,
+      raffles: normalizedRaffles.length > 0 ? normalizedRaffles : null,
       valesAndPrizes: orgVales.length > 0 ? orgVales : null,
       fishingBookings: orgFishing.length > 0 ? orgFishing : null,
       ranchoBookings: orgRancho.length > 0 ? orgRancho : null,
@@ -378,7 +408,11 @@ class LocalDatabase {
 
     // Raffles
     if (Array.isArray(appData.raffles) && appData.raffles.length > 0) {
-      await this.putBatch('raffles', appData.raffles.map(r => ({ ...r, organization_id: orgId })));
+      const normalizedRaffles = appData.raffles.map(r => {
+        const norm = typeof normalizeRaffle === 'function' ? normalizeRaffle(r) : r;
+        return { ...norm, organization_id: orgId };
+      });
+      await this.putBatch('raffles', normalizedRaffles);
     }
 
     // Vales & Prêmios

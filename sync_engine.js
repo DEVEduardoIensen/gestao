@@ -92,8 +92,16 @@ class SyncEngine {
       });
     }
 
+    // Auto-recuperação inicial de operações syncing abandonadas
+    if (typeof window !== 'undefined' && window.localDB && typeof window.localDB.recoverAbandonedOperations === 'function') {
+      window.localDB.recoverAbandonedOperations().catch(() => {});
+    }
+
     // Auto-recuperação e processamento periódico a cada 5 segundos
     this.syncInterval = setInterval(() => {
+      if (typeof window !== 'undefined' && window.localDB && typeof window.localDB.recoverAbandonedOperations === 'function') {
+        window.localDB.recoverAbandonedOperations().catch(() => {});
+      }
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isOnline) {
         this.isOnline = true;
         this.initRealtimeSubscription();
@@ -113,10 +121,17 @@ class SyncEngine {
   }
 
   initRealtimeSubscription() {
-    if (!window.supabaseClient || !this.isOnline || this.realtimeChannel) return;
+    if (!window.supabaseClient || !this.isOnline) return;
+
+    if (this.realtimeChannel) {
+      try {
+        window.supabaseClient.removeChannel(this.realtimeChannel);
+      } catch (e) {}
+      this.realtimeChannel = null;
+    }
 
     try {
-      this.realtimeChannel = window.supabaseClient.channel('eldorado-sync-channel')
+      this.realtimeChannel = window.supabaseClient.channel('eldorado-sync-channel-' + Date.now())
         .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
           console.log('[Realtime] Mudança remota recebida do Supabase:', payload.table, payload.eventType);
           if (this.isSyncing) return;
@@ -130,12 +145,35 @@ class SyncEngine {
     }
   }
 
-  handleRealtimePayload(payload) {
+  async handleRealtimePayload(payload) {
     const { table, eventType, new: newRec } = payload;
     if (!window.appData) return;
 
     // Se for atualização pontual de cota da rifa
     if (table === 'raffle_numbers' && newRec) {
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+      
+      // Protege contra sobrescrita de alterações locais pendentes na Outbox
+      if (window.localDB) {
+        try {
+          const pending = await window.localDB.getPendingOperations(orgId);
+          const cotaNum = parseInt(newRec.num, 10);
+          const isPending = pending.some(op => {
+            if (op.type === 'SELL_NUMBERS' && String(op.payload?.raffleId) === String(newRec.raffle_id)) {
+              return Array.isArray(op.payload?.numbers) && op.payload.numbers.includes(cotaNum);
+            }
+            if (op.type === 'BATCH_SET_NUMBERS' && String(op.payload?.raffleId) === String(newRec.raffle_id)) {
+              return Array.isArray(op.payload?.numbersList) && op.payload.numbersList.some(n => n.num === cotaNum);
+            }
+            return false;
+          });
+          if (isPending) {
+            console.log('[Realtime] Ignorando payload remoto para cota pendente na Outbox:', cotaNum);
+            return;
+          }
+        } catch (e) {}
+      }
+
       const raffle = (window.appData.raffles || []).find(r => String(r.id) === String(newRec.raffle_id));
       if (raffle && Array.isArray(raffle.numbers)) {
         const numItem = raffle.numbers.find(n => n.num === parseInt(newRec.num, 10));
@@ -162,8 +200,8 @@ class SyncEngine {
   scheduleDebouncedRemoteRefresh() {
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     this._refreshTimer = setTimeout(async () => {
-      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
-      if (!this.isOnline || this.isSyncing) return;
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+      if (!orgId || !this.isOnline || this.isSyncing) return;
       const remoteData = await this.fetchRemoteData(orgId);
       if (remoteData && typeof window.mergeRemoteData === 'function') {
         await window.mergeRemoteData(remoteData);
@@ -257,7 +295,7 @@ class SyncEngine {
           });
         }
 
-        return {
+        const rawRaffle = {
           id: r.id,
           number: r.number,
           title: r.title,
@@ -281,6 +319,8 @@ class SyncEngine {
           })),
           numbers: numbersArray
         };
+
+        return (typeof normalizeRaffle === 'function') ? normalizeRaffle(rawRaffle) : rawRaffle;
       });
 
       // Vales & Prêmios com suas transações
@@ -394,8 +434,9 @@ class SyncEngine {
       this.isOnline = true;
     }
 
-    // Se já estiver em processamento, retorna a promessa ativa para os chamadores aguardarem
+    // Se já estiver em processamento, marca necessidade de novo ciclo e aguarda promessa ativa
     if (this.isSyncing) {
+      this._needsRecheck = true;
       return this._activeQueuePromise || Promise.resolve();
     }
 
@@ -405,7 +446,12 @@ class SyncEngine {
 
     this._activeQueuePromise = (async () => {
       this.isSyncing = true;
-      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+
+      if (!orgId) {
+        this.isSyncing = false;
+        return;
+      }
 
       try {
         const pendingOps = await window.localDB.getPendingOperations(orgId);
@@ -442,7 +488,7 @@ class SyncEngine {
               // Remove de eventuais conflitos resolvidos
               this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
             } else if (result && result.conflict) {
-              // Conflito registrado — mantem na fila para decisão do operador
+              // Conflito registrado — mantém na fila para decisão do operador
               console.warn('[SyncEngine] Conflito retornado pelo servidor:', result);
             }
           } catch (err) {
@@ -466,6 +512,10 @@ class SyncEngine {
       } finally {
         this.isSyncing = false;
         this._activeQueuePromise = null;
+        if (this._needsRecheck) {
+          this._needsRecheck = false;
+          setTimeout(() => this.processQueue(), 250);
+        }
       }
     })();
 
@@ -473,7 +523,10 @@ class SyncEngine {
   }
 
   async executeOperation(op) {
-    const orgId = op.orgId || (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+    const orgId = op.orgId || (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+    if (!orgId) {
+      throw new Error(`[SyncEngine] Operação ${op.id} (${op.type}) bloqueada: ausência de organization_id.`);
+    }
 
     switch (op.type) {
       // 1. Venda de Cotas (Atômica Anti-Conflito com Suporte a Override Administrativo)
@@ -528,7 +581,11 @@ class SyncEngine {
           return { success: false, conflict: true, data };
         }
 
-        return data?.success || true;
+        if (data && data.success === false) {
+          throw new Error(data.error || data.message || 'Falha ao processar venda de cotas na RPC');
+        }
+
+        return true;
       }
 
       // 2. Venda / Atualização de Cotas em Lote (ex: Importação do WhatsApp)
@@ -557,7 +614,7 @@ class SyncEngine {
       // 3. Criar ou Atualizar Rifa
       case 'CREATE_RAFFLE':
       case 'UPDATE_RAFFLE': {
-        const r = op.payload;
+        const r = typeof normalizeRaffle === 'function' ? normalizeRaffle(op.payload) : op.payload;
         const { error: rError } = await window.supabaseClient.from('raffles').upsert({
           organization_id: orgId,
           id: r.id,
@@ -577,19 +634,40 @@ class SyncEngine {
         }, { onConflict: 'organization_id,id' });
         if (rError) throw rError;
 
-        if (r.prizes && r.prizes.length > 0) {
-          const prizeRecords = r.prizes.map((p, idx) => ({
-            organization_id: orgId,
-            raffle_id: r.id,
-            position: p.position || (idx + 1),
-            description: p.description || `${idx + 1}º Prêmio`,
-            winner_number: p.winnerNumber || null,
-            winner_name: p.winnerName || ''
-          }));
-          const { error: pError } = await window.supabaseClient
-            .from('raffle_prizes')
-            .upsert(prizeRecords, { onConflict: 'organization_id,raffle_id,position' });
-          if (pError) throw pError;
+        // Sincronização estrita e bidirecional de prêmios (raffle_prizes)
+        if (Array.isArray(r.prizes)) {
+          if (r.prizes.length > 0) {
+            const prizeRecords = r.prizes.map((p, idx) => ({
+              organization_id: orgId,
+              raffle_id: r.id,
+              position: p.position || (idx + 1),
+              description: p.description || `${idx + 1}º Prêmio`,
+              winner_number: p.winnerNumber || null,
+              winner_name: p.winnerName || ''
+            }));
+            const { error: pError } = await window.supabaseClient
+              .from('raffle_prizes')
+              .upsert(prizeRecords, { onConflict: 'organization_id,raffle_id,position' });
+            if (pError) throw pError;
+
+            // Remove prêmios obsoletos que foram excluídos na edição (ex: rifa passou de 3 para 2 prêmios)
+            const keepPositions = r.prizes.map((p, idx) => p.position || (idx + 1));
+            const { error: dError } = await window.supabaseClient
+              .from('raffle_prizes')
+              .delete()
+              .eq('organization_id', orgId)
+              .eq('raffle_id', r.id)
+              .not('position', 'in', `(${keepPositions.join(',')})`);
+            if (dError) throw dError;
+          } else {
+            // Rifa sem prêmios (ex: criada sem prêmio ou todos os prêmios foram removidos)
+            const { error: dError } = await window.supabaseClient
+              .from('raffle_prizes')
+              .delete()
+              .eq('organization_id', orgId)
+              .eq('raffle_id', r.id);
+            if (dError) throw dError;
+          }
         }
 
         // Persiste as cotas 1 a N na criação ou atualização
