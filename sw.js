@@ -1,6 +1,6 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.8.6 — Cache do App Shell + W3C Background Sync API
+ * Versão 2.8.7 — Cache do App Shell + W3C Background Sync API
  * Sincronização autônoma em segundo plano via Wi-Fi/dados móveis com blindagem de autenticação,
  * sincronização completa de raffle_prizes, cotas e resolução de conflitos.
  */
@@ -11,7 +11,7 @@ try {
   console.warn('[Service Worker] normalize_raffle.js carregado inline/fallback');
 }
 
-const CACHE_NAME = 'eldorado-pwa-v2.8.6';
+const CACHE_NAME = 'eldorado-pwa-v2.8.7';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
