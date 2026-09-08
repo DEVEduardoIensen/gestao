@@ -2679,6 +2679,9 @@ function renderValesView() {
           <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: var(--primary-gold); color: var(--primary-gold);" title="Escolheu Vale-Compras de ${formatCurrency(valeAmount)}">
             Vale (${formatCurrency(valeAmount)})
           </button>
+          <button class="btn btn-whatsapp btn-sm" onclick="generatePrizeWhatsAppMessage('${item.id}', 'choice')" title="Enviar mensagem de parabéns e perguntar se prefere Diária ou Vale">
+            WhatsApp
+          </button>
           <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
             Editar
           </button>
@@ -2688,11 +2691,14 @@ function renderValesView() {
         `;
       } else {
         actionsHtml = `
-          <button class="btn btn-gold btn-sm" onclick="choosePrizeOption('${item.id}', 'premio_entregue')" title="Ganhador retirou o produto físico na loja">
-            Entregar Prêmio
+          <button class="btn btn-gold btn-sm" onclick="choosePrizeOption('${item.id}', 'premio_fisico')" title="Ganhador optou pelo Prêmio Físico (ficará como Aguardando Retirada)">
+            Prêmio Físico
           </button>
           <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: #818cf8; color: #a5b4fc;" title="Escolheu ficar com o Vale-Compras de ${formatCurrency(valeAmount)}">
             Vale (${formatCurrency(valeAmount)})
+          </button>
+          <button class="btn btn-whatsapp btn-sm" onclick="generatePrizeWhatsAppMessage('${item.id}', 'choice')" title="Enviar mensagem de parabéns e perguntar se prefere o Prêmio Físico ou Vale">
+            WhatsApp
           </button>
           <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #8b5cf6; color: #c4b5fd;" title="Ganhador quer trocar por outro produto na loja">
             Troca
@@ -2713,6 +2719,9 @@ function renderValesView() {
         </button>
         <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Trocar por vale-compras de ${formatCurrency(valeAmount)}">
           Trocar p/ Vale (${formatCurrency(valeAmount)})
+        </button>
+        <button class="btn btn-whatsapp btn-sm" onclick="generatePrizeWhatsAppMessage('${item.id}', 'schedule')" title="Enviar mensagem para agendar a pescaria no WhatsApp">
+          WhatsApp
         </button>
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
@@ -2746,7 +2755,7 @@ function renderValesView() {
         `;
       }
       actionsHtml += `
-        <button class="btn btn-whatsapp btn-sm" onclick="generateValeWhatsAppReceipt('${item.id}')">
+        <button class="btn btn-whatsapp btn-sm" onclick="generateValeWhatsAppReceipt('${item.id}')" title="Enviar extrato de saldo pelo WhatsApp">
           WhatsApp
         </button>
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações e Saldo">
@@ -2768,8 +2777,11 @@ function renderValesView() {
         `;
       } else if (item.status === "pending_pickup") {
         actionsHtml = `
-          <button class="btn btn-gold btn-sm" onclick="markPrizeDelivered('${item.id}')">
+          <button class="btn btn-gold btn-sm" onclick="markPrizeDelivered('${item.id}')" title="Confirmar que o cliente retirou o prêmio">
             Entregue
+          </button>
+          <button class="btn btn-whatsapp btn-sm" onclick="generatePrizeWhatsAppMessage('${item.id}', 'pickup')" title="Enviar aviso para o ganhador vir retirar o prêmio físico na loja">
+            WhatsApp
           </button>
           <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #8b5cf6; color: #c4b5fd;">
             Troca
@@ -3324,6 +3336,81 @@ async function executeUndoExchange(prizeId) {
   showToast(`Troca desfeita! O prêmio de ${item.customerName} voltou para Aguardando Retirada.`, "success");
 }
 
+function generatePrizeWhatsAppMessage(itemId, msgType) {
+  const item = (appData.valesAndPrizes || []).find(v => v.id === itemId);
+  if (!item) return;
+
+  const winnerName = (item.customerName || "Ganhador(a)").trim();
+  const prizeDesc = item.description || "Prêmio da Ação";
+  const raffleTitle = item.raffleRef || "Ação Eldorado";
+  const valeAmount = item.initialAmount || item.currentBalance || 450.00;
+  const isFishingPrize = /diaria|diária|pesca|lago|rancho/i.test(prizeDesc);
+
+  let msg = "";
+
+  if (msgType === "choice") {
+    if (isFishingPrize) {
+      msg = `🎉 *PARABÉNS DA ELDORADO PESCA!* 🎣🏆\n\n` +
+        `Olá, *${winnerName}*! Tudo bem?\n\n` +
+        `Passando para te dar os parabéns! Você foi o ganhador na *${raffleTitle}*!\n` +
+        `🎁 *Sua premiação:* ${prizeDesc}\n\n` +
+        `Nesta ação você pode escolher entre:\n` +
+        `1️⃣ *Diária de Pesca Esportiva* no lago com guia profissional;\n` +
+        `OU\n` +
+        `2️⃣ *Vale-Compras de ${formatCurrency(valeAmount)}* em produtos na nossa loja!\n\n` +
+        `Por favor, nos responda aqui informando qual opção você prefere para agendarmos ou liberarmos seu crédito! 🤝\n\n` +
+        `📍 *Eldorado Pesca & Lake*\n` +
+        `📱 WhatsApp: 42 9 9916-2340`;
+    } else {
+      msg = `🎉 *PARABÉNS DA ELDORADO PESCA!* 🎣🏆\n\n` +
+        `Olá, *${winnerName}*! Tudo bem?\n\n` +
+        `Passando para te dar os parabéns! Você foi o ganhador na *${raffleTitle}*!\n` +
+        `🎁 *Sua premiação:* ${prizeDesc}\n\n` +
+        `Nesta ação você pode escolher entre:\n` +
+        `1️⃣ Retirar o *Prêmio Físico* aqui na nossa loja;\n` +
+        `OU\n` +
+        `2️⃣ Ficar com um *Vale-Compras de ${formatCurrency(valeAmount)}* para escolher produtos na Eldorado Pesca!\n\n` +
+        `Por favor, nos avise qual das opções você prefere para prepararmos tudo para você! 🤝\n\n` +
+        `📍 *Eldorado Pesca & Lake*\n` +
+        `📱 WhatsApp: 42 9 9916-2340`;
+    }
+  } else if (msgType === "pickup") {
+    msg = `🎣 *ELDORADO PESCA - SEU PRÊMIO ESTÁ PRONTO!* 📦🏆\n\n` +
+      `Olá, *${winnerName}*! Tudo bem?\n\n` +
+      `Confirmamos sua opção pelo prêmio físico da ação *${raffleTitle}*:\n` +
+      `🎁 *Produto:* ${prizeDesc}\n\n` +
+      `O seu produto já está separado e prontinho para retirada aqui na nossa loja! Pode vir buscar quando for melhor para você.\n\n` +
+      `📍 *Local:* Loja Eldorado Pesca & Lake\n` +
+      `🕒 *Horário:* Seg a Sex das 08h às 18h | Sáb das 08h às 12h\n` +
+      `📱 Dúvidas: 42 9 9916-2340\n\n` +
+      `Aguardamos você para te entregar em mãos! 🤝📸`;
+  } else if (msgType === "schedule") {
+    msg = `🎣 *ELDORADO LAKE - VAMOS AGENDAR SUA PESCARIA!* 🏆\n\n` +
+      `Olá, *${winnerName}*! Tudo bem?\n\n` +
+      `Vimos que você optou pela *Diária de Pesca* da ação *${raffleTitle}*!\n` +
+      `🎁 *Premiação:* ${prizeDesc}\n\n` +
+      `Vamos marcar o dia da sua pescaria? Nos informe quais datas ficam melhores para você, para consultarmos a agenda do guia e reservarmos o seu dia no lago!\n\n` +
+      `📍 *Eldorado Lake*\n` +
+      `📱 WhatsApp: 42 9 9916-2340`;
+  }
+
+  // Copia sempre para o clipboard
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).catch(() => {});
+  }
+
+  // Se tiver telefone do cliente, abre o WhatsApp diretamente
+  const rawPhone = (item.customerPhone || "").replace(/\D/g, "");
+  if (rawPhone) {
+    const fullPhone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    showToast("Mensagem aberta no WhatsApp e copiada!", "success");
+  } else {
+    showToast("Texto da mensagem copiado para a área de transferência!", "success");
+  }
+}
+
 function generateValeWhatsAppReceipt(valeId) {
   const item = appData.valesAndPrizes.find(v => v.id === valeId);
   if (!item) return;
@@ -3344,9 +3431,19 @@ function generateValeWhatsAppReceipt(valeId) {
 
   msg += `Qualquer dúvida estamos à disposição no WhatsApp 42 9 9916-2340!`;
 
-  navigator.clipboard.writeText(msg).then(() => {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).catch(() => {});
+  }
+
+  const rawPhone = (item.customerPhone || "").replace(/\D/g, "");
+  if (rawPhone) {
+    const fullPhone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    showToast("Extrato aberto no WhatsApp e copiado!", "success");
+  } else {
     showToast("Extrato copiado para o WhatsApp!", "success");
-  });
+  }
 }
 
 async function markPrizeDelivered(prizeId) {

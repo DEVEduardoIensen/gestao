@@ -167,8 +167,17 @@ self.addEventListener('online', () => {
  * Abre o IndexedDB local e despacha a fila Outbox para o Supabase
  */
 async function processBackgroundOutboxSync(isExplicitSyncEvent = true) {
-  console.log(`[Service Worker] Executando sincronização de segundo plano (isExplicitSyncEvent=${isExplicitSyncEvent})...`);
   try {
+    const clients = await self.clients.matchAll({ type: 'window' });
+    if (clients && clients.length > 0) {
+      console.log('[Service Worker] Janela ativa detectada. Delegando sincronização para o SyncEngine em primeiro plano.');
+      clients.forEach((c) => {
+        c.postMessage({ type: 'TRIGGER_SYNC' });
+      });
+      return;
+    }
+
+    console.log(`[Service Worker] Executando sincronização autônoma de segundo plano (isExplicitSyncEvent=${isExplicitSyncEvent})...`);
     const db = await openLocalIndexedDB();
     const pendingOps = await getPendingOpsFromDB(db);
 

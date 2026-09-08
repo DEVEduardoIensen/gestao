@@ -272,54 +272,25 @@ class LocalDatabase {
       }
     }
 
-    // Registra tag de Background Sync no Service Worker (Mobile PWA & Navegador) de forma aguardada
+    // Dispara registro de Background Sync no Service Worker de forma não-bloqueante (fire-and-forget)
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      try {
-        const regPromise = navigator.serviceWorker.ready || (navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration() : null);
-        const reg = await Promise.race([
-          regPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('SW ready timeout')), 2500))
-        ]).catch(err => {
-          console.log('[LocalDB] Service Worker pronto não respondeu a tempo:', err.message);
-          return null;
-        });
-
-        if (reg) {
-          if ('sync' in reg) {
-            try {
-              await reg.sync.register('eldorado-outbox-sync');
-              console.log('[LocalDB] Background Sync registrado com sucesso no SO: eldorado-outbox-sync');
-            } catch (err) {
-              console.warn('[LocalDB] Falha ao registrar tag eldorado-outbox-sync:', err);
+      Promise.resolve().then(async () => {
+        try {
+          const reg = await navigator.serviceWorker.ready.catch(() => null);
+          if (reg) {
+            if ('sync' in reg) {
+              reg.sync.register('eldorado-outbox-sync').catch(() => {});
             }
-            try {
-              await reg.sync.register('sync-outbox');
-            } catch (err) {
-              console.warn('[LocalDB] Falha ao registrar tag sync-outbox:', err);
-            }
-            try {
-              await reg.sync.register('sync');
-            } catch (err) {
-              console.warn('[LocalDB] Falha ao registrar tag sync:', err);
-            }
-          } else {
-            console.log('[LocalDB] Background Sync API (sync) não suportada pelo navegador atual.');
-          }
-
-          if ('periodicSync' in reg) {
-            try {
-              await reg.periodicSync.register('eldorado-periodic-sync', {
-                minInterval: 15 * 60 * 1000
-              });
-              console.log('[LocalDB] Periodic Background Sync registrado com sucesso no SO.');
-            } catch (pErr) {
-              console.log('[LocalDB] Periodic Background Sync indisponível ou negado:', pErr.message);
+            if ('periodicSync' in reg) {
+              try {
+                await reg.periodicSync.register('eldorado-periodic-sync', {
+                  minInterval: 15 * 60 * 1000
+                });
+              } catch (pErr) {}
             }
           }
-        }
-      } catch (swErr) {
-        console.warn('[LocalDB] Erro no registro de Background Sync do SO:', swErr);
-      }
+        } catch (e) {}
+      });
     }
 
     return operation;
