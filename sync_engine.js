@@ -99,6 +99,10 @@ class SyncEngine {
 
     // Processamento periódico gentil (heartbeat a cada 60s em vez de loop agressivo de 5s)
     this.syncInterval = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine && !this.isOnline) {
+        this.isOnline = true;
+        this.initRealtimeSubscription();
+      }
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         this.isOnline = true;
       }

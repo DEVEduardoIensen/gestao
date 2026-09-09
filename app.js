@@ -671,7 +671,7 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const activeCache = 'eldorado-pwa-v2.8.8';
+        const activeCache = 'eldorado-pwa-v2.8.9';
         await Promise.all(
           cacheNames.map(name => {
             if (name !== activeCache) {
@@ -681,7 +681,7 @@ window.forceCheckAppUpdate = async function() {
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.8.8 PRO)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.8.9 PRO)!', 'success');
     } else {
       window.location.reload();
     }

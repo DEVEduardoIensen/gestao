@@ -1,6 +1,6 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.8.8 — Cache do App Shell + W3C Background Sync API
+ * Versão 2.8.9 — Cache do App Shell + W3C Background Sync API
  * Sincronização autônoma em segundo plano via Wi-Fi/dados móveis com blindagem de autenticação,
  * sincronização completa de raffle_prizes, cotas e resolução de conflitos.
  */
