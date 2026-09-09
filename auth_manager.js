@@ -240,7 +240,7 @@ class AuthManager {
 
   async checkInitialSession() {
     // 1. Restaura SEMPRE o cache offline antes de qualquer chamada de rede (latência zero no offline)
-    this.restoreCachedOrganizations();
+    const hasCachedOrgs = this.restoreCachedOrganizations();
 
     if (!this.client) {
       await this.ensureDirectInstalledSession();
@@ -258,10 +258,15 @@ class AuthManager {
       }
 
       if (this.user) {
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (hasCachedOrgs && this.currentOrg) {
+          // Stale-While-Revalidate: Já possui organização no cache local, revalida em background sem travar o boot
+          this.loadUserOrganizations().catch(e => {
+            console.log('[AuthManager] Revalidação remota de organizações em background:', e.message);
+          });
+        } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
           console.log('[AuthManager] Inicialização offline: usando cache de organizações sem chamada de rede.');
         } else {
-          // Em rede instável ou mobile, limita espera a 1.5s para não travar a renderização inicial
+          // Apenas se NÃO houver nenhum cache local prévio, aguarda consulta inicial
           await Promise.race([
             this.loadUserOrganizations(),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de consulta de organizações')), 1500))

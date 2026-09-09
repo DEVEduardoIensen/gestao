@@ -25,19 +25,10 @@ class LocalDatabase {
           store.createIndex('idx_org', 'organization_id', { unique: false });
         }
 
-        // Raffles
+        // Raffles (números e prêmios aninhados de alta performance)
         if (!db.objectStoreNames.contains('raffles')) {
           const store = db.createObjectStore('raffles', { keyPath: 'id' });
           store.createIndex('idx_org', 'organization_id', { unique: false });
-          store.createIndex('idx_status', 'status', { unique: false });
-        }
-
-        // Raffle Numbers
-        if (!db.objectStoreNames.contains('raffle_numbers')) {
-          const store = db.createObjectStore('raffle_numbers', { keyPath: '_key' });
-          store.createIndex('idx_raffle_id', 'raffle_id', { unique: false });
-          store.createIndex('idx_org', 'organization_id', { unique: false });
-          store.createIndex('idx_org_raffle', ['organization_id', 'raffle_id'], { unique: false });
           store.createIndex('idx_status', 'status', { unique: false });
         }
 

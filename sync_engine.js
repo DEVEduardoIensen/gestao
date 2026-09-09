@@ -97,22 +97,15 @@ class SyncEngine {
       window.localDB.recoverAbandonedOperations().catch(() => {});
     }
 
-    // Auto-recuperação e processamento periódico a cada 5 segundos
+    // Processamento periódico gentil (heartbeat a cada 60s em vez de loop agressivo de 5s)
     this.syncInterval = setInterval(() => {
-      if (typeof window !== 'undefined' && window.localDB && typeof window.localDB.recoverAbandonedOperations === 'function') {
-        window.localDB.recoverAbandonedOperations().catch(() => {});
-      }
-      if (typeof navigator !== 'undefined' && navigator.onLine && !this.isOnline) {
-        this.isOnline = true;
-        this.initRealtimeSubscription();
-      }
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         this.isOnline = true;
       }
       if (this.isOnline && !this.isSyncing) {
         this.processQueue();
       }
-    }, 5000);
+    }, 60000);
 
     // Inicializa Realtime imediatamente se online
     if (this.isOnline) {

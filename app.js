@@ -76,7 +76,13 @@ let isConnectedToBackend = false;
 function sanitizeAppData(data) {
   if (!data || typeof data !== 'object') data = {};
   if (!data.settings || typeof data.settings !== 'object') {
-    data.settings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && INITIAL_SAMPLE_DATA.settings) ? INITIAL_SAMPLE_DATA.settings : { eduardoDailyRate: 62.00, eduardoHalfRate: 31.00 };
+    data.settings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && INITIAL_SAMPLE_DATA.settings) ? INITIAL_SAMPLE_DATA.settings : {
+      eduardoDailyRate: 62.00,
+      eduardoHalfRate: 31.00,
+      storeName: "ELDORADO PESCA LTDA",
+      pixKey: "42999162340",
+      phone: "42 9 9916-2340"
+    };
   }
   if (!Array.isArray(data.raffles)) {
     data.raffles = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.raffles)) ? INITIAL_SAMPLE_DATA.raffles : [];
@@ -143,7 +149,7 @@ async function initAppState() {
     (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Electron')) ||
     (typeof window !== 'undefined' && window.location && (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
 
-  // 1. Recupera sessão do usuário se houver
+  // 1. Recupera sessão do usuário se houver (com stale-while-revalidate ultrarrápido)
   if (window.authManager) {
     try {
       await window.authManager.checkInitialSession();
@@ -190,27 +196,42 @@ async function initAppState() {
 
   const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
-  // 3. Renderiza IMEDIATAMENTE do cache local IndexedDB exclusivo deste tenant (< 30ms)
+  // 3. ZERO-LATENCY FIRST PAINT (< 2ms): Lê imediatamente do localStorage síncrono e pinta as cotas no frame zero!
   let loadedFromLocal = false;
+  const fastSaved = (orgId ? localStorage.getItem("ELDORADO_PESCA_STORE_DATA_" + orgId) : null) || localStorage.getItem("ELDORADO_PESCA_STORE_DATA_00000000-0000-0000-0000-000000000001");
+  if (fastSaved) {
+    try {
+      const parsedFast = JSON.parse(fastSaved);
+      if (parsedFast && (Array.isArray(parsedFast.raffles) && parsedFast.raffles.length > 0)) {
+        appData = sanitizeAppData(parsedFast);
+        loadedFromLocal = true;
+        if (!userSelectedRaffleExplicitly) {
+          const highest = getHighestRaffle(appData.raffles);
+          activeRaffleId = highest ? highest.id : appData.raffles[0].id;
+        }
+        // Exibição instantânea das cotas antes de qualquer operação assíncrona
+        renderAll();
+      }
+    } catch (e) {}
+  }
+
+  // 4. Complementa/sincroniza com o IndexedDB persistente (isolado por tenant)
   if (window.localDB) {
     try {
       const localData = await window.localDB.loadFullAppData(orgId);
       if (localData && (localData.raffles || localData.valesAndPrizes || localData.fishingBookings || localData.ranchoBookings)) {
         appData = sanitizeAppData(localData);
         loadedFromLocal = true;
+        if (appData.raffles && appData.raffles.length > 0) {
+          if (!userSelectedRaffleExplicitly) {
+            const highest = getHighestRaffle(appData.raffles);
+            activeRaffleId = highest ? highest.id : appData.raffles[0].id;
+          }
+        }
+        renderAll();
       }
     } catch (err) {
       console.warn('[Offline-First] Erro ao ler IndexedDB:', err);
-    }
-  }
-
-  if (!loadedFromLocal) {
-    const saved = localStorage.getItem("ELDORADO_PESCA_STORE_DATA_" + orgId);
-    if (saved) {
-      try {
-        appData = sanitizeAppData(JSON.parse(saved));
-        loadedFromLocal = true;
-      } catch (e) {}
     }
   }
 
@@ -223,9 +244,10 @@ async function initAppState() {
       fishingBookings: [],
       ranchoBookings: []
     });
+    renderAll();
   }
 
-  // Define rifa ativa imediatamente para renderização rápida (sempre a ação mais alta se não escolhida manualmente)
+  // Define rifa ativa para renderização rápida
   if (appData.raffles && appData.raffles.length > 0) {
     if (!userSelectedRaffleExplicitly) {
       const highest = getHighestRaffle(appData.raffles);
@@ -394,20 +416,20 @@ window.mergeRemoteData = async function(remoteData) {
 
     appData = sanitized;
 
+    // RENDERIZAÇÃO IMEDIATA: Atualiza a tela instantaneamente sem esperar I/O de disco
+    renderAll();
+    updateGlobalStats();
+
+    // Persistência assíncrona não-bloqueante
     if (window.localDB) {
-      try {
-        await window.localDB.saveFullAppData(appData, orgId);
-      } catch (e) {
+      window.localDB.saveFullAppData(appData, orgId).catch(e => {
         console.warn('[mergeRemoteData] Falha ao persistir no IndexedDB:', e);
-      }
+      });
     }
 
     try {
       localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
     } catch (e) {}
-
-    renderAll();
-    updateGlobalStats();
   }
 };
 
@@ -1484,7 +1506,6 @@ function renderRaffleNumbersGrid() {
   if (!raffle || !gridEl) return;
 
   const searchTerm = (document.getElementById("inputSearchRaffle") ? document.getElementById("inputSearchRaffle").value : "").toLowerCase().trim();
-  gridEl.innerHTML = "";
 
   const numbersList = Array.isArray(raffle.numbers) ? raffle.numbers : [];
   if (numbersList.length === 0) {
@@ -1492,22 +1513,32 @@ function renderRaffleNumbersGrid() {
     return;
   }
 
-  numbersList.forEach((item, index) => {
+  // Mapa de prêmios para lookup O(1) imediato
+  const prizeMap = new Map();
+  if (Array.isArray(raffle.prizes)) {
+    for (let i = 0; i < raffle.prizes.length; i++) {
+      const p = raffle.prizes[i];
+      if (p && p.winnerNumber != null) {
+        prizeMap.set(p.winnerNumber, p);
+      }
+    }
+  }
+
+  let html = "";
+  for (let index = 0; index < numbersList.length; index++) {
+    const item = numbersList[index];
+
     // Search Filter
     if (searchTerm) {
       const matchNum = item.num.toString().includes(searchTerm);
       const matchName = (item.name || "").toLowerCase().includes(searchTerm);
-      if (!matchNum && !matchName) return;
+      if (!matchNum && !matchName) continue;
     }
 
     const isSelected = gridSelectedCotas.has(item.num);
-    const wonPrize = (raffle.prizes || []).find(p => p.winnerNumber === item.num);
+    const wonPrize = prizeMap.get(item.num);
     const winnerClass = wonPrize ? ` is-winner winner-pos-${wonPrize.position || 1}` : "";
-
-    const tile = document.createElement("div");
-    tile.className = `num-tile ${item.status}${winnerClass}` + (isSelected ? " multi-selected" : "");
-    tile.dataset.index = index;
-    tile.dataset.num = item.num;
+    const selectedClass = isSelected ? " multi-selected" : "";
 
     let statusTag = "";
     if (item.status === "paid") {
@@ -1516,22 +1547,24 @@ function renderRaffleNumbersGrid() {
       statusTag = `<span class="num-status-tag tag-reserved" title="Reservado" style="color: var(--primary-gold);"><span class="status-text-full">Reservado</span><span class="status-text-short">Res.</span></span>`;
     }
 
-    if (wonPrize) {
-      tile.title = `${wonPrize.position || 1}º Lugar: ${item.name || 'Ganhador'}`;
-    }
+    const tileTitle = wonPrize ? ` title="${wonPrize.position || 1}º Lugar: ${escapeHtml(item.name || 'Ganhador')}"` : "";
+    const nameTitle = item.name ? escapeHtml(item.name) : 'Livre';
+    const nameDisplay = item.name ? escapeHtml(item.name) : '—';
 
-    tile.innerHTML = `
-      <div class="num-tile-top">
-        <span class="num-badge">#${item.num}</span>
-        ${statusTag}
-      </div>
-      <div class="num-name" title="${item.name ? escapeHtml(item.name) : 'Livre'}">
-        ${item.name ? escapeHtml(item.name) : '—'}
+    html += `
+      <div class="num-tile ${item.status}${winnerClass}${selectedClass}" data-index="${index}" data-num="${item.num}"${tileTitle}>
+        <div class="num-tile-top">
+          <span class="num-badge">#${item.num}</span>
+          ${statusTag}
+        </div>
+        <div class="num-name" title="${nameTitle}">
+          ${nameDisplay}
+        </div>
       </div>
     `;
+  }
 
-    gridEl.appendChild(tile);
-  });
+  gridEl.innerHTML = html;
 }
 
 /* Modal: Editar Número Individual ou Múltiplas Cotas & Definir Ganhador Físico */
