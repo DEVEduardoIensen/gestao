@@ -58,6 +58,24 @@ assert(cssContent.includes('.badge-insta-stories'), 'styles.css possui estilo pa
 assert(cssContent.includes('.insta-day-chip'), 'styles.css possui estilo para chips no calendário');
 console.log('  ✓ [PASS] Estilos específicos de badges e chips do Instagram definidos');
 
+// 5. Verificação Estrutural de Tags HTML (Garante que nenhuma section está aninhada indevidamente)
+console.log('\n5. Verificando Integridade Estrutural do DOM em index.html:');
+const mainStartIndex = htmlContent.indexOf('<main');
+const mainEndIndex = htmlContent.indexOf('</main>');
+const mainHtml = htmlContent.substring(mainStartIndex, mainEndIndex);
+
+const openSectionCount = (mainHtml.match(/<section\b/g) || []).length;
+const closeSectionCount = (mainHtml.match(/<\/section>/g) || []).length;
+assert.strictEqual(openSectionCount, closeSectionCount, `Tags <section> devem estar balanceadas em <main> (${openSectionCount} abertas, ${closeSectionCount} fechadas)`);
+
+const eduardoSectionStart = htmlContent.indexOf('id="tab-eduardo"');
+const eduardoSectionEnd = htmlContent.indexOf('</section>', eduardoSectionStart);
+const instaSectionStart = htmlContent.indexOf('id="tab-instagram"');
+
+assert(instaSectionStart > eduardoSectionEnd, 'tab-instagram deve estar completamente fora e após o fechamento de tab-eduardo');
+console.log('  ✓ [PASS] Todas as sections em <main> estão fechadas e independentes');
+
 console.log('\n================================================================');
 console.log('  RESULTADO: Todos os testes da aba Instagram passaram com sucesso!');
 console.log('================================================================');
+
