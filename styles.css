@@ -3397,3 +3397,154 @@ html.show-auth-gate .offline-bar {
 .hub-close-btn:active {
   transform: scale(0.92) !important;
 }
+
+/* ==========================================================================
+   Instagram Content Calendar Styles (Ponytail minimal)
+   ========================================================================== */
+.badge-insta-reels {
+  background: rgba(225, 48, 108, 0.18);
+  color: #f472b6;
+  border: 1px solid rgba(225, 48, 108, 0.5);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-insta-feed {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-insta-stories {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-insta-status-draft {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.badge-insta-status-producing {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.badge-insta-status-ready {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.badge-insta-status-published {
+  background: rgba(229, 193, 88, 0.18);
+  color: var(--primary-gold);
+  border: 1px solid var(--border-gold);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.insta-day-chip {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 4px;
+  margin-top: 2px;
+  border-radius: 3px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.insta-day-chip.chip-reels {
+  background: rgba(225, 48, 108, 0.3);
+  color: #fbcfe8;
+  border-left: 2px solid #e1306c;
+}
+
+.insta-day-chip.chip-feed {
+  background: rgba(56, 189, 248, 0.25);
+  color: #bae6fd;
+  border-left: 2px solid #38bdf8;
+}
+
+.insta-day-chip.chip-stories {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fef08a;
+  border-left: 2px solid #f59e0b;
+}
+
+.insta-day-chip.chip-published {
+  opacity: 0.65;
+  text-decoration: line-through;
+}
+
+.insta-post-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.insta-post-card:hover {
+  border-color: var(--border-gold);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.insta-copy-preview {
+  background: rgba(6, 10, 19, 0.6);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 0.65rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  max-height: 90px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
