@@ -1304,8 +1304,8 @@ body {
 
 .vale-actions-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
   margin-top: 0.65rem;
   padding-top: 0.55rem;
   border-top: 1px solid var(--border-light);
@@ -1313,11 +1313,42 @@ body {
 
 .vale-actions-bar .btn {
   font-size: 0.76rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.42rem 0.5rem;
   border-radius: 4px;
   justify-content: center;
   text-align: center;
   white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.vale-actions-bar .btn:nth-last-child(2):nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.btn-delete-vale {
+  grid-column: 1 / -1;
+  width: 100%;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: #f87171;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.42rem 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 0.1rem;
+  box-sizing: border-box;
+}
+
+.btn-delete-vale:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #ffffff;
 }
 
 /* ==========================================================================

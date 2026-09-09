@@ -2620,7 +2620,7 @@ function renderValesView() {
           <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
             Editar
           </button>
-          <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+          <button class="btn-delete-vale" onclick="deleteValeItem('${item.id}')" title="Excluir Registro">
             Excluir
           </button>
         `;
@@ -2641,7 +2641,7 @@ function renderValesView() {
           <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
             Editar
           </button>
-          <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+          <button class="btn-delete-vale" onclick="deleteValeItem('${item.id}')" title="Excluir Registro">
             Excluir
           </button>
         `;
@@ -2661,7 +2661,7 @@ function renderValesView() {
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+        <button class="btn-delete-vale" onclick="deleteValeItem('${item.id}')" title="Excluir Registro">
           Excluir
         </button>
       `;
@@ -2677,7 +2677,7 @@ function renderValesView() {
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+        <button class="btn-delete-vale" onclick="deleteValeItem('${item.id}')" title="Excluir Registro">
           Excluir
         </button>
       `;
@@ -2696,7 +2696,7 @@ function renderValesView() {
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações e Saldo">
           Editar
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+        <button class="btn-delete-vale" onclick="deleteValeItem('${item.id}')" title="Excluir Registro">
           Excluir
         </button>
       `;
@@ -2734,7 +2734,7 @@ function renderValesView() {
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações">
           Editar
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="deleteValeItem('${item.id}')" title="Excluir" style="margin-left: auto;">
+        <button class="btn-delete-vale" onclick="deleteValeItem('${item.id}')" title="Excluir Registro">
           Excluir
         </button>
       `;
@@ -4031,7 +4031,7 @@ function renderFishingBookingsList() {
       <button class="btn btn-secondary btn-sm" onclick="openEditFishingBookingModal('${b.id}')" title="Editar">
         Editar
       </button>
-      <button class="btn btn-secondary btn-sm" onclick="deleteFishingBooking('${b.id}')" title="Excluir" style="margin-left: auto;">
+      <button class="btn-delete-vale" onclick="deleteFishingBooking('${b.id}')" title="Excluir Reserva">
         Excluir
       </button>
     `;
@@ -5119,7 +5119,7 @@ function renderRanchoBookingsList() {
       <button class="btn btn-secondary btn-sm" onclick="openEditRanchoBookingModal('${b.id}')" title="Editar">
         Editar
       </button>
-      <button class="btn btn-secondary btn-sm" onclick="deleteRanchoBooking('${b.id}')" title="Excluir" style="margin-left: auto;">
+      <button class="btn-delete-vale" onclick="deleteRanchoBooking('${b.id}')" title="Excluir Locação">
         Excluir
       </button>
     `;
