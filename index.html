@@ -130,7 +130,6 @@
             ELDORADO PESCA
             <span class="brand-gold-tag">PRO</span>
           </div>
-          <span class="brand-subtitle">Gestão de Rifas • Vales e Prêmios • Agenda de Pesca • Ponto</span>
         </div>
       </div>
 
@@ -158,7 +157,7 @@
 
       <!-- Header Actions -->
       <div class="header-status-indicator">
-        <div id="dbStatusBadge" class="db-status-badge online" title="Clique para ver o status da fila de sincronização" onclick="openModal('modalSyncCenter')">
+        <div id="dbStatusBadge" class="db-status-badge online">
           <span class="status-dot"></span>
           <span id="dbStatusText">Sincronizado</span>
         </div>
@@ -222,11 +221,6 @@
           <!-- Botão Nova Ação Maior e em Super Destaque -->
           <button class="btn-new-raffle-cta" id="btnNewRaffle" title="Criar Nova Ação / Rifa">
             <span class="btn-icon-plus">+</span> Nova Ação
-          </button>
-          <!-- Botão Excluir Rifa -->
-          <button class="btn btn-danger" id="btnDeleteRaffle" title="Excluir Rifa Selecionada"
-            style="font-size: 0.85rem; padding: 0.65rem 1rem;">
-            Excluir Rifa
           </button>
         </div>
       </div>
@@ -325,7 +319,7 @@
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
               <button class="btn btn-whatsapp-subtle btn-sm" style="width: 100%; justify-content: flex-start;"
                 id="btnSideExportAvailable" onclick="openExportAvailableWhatsAppModal()" title="Exportar cotas disponíveis para WhatsApp">
-                💬 Cotas Livres p/ WhatsApp
+                Cotas Livres p/ WhatsApp
               </button>
               <button class="btn btn-secondary btn-sm" style="width: 100%; justify-content: flex-start;"
                 id="btnMarkAllPaid">
@@ -858,9 +852,6 @@
             <button type="button" class="btn btn-secondary" onclick="handleUserLogout()" style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.82rem; border-color: rgba(239, 68, 68, 0.4); color: #f87171; text-align: center;">
               Sair da Conta
             </button>
-            <button type="button" class="btn btn-secondary" onclick="openModal('modalSyncCenter')" style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.82rem; border-color: var(--border-gold); color: var(--primary-gold); text-align: center;">
-              Sincronização
-            </button>
             <button type="button" class="btn btn-secondary" onclick="openAccessHub()" style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.82rem; border-color: var(--border-gold); color: var(--primary-gold); text-align: center;">
               Instalar App
             </button>
@@ -921,7 +912,7 @@
 
           <div>
             <button type="button" class="btn btn-gold" id="btnForceCheckUpdate" onclick="forceCheckAppUpdate()" style="width: 100%; padding: 0.85rem; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
-              <span>🔄</span> Verificar e Atualizar Agora
+              Verificar e Atualizar Agora
             </button>
           </div>
         </div>
@@ -2280,39 +2271,7 @@
     </div>
   </div>
 
-  <!-- Modal: Central de Sincronização e Resolução de Conflitos -->
-  <div class="modal-overlay" id="modalSyncCenter" style="display: none;">
-    <div class="modal-container" style="max-width: 580px;">
-      <div class="modal-header">
-        <h3 class="modal-title">🔄 Central de Sincronização & Fila Offline</h3>
-        <button class="modal-close" onclick="closeModal('modalSyncCenter')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border-light); margin-bottom: 1rem;">
-          <div>
-            <div style="font-size: 0.8rem; color: var(--text-dim);">Estado da Conexão:</div>
-            <div style="font-weight: 700; color: var(--text-light);" id="syncCenterStatusText">🟢 Sincronizado</div>
-          </div>
-          <button class="btn btn-gold btn-xs" onclick="window.syncEngine && window.syncEngine.processQueue()">Forçar Sincronização</button>
-        </div>
 
-        <h4 style="font-size: 0.9rem; color: var(--primary-gold); margin-bottom: 0.5rem;">Fila de Operações Locais (Outbox)</h4>
-        <div id="syncQueueListContainer" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: var(--radius-sm); padding: 0.5rem; border: 1px solid var(--border-light);">
-          <div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 1rem;">Nenhuma operação pendente. Todos os dados estão salvos na nuvem!</div>
-        </div>
-
-        <!-- Seção de Conflitos Detectados -->
-        <div id="syncConflictsSection" style="display: none; margin-top: 1rem;">
-          <h4 style="font-size: 0.9rem; color: #ff6b6b; margin-bottom: 0.5rem;">⚠️ Conflitos Detectados no Servidor</h4>
-          <div id="syncConflictsList" style="background: rgba(255, 107, 107, 0.08); border: 1px solid rgba(255, 107, 107, 0.3); border-radius: var(--radius-sm); padding: 0.75rem;">
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('modalSyncCenter')">Fechar</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>

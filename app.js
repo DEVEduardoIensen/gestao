@@ -120,19 +120,15 @@ function updateDbStatusBadge(status) {
 
   if (status === "online" || status === "synced" || status === true) {
     badge.className = "db-status-badge online";
-    badge.title = "Supabase PostgreSQL conectado e sincronizado!";
+    badge.title = "Supabase PostgreSQL conectado e sincronizado";
     text.textContent = "Sincronizado";
   } else if (status === "syncing") {
     badge.className = "db-status-badge syncing";
-    badge.title = "Enviando alterações pendentes para o Supabase...";
+    badge.title = "Sincronizando com o Supabase...";
     text.textContent = "Sincronizando...";
-  } else if (status === "conflict") {
-    badge.className = "db-status-badge conflict";
-    badge.title = "Atenção: Conflito detectado na sincronização! Clique para resolver.";
-    text.textContent = "Conflito";
   } else {
     badge.className = "db-status-badge offline";
-    badge.title = "Modo Offline ativo (IndexedDB). As alterações serão sincronizadas ao reconectar.";
+    badge.title = "Modo Offline ativo. As alterações serão sincronizadas ao reconectar.";
     text.textContent = "Offline";
   }
 }
@@ -583,9 +579,8 @@ function initSyncAndPwaHandlers() {
 
   // Escuta mudanças de status no SyncEngine
   if (window.syncEngine) {
-    window.syncEngine.onStatusChange((status, conflicts) => {
+    window.syncEngine.onStatusChange((status) => {
       updateDbStatusBadge(status);
-      updateSyncCenterModal(status, conflicts);
     });
   }
 
@@ -1181,67 +1176,7 @@ async function onSwitchOrganization(orgId) {
   }
 }
 
-async function updateSyncCenterModal(status, conflicts) {
-  const statusText = document.getElementById('syncCenterStatusText');
-  const queueContainer = document.getElementById('syncQueueListContainer');
-  const conflictsSection = document.getElementById('syncConflictsSection');
-  const conflictsList = document.getElementById('syncConflictsList');
-
-  if (statusText) {
-    statusText.textContent = status === 'synced' ? '🟢 Sincronizado' : (status === 'syncing' ? '🔵 Sincronizando...' : (status === 'conflict' ? '🔴 Conflito Detectado' : '🟡 Offline'));
-  }
-
-  const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
-  if (queueContainer && window.localDB) {
-    const pendingOps = await window.localDB.getPendingOperations(orgId);
-    if (pendingOps.length === 0) {
-      queueContainer.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 1rem;">Nenhuma operação pendente. Todos os dados estão salvos na nuvem!</div>';
-    } else {
-      queueContainer.innerHTML = pendingOps.map(op => `
-        <div class="sync-queue-item">
-          <div>
-            <span class="sync-queue-type">${escapeHtml(op.type)}</span>
-            <div style="font-size: 0.72rem; color: var(--text-dim);">${new Date(op.timestamp).toLocaleTimeString()} • ${escapeHtml(op.tableName || 'db')}</div>
-          </div>
-          <span class="sync-queue-status ${op.status}">${op.status.toUpperCase()}</span>
-        </div>
-      `).join('');
-    }
-  }
-
-  if (conflictsSection && conflictsList) {
-    if (Array.isArray(conflicts) && conflicts.length > 0) {
-      conflictsSection.style.display = 'block';
-      conflictsList.innerHTML = conflicts.map(c => `
-        <div class="conflict-card">
-          <div class="conflict-card-header">
-            <span>⚠️ Conflito na Venda da Cota</span>
-            <span style="font-size: 0.72rem; color: var(--text-dim);">${new Date(c.timestamp || Date.now()).toLocaleTimeString()}</span>
-          </div>
-          <div class="conflict-card-details">
-            <div><strong>Rifa ID:</strong> ${escapeHtml(c.raffleId)}</div>
-            <div><strong>Comprador Local:</strong> ${escapeHtml(c.buyerName || 'Sem nome')}</div>
-            <div><strong>Cotas Conflitantes:</strong> ${(c.conflictingNumbers || []).map(cn => `#${cn.num} (Já vendida no servidor para: <strong>${escapeHtml(cn.current_owner || 'Outro comprador')}</strong>)`).join('<br>')}</div>
-            <div style="font-size: 0.75rem; color: #ff9f43; margin-top: 0.35rem;">A venda foi bloqueada para proteger o comprador oficial no servidor.</div>
-          </div>
-          <div class="conflict-card-actions">
-            <button class="btn btn-secondary btn-xs" onclick="resolveConflictFromUI('${c.opId}', 'dismiss')">Descartar da Fila</button>
-            <button class="btn btn-gold btn-xs" onclick="resolveConflictFromUI('${c.opId}', 'accept_server')">Aceitar Estado do Servidor</button>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      conflictsSection.style.display = 'none';
-    }
-  }
-}
-
-async function resolveConflictFromUI(opId, action) {
-  if (window.syncEngine) {
-    await window.syncEngine.resolveConflict(opId, action);
-    showToast(action === 'accept_server' ? 'Estado do servidor aceito.' : 'Conflito descartado da fila.', 'info');
-  }
-}
+// Central de Sincronização e Conflitos descontinuada em prol de sincronização transparente direta
 
 function getActiveRaffle() {
   if (!appData.raffles || appData.raffles.length === 0) return null;
@@ -2769,10 +2704,10 @@ function renderValesView() {
       if (isExchanged) {
         actionsHtml = `
           <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #a855f7; color: #e9d5ff;" title="Editar informações da troca">
-            ✏️ Editar Troca
+            Editar Troca
           </button>
           <button class="btn btn-danger btn-sm" onclick="undoCurrentExchangePrizeDirect('${item.id}')" title="Desfazer troca caso o cliente tenha se arrependido e retornar prêmio para Aguardando Retirada">
-            ↩️ Desfazer Troca
+            Desfazer Troca
           </button>
         `;
       } else if (item.status === "pending_pickup") {

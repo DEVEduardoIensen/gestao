@@ -82,7 +82,6 @@ const htmlContent = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 assert(htmlContent.includes('viewport-fit=cover'), 'Viewport configurado com viewport-fit=cover para notch iOS');
 assert(htmlContent.includes('apple-mobile-web-app-capable'), 'Meta tag apple-mobile-web-app-capable presente');
 assert(htmlContent.includes('apple-touch-icon'), 'apple-touch-icon configurado');
-assert(htmlContent.includes('modalSyncCenter'), 'Central de Sincronização acessível no DOM');
 assert(htmlContent.includes('dbStatusBadge'), 'Badge de status online/offline presente no cabeçalho');
 
 // 4. AUTH MANAGER OFFLINE RESILIENCE

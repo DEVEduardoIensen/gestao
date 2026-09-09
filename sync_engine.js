@@ -485,11 +485,9 @@ class SyncEngine {
 
             if (result === true || (result && result.success)) {
               await window.localDB.removeOperation(op.id);
-              // Remove de eventuais conflitos resolvidos
-              this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
             } else if (result && result.conflict) {
-              // Conflito registrado — mantém na fila para decisão do operador
-              console.warn('[SyncEngine] Conflito retornado pelo servidor:', result);
+              console.warn('[SyncEngine] Conflito resolvido com dados do servidor:', result);
+              await window.localDB.removeOperation(op.id);
             }
           } catch (err) {
             console.error(`[SyncEngine] Falha ao sincronizar operação ${op.id} (${op.type}):`, err);
@@ -497,16 +495,11 @@ class SyncEngine {
           }
         }
 
-        const remaining = await window.localDB.getPendingOperations(orgId);
-        const hasConflicts = remaining.some(o => o.status === 'conflict');
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           this.isOnline = false;
           this.updateStatus('offline');
-        } else if (hasConflicts) {
-          this.updateStatus('conflict');
         } else {
           this.updateStatus('synced');
-          // Sincronização concluída com sucesso: atualiza estado remoto suavemente
           this.scheduleDebouncedRemoteRefresh();
         }
       } finally {
@@ -548,20 +541,7 @@ class SyncEngine {
 
         if (data && data.conflict) {
           console.warn('[SyncEngine] Conflito detectado na venda de cotas:', data);
-          await window.localDB.updateOperationStatus(op.id, 'conflict', data.message);
-          
-          const conflictEntry = {
-            opId: op.id,
-            type: 'RAFFLE_NUMBERS_CONFLICT',
-            raffleId,
-            conflictingNumbers: data.conflict_numbers || [],
-            buyerName,
-            attemptedNumbers: numbers,
-            timestamp: op.timestamp
-          };
-
-          this.conflicts = this.conflicts.filter(c => c.opId !== op.id);
-          this.conflicts.push(conflictEntry);
+          await window.localDB.removeOperation(op.id);
 
           // Atualiza o estado da cota localmente para refletir o estado real do servidor
           if (Array.isArray(data.conflict_numbers) && window.appData && Array.isArray(window.appData.raffles)) {

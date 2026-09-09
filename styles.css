@@ -1303,19 +1303,21 @@ body {
 }
 
 .vale-actions-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.4rem;
   margin-top: 0.65rem;
   padding-top: 0.55rem;
   border-top: 1px solid var(--border-light);
-  flex-wrap: wrap;
 }
 
 .vale-actions-bar .btn {
   font-size: 0.76rem;
-  padding: 0.32rem 0.55rem;
+  padding: 0.4rem 0.5rem;
   border-radius: 4px;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* ==========================================================================

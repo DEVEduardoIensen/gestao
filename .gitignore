@@ -23,5 +23,8 @@ scratch/
 
 # IDE & OS
 .vscode/
+.agents/
+agent/
+.claude/
 
 

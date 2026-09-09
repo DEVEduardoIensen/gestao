@@ -47,10 +47,13 @@ RETURNS SETOF UUID
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
-SET search_path = public, auth
+SET search_path = ''
 AS $$
-  SELECT organization_id FROM public.organization_members WHERE user_id = auth.uid();
+  SELECT organization_id FROM public.organization_members WHERE user_id = (SELECT auth.uid());
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.get_user_organizations() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_user_organizations() TO authenticated;
 
 -- Trigger para vincular novo usuário à organização ao se cadastrar
 CREATE OR REPLACE FUNCTION public.handle_new_user_organization()
@@ -103,6 +106,8 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.handle_new_user_organization() FROM PUBLIC, anon, authenticated;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -341,7 +346,7 @@ CREATE OR REPLACE FUNCTION public.sell_raffle_numbers_atomic(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = ''
 AS $$
 DECLARE
     conflict_rec RECORD;
@@ -349,11 +354,12 @@ DECLARE
     target_num INT;
     res_time TIMESTAMPTZ := COALESCE(p_reserved_at, now());
     pay_time TIMESTAMPTZ := COALESCE(p_paid_at, now());
+    current_uid UUID := (SELECT auth.uid());
 BEGIN
     -- 1. Exige permissão estrita na organização
-    IF auth.uid() IS NOT NULL AND NOT EXISTS (
+    IF current_uid IS NULL OR NOT EXISTS (
         SELECT 1 FROM public.organization_members
-        WHERE organization_id = p_org_id AND user_id = auth.uid()
+        WHERE organization_id = p_org_id AND user_id = current_uid
     ) THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -426,6 +432,12 @@ BEGIN
 END;
 $$;
 
+REVOKE EXECUTE ON FUNCTION public.sell_raffle_numbers_atomic(uuid, text, integer[], text, text, timestamptz, timestamptz, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.sell_raffle_numbers_atomic(uuid, text, integer[], text, text, timestamptz, timestamptz, boolean) TO authenticated;
+
+-- Índice cobrindo chave estrangeira sem índice
+CREATE INDEX IF NOT EXISTS idx_vale_transactions_org_vale ON public.vale_transactions(organization_id, vale_id);
+
 -- ==============================================================================
 -- 5. POLÍTICAS DE ACESSO (Row Level Security - RLS)
 -- ==============================================================================
@@ -445,116 +457,136 @@ ALTER TABLE public.eduardo_work_days ENABLE ROW LEVEL SECURITY;
 -- 5.1 Organizations
 DROP POLICY IF EXISTS "Membros veem sua organização" ON public.organizations;
 CREATE POLICY "Membros veem sua organização" ON public.organizations
-    FOR SELECT USING (
-        auth.uid() IS NOT NULL AND id IN (SELECT public.get_user_organizations())
-    );
+    FOR SELECT TO authenticated
+    USING (id IN (SELECT public.get_user_organizations()));
 
 DROP POLICY IF EXISTS "Owners e Admins atualizam organização" ON public.organizations;
 CREATE POLICY "Owners e Admins atualizam organização" ON public.organizations
-    FOR UPDATE USING (
-        auth.uid() IS NOT NULL AND id IN (
-            SELECT organization_id FROM public.organization_members 
-            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-        )
-    );
+    FOR UPDATE TO authenticated
+    USING (id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ))
+    WITH CHECK (id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ));
 
 -- 5.2 Organization Members
 DROP POLICY IF EXISTS "Membros veem seus colegas de organização" ON public.organization_members;
 CREATE POLICY "Membros veem seus colegas de organização" ON public.organization_members
-    FOR SELECT USING (
-        auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations())
-    );
+    FOR SELECT TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()) OR user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS "Owners gerenciam membros" ON public.organization_members;
-CREATE POLICY "Owners gerenciam membros" ON public.organization_members
-    FOR ALL USING (
-        auth.uid() IS NOT NULL AND organization_id IN (
-            SELECT organization_id FROM public.organization_members 
-            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-        )
-    )
-    WITH CHECK (
-        auth.uid() IS NOT NULL AND organization_id IN (
-            SELECT organization_id FROM public.organization_members 
-            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-        )
-    );
+DROP POLICY IF EXISTS "Owners inserem membros" ON public.organization_members;
+CREATE POLICY "Owners inserem membros" ON public.organization_members
+    FOR INSERT TO authenticated
+    WITH CHECK (organization_id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ));
+
+DROP POLICY IF EXISTS "Owners atualizam membros" ON public.organization_members;
+CREATE POLICY "Owners atualizam membros" ON public.organization_members
+    FOR UPDATE TO authenticated
+    USING (organization_id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ))
+    WITH CHECK (organization_id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ));
+
+DROP POLICY IF EXISTS "Owners removem membros" ON public.organization_members;
+CREATE POLICY "Owners removem membros" ON public.organization_members
+    FOR DELETE TO authenticated
+    USING (organization_id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ));
 
 -- 5.3 Organization Invites
 DROP POLICY IF EXISTS "Membros veem convites da sua organização" ON public.organization_invites;
 CREATE POLICY "Membros veem convites da sua organização" ON public.organization_invites
-    FOR SELECT USING (
-        auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations())
-    );
+    FOR SELECT TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()));
 
 DROP POLICY IF EXISTS "Owners gerenciam convites" ON public.organization_invites;
 CREATE POLICY "Owners gerenciam convites" ON public.organization_invites
-    FOR ALL USING (
-        auth.uid() IS NOT NULL AND organization_id IN (
-            SELECT organization_id FROM public.organization_members 
-            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-        )
-    )
-    WITH CHECK (
-        auth.uid() IS NOT NULL AND organization_id IN (
-            SELECT organization_id FROM public.organization_members 
-            WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-        )
-    );
+    FOR ALL TO authenticated
+    USING (organization_id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ))
+    WITH CHECK (organization_id IN (
+        SELECT organization_id FROM public.organization_members 
+        WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin')
+    ));
 
 -- 5.4 Settings
 DROP POLICY IF EXISTS "RLS Settings" ON public.settings;
 CREATE POLICY "RLS Settings" ON public.settings
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.5 Raffles
 DROP POLICY IF EXISTS "RLS Raffles" ON public.raffles;
 CREATE POLICY "RLS Raffles" ON public.raffles
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.6 Raffle Numbers
 DROP POLICY IF EXISTS "RLS Raffle Numbers" ON public.raffle_numbers;
 CREATE POLICY "RLS Raffle Numbers" ON public.raffle_numbers
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.7 Raffle Prizes
 DROP POLICY IF EXISTS "RLS Raffle Prizes" ON public.raffle_prizes;
 CREATE POLICY "RLS Raffle Prizes" ON public.raffle_prizes
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.8 Vales & Prêmios
 DROP POLICY IF EXISTS "RLS Vales" ON public.vales_prizes;
 CREATE POLICY "RLS Vales" ON public.vales_prizes
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.9 Transações de Vales
 DROP POLICY IF EXISTS "RLS Vale Transactions" ON public.vale_transactions;
 CREATE POLICY "RLS Vale Transactions" ON public.vale_transactions
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.10 Agenda Pescaria
 DROP POLICY IF EXISTS "RLS Fishing" ON public.fishing_bookings;
 CREATE POLICY "RLS Fishing" ON public.fishing_bookings
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.11 Rancho
 DROP POLICY IF EXISTS "RLS Rancho" ON public.rancho_bookings;
 CREATE POLICY "RLS Rancho" ON public.rancho_bookings
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- 5.12 Ponto Eduardo
 DROP POLICY IF EXISTS "RLS Eduardo" ON public.eduardo_work_days;
 CREATE POLICY "RLS Eduardo" ON public.eduardo_work_days
-    FOR ALL USING (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()))
-    WITH CHECK (auth.uid() IS NOT NULL AND organization_id IN (SELECT public.get_user_organizations()));
+    FOR ALL TO authenticated
+    USING (organization_id IN (SELECT public.get_user_organizations()))
+    WITH CHECK (organization_id IN (SELECT public.get_user_organizations()));
 
 -- ==============================================================================
 -- 6. ATIVAR REALTIME DO SUPABASE
