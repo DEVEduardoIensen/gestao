@@ -3591,6 +3591,21 @@ html.show-auth-gate .offline-bar {
   font-weight: 700;
 }
 
+.insta-day-chip.chip-recurring {
+  background: rgba(229, 193, 88, 0.12);
+  color: #fef08a;
+  border: 1px dashed rgba(229, 193, 88, 0.6);
+  border-left: 3px solid var(--primary-gold);
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.insta-day-chip.chip-recurring:hover {
+  background: rgba(229, 193, 88, 0.28);
+  border-color: var(--primary-gold);
+  opacity: 1;
+}
+
 .insta-day-chip.chip-published {
   opacity: 0.65;
   text-decoration: line-through;

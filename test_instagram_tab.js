@@ -73,13 +73,15 @@ assert(jsContent.includes('renderInstagramView'), 'app.js implementa renderInsta
 assert(jsContent.includes('renderInstagramCalendar'), 'app.js implementa renderInstagramCalendar');
 assert(jsContent.includes('updateInstagramStats'), 'app.js implementa updateInstagramStats');
 assert(jsContent.includes('steelfishWeekCount'), 'app.js calcula contagem semanal de posts da Steelfish para meta 2/sem');
+assert(jsContent.includes('isSteelfishRecurringDay'), 'app.js define Segunda e Sexta como dias contratuais fixos da Steelfish');
+assert(jsContent.includes('chip-recurring'), 'app.js renderiza slots recorrentes com chip-recurring no calendário');
 assert(jsContent.includes('filterInstaSteelfish'), 'app.js suporta filtro Steelfish');
 assert(jsContent.includes('filterInstaSponsors'), 'app.js suporta filtro Patrocinadores');
 assert(jsContent.includes('fishing_company'), 'app.js inclui fishing_company na filtragem e rotulação de patrocinadores');
 assert(jsContent.includes('openNewInstagramPostModal'), 'app.js implementa openNewInstagramPostModal');
 assert(jsContent.includes('openEditInstagramPostModal'), 'app.js implementa openEditInstagramPostModal');
 assert(jsContent.includes('copyInstagramCaption'), 'app.js implementa cópia de legenda');
-console.log('  ✓ [PASS] Lógica de patrocinadores e cálculo da meta semanal funcionando no app.js');
+console.log('  ✓ [PASS] Lógica de patrocinadores, cálculo semanal e slots fixos de Seg & Sex funcionando no app.js');
 
 // 6. Verificação de Estilos e Responsividade no styles.css e index.html
 console.log('\n6. Verificando Estilos Visuais e Responsividade:');
@@ -87,9 +89,10 @@ assert(cssContent.includes('.badge-insta-sponsor'), 'styles.css possui estilo pa
 assert(cssContent.includes('.badge-insta-sponsor-steelfish'), 'styles.css possui estilo destacado para Steelfish');
 assert(cssContent.includes('.insta-day-chip.chip-steelfish'), 'styles.css possui chip destacado da Steelfish no calendário');
 assert(cssContent.includes('.insta-day-chip.chip-sponsor'), 'styles.css possui chip de patrocinadores');
+assert(cssContent.includes('.insta-day-chip.chip-recurring'), 'styles.css possui estilo para slots recorrentes de patrocinador');
 assert(cssContent.includes('minmax(0, 1fr)'), 'styles.css utiliza minmax(0, 1fr) para evitar que chips longos estufem as colunas do calendário');
 assert(htmlContent.includes('class="calendar-scroll-wrap"'), 'index.html possui wrapper de rolagem responsiva para o calendário');
-console.log('  ✓ [PASS] Estilos específicos de patrocinadores e correção de responsividade validados');
+console.log('  ✓ [PASS] Estilos específicos de patrocinadores, slots recorrentes e responsividade validados');
 
 // 7. Verificação Estrutural de Tags HTML
 console.log('\n7. Verificando Integridade Estrutural do DOM em index.html:');

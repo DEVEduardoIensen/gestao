@@ -5603,11 +5603,11 @@ function updateInstagramStats() {
   const statSteelfishStatusEl = document.getElementById("statInstaSteelfishStatus");
   if (statSteelfishStatusEl) {
     if (steelfishWeekCount >= 2) {
-      statSteelfishStatusEl.textContent = `Meta semanal cumprida (${steelfishMonthPosts.length} no mês)`;
+      statSteelfishStatusEl.textContent = `Meta da semana cumprida (Seg & Sex no calendário)`;
       statSteelfishStatusEl.style.color = "#34d399";
     } else {
       const remaining = 2 - steelfishWeekCount;
-      statSteelfishStatusEl.textContent = `Falta ${remaining} post${remaining === 1 ? '' : 's'} nesta semana (Meta: 2/sem)`;
+      statSteelfishStatusEl.textContent = `Segundas e Sextas fixas (falta preencher ${remaining} de 2)`;
       statSteelfishStatusEl.style.color = "var(--primary-gold)";
     }
   }
@@ -5623,7 +5623,7 @@ function updateInstagramStats() {
   // Atualiza aviso de patrocinador no topo
   const badgeSteelfishWeekEl = document.getElementById("badgeSteelfishWeekStatus");
   if (badgeSteelfishWeekEl) {
-    badgeSteelfishWeekEl.textContent = `Steelfish: ${steelfishWeekCount}/2 nesta semana`;
+    badgeSteelfishWeekEl.textContent = `Steelfish: Seg & Sex (${steelfishWeekCount}/2)`;
     if (steelfishWeekCount >= 2) {
       badgeSteelfishWeekEl.style.background = "rgba(52, 211, 153, 0.15)";
       badgeSteelfishWeekEl.style.color = "#34d399";
@@ -5640,10 +5640,9 @@ function updateInstagramStats() {
     const mondayFmt = `${mondayStr.slice(8, 10)}/${mondayStr.slice(5, 7)}`;
     const sundayFmt = `${sundayStr.slice(8, 10)}/${sundayStr.slice(5, 7)}`;
     if (steelfishWeekCount >= 2) {
-      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Meta da Steelfish cumprida com ${steelfishWeekCount} postagens. Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
+      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Meta da Steelfish cumprida com ${steelfishWeekCount} postagens (Seg e Sex). Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
     } else {
-      const needed = 2 - steelfishWeekCount;
-      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): ${steelfishWeekCount} de 2 posts da Steelfish agendados (falta ${needed}). Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
+      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Steelfish é fixa toda Segunda e Sexta (${steelfishWeekCount} de 2 agendados). Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
     }
   }
 }
@@ -5691,6 +5690,10 @@ function renderInstagramCalendar() {
     const dayStr = `${instagramCalSelectedYear}-${String(instagramCalSelectedMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayPosts = posts.filter(p => p.date === dayStr);
 
+    const dayDate = new Date(instagramCalSelectedYear, instagramCalSelectedMonth, day);
+    const dayOfWeek = dayDate.getDay(); // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sab
+    const isSteelfishRecurringDay = (dayOfWeek === 1 || dayOfWeek === 5); // Segunda ou Sexta fixa
+
     const cell = document.createElement("div");
     const isToday = dayStr === todayStr;
     cell.className = `cal-day-cell current-month ${isToday ? "today" : ""}`;
@@ -5709,6 +5712,7 @@ function renderInstagramCalendar() {
       </div>
     `;
 
+    // 1. Renderiza postagens cadastradas no dia
     dayPosts.forEach(p => {
       const isPub = p.status === 'published';
       let chipClass = `insta-day-chip chip-${p.format || 'feed'}`;
@@ -5753,6 +5757,19 @@ function renderInstagramCalendar() {
         </div>
       `;
     });
+
+    // 2. Se for Segunda ou Sexta e ainda não tiver post cadastrado da Steelfish, exibe o slot fixo contratual
+    const hasSteelfishPost = dayPosts.some(p => p.theme === 'steelfish');
+    if (isSteelfishRecurringDay && !hasSteelfishPost) {
+      const weekdayLabel = dayOfWeek === 1 ? 'Segunda' : 'Sexta';
+      innerHtml += `
+        <div class="insta-day-chip chip-steelfish chip-recurring" 
+             title="Meta Contratual: Steelfish toda ${weekdayLabel} (2 por semana). Clique para preencher o roteiro."
+             onclick="openNewInstagramPostModal('${dayStr}', 'steelfish', 'Steelfish: Post Semanal (${weekdayLabel})')">
+          <strong style="font-size:0.64rem;">[Steelfish]</strong> Fixo (${weekdayLabel})
+        </div>
+      `;
+    }
 
     cell.innerHTML = innerHtml;
     calGrid.appendChild(cell);
@@ -5945,15 +5962,15 @@ function renderInstagramPostsList() {
 }
 window.renderInstagramPostsList = renderInstagramPostsList;
 
-function openNewInstagramPostModal(defaultDate = null) {
+function openNewInstagramPostModal(defaultDate = null, defaultTheme = "steelfish", defaultTitle = "") {
   activeInstagramPostId = null;
   document.getElementById("modalInstagramTitle").textContent = "Planejar Post no Instagram";
   document.getElementById("instaPostId").value = "";
   document.getElementById("instaPostDate").value = defaultDate || getLocalDateStr();
   document.getElementById("instaPostTime").value = "18:30";
   document.getElementById("instaPostFormat").value = "reels";
-  document.getElementById("instaPostTheme").value = "steelfish";
-  document.getElementById("instaPostTitle").value = "";
+  document.getElementById("instaPostTheme").value = defaultTheme || "steelfish";
+  document.getElementById("instaPostTitle").value = defaultTitle || "";
   document.getElementById("instaPostCaption").value = "";
   document.getElementById("instaPostStatus").value = "draft";
   const btnDelete = document.getElementById("btnDeleteInstagramPost");
