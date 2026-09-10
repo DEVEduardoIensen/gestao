@@ -87,7 +87,7 @@ const pkg = currentPkg;
 console.log(`\n6. Verificando Consistência de Versões (v${pkg.version}):`);
 const htmlCode = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 
-assert(pkg.version === '2.9.1', 'package.json está na versão 2.9.1');
+assert(pkg.version === '2.9.2', 'package.json está na versão 2.9.2');
 assert(htmlCode.includes(`app.js?v=${pkg.version}`), `index.html referencia app.js?v=${pkg.version}`);
 assert(htmlCode.includes(`styles.css?v=${pkg.version}`), `index.html referencia styles.css?v=${pkg.version}`);
 

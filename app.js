@@ -7710,40 +7710,115 @@ async function openBoletoLiveBarcodeScanner() {
   const torchBtn = document.getElementById("btnToggleScannerTorch");
   const helpMsg = document.getElementById("boletoScannerHelpMsg");
   const box = document.getElementById("boletoViewfinderBox");
+  const fallbackBox = document.getElementById("boletoScannerFallbackActions");
 
   if (!modal || !video) {
     showToast("Componente de câmera não encontrado no DOM.", "error");
     return;
   }
 
-  if (box) box.classList.remove("detected");
-  if (helpMsg) helpMsg.textContent = "Aponte a mira para o Código de Barras do boleto";
-
+  // Abre imediatamente o modal com classe .open para garantir opacidade 1 e interação ativa
+  modal.classList.add("open");
   modal.style.display = "flex";
 
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast("Câmera não suportada neste navegador.", "error");
-    closeBoletoLiveBarcodeScanner();
+  if (fallbackBox) fallbackBox.style.display = "none";
+  if (box) {
+    box.style.display = "block";
+    box.classList.remove("detected");
+  }
+  if (helpMsg) helpMsg.textContent = "Iniciando câmera...";
+
+  const hasGetUserMedia = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+
+  if (!hasGetUserMedia) {
+    console.warn("Navegador sem suporte a getUserMedia ou executando em contexto não seguro (HTTP).");
+    if (helpMsg) {
+      helpMsg.innerHTML = '<span style="color:#f59e0b">Câmera ao vivo requer HTTPS. Use os botões abaixo:</span>';
+    }
+    if (fallbackBox) {
+      fallbackBox.style.display = "flex";
+    }
+    showToast("Câmera ao vivo requer HTTPS. Você pode tirar uma foto com a câmera do celular!", "warning", 5000);
     return;
   }
 
   try {
     if (boletoScannerStream) {
       boletoScannerStream.getTracks().forEach(t => t.stop());
+      boletoScannerStream = null;
     }
 
-    const constraints = {
-      video: {
-        facingMode: { ideal: boletoScannerCurrentFacing },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      },
-      audio: false
-    };
+    // Configuração do vídeo para compatibilidade máxima com iOS Safari e Android
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
 
-    boletoScannerStream = await navigator.mediaDevices.getUserMedia(constraints);
+    // Tentativas progressivas de constraints
+    const constraintCandidates = [
+      {
+        video: {
+          facingMode: { ideal: boletoScannerCurrentFacing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      },
+      {
+        video: { facingMode: { ideal: boletoScannerCurrentFacing } },
+        audio: false
+      },
+      {
+        video: { facingMode: boletoScannerCurrentFacing },
+        audio: false
+      },
+      {
+        video: true,
+        audio: false
+      }
+    ];
+
+    let stream = null;
+    let lastError = null;
+    for (const c of constraintCandidates) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(c);
+        if (stream) break;
+      } catch (err) {
+        lastError = err;
+        console.warn("Tentativa de constraints falhou:", c, err);
+      }
+    }
+
+    if (!stream) {
+      throw lastError || new Error("Não foi possível acessar a câmera do dispositivo.");
+    }
+
+    boletoScannerStream = stream;
     video.srcObject = boletoScannerStream;
-    await video.play();
+
+    // Aguarda metadados no iOS Safari antes de reproduzir
+    await new Promise((resolve) => {
+      if (video.readyState >= 2) {
+        resolve();
+      } else {
+        const onLoaded = () => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          resolve();
+        };
+        video.addEventListener('loadedmetadata', onLoaded);
+        setTimeout(resolve, 800);
+      }
+    });
+
+    try {
+      await video.play();
+    } catch (playErr) {
+      console.warn("video.play inicial falhou, tentando novamente mutado:", playErr);
+      video.muted = true;
+      await video.play().catch(e => console.warn("Retry de play falhou:", e));
+    }
 
     const tracks = boletoScannerStream.getVideoTracks();
     if (tracks && tracks.length > 0) {
@@ -7756,12 +7831,18 @@ async function openBoletoLiveBarcodeScanner() {
       }
     }
 
+    if (helpMsg) helpMsg.textContent = "Aponte a mira para o Código de Barras do boleto";
     startBoletoScannerLoop();
 
   } catch (err) {
     console.error("Erro ao iniciar câmera para leitura de boleto:", err);
-    showToast("Não foi possível acessar a câmera. Você pode usar 'Foto da Linha' ou galeria.", "warning");
-    closeBoletoLiveBarcodeScanner();
+    if (helpMsg) {
+      helpMsg.innerHTML = '<span style="color:#ef4444">Permissão negada ou câmera ocupada.</span>';
+    }
+    if (fallbackBox) {
+      fallbackBox.style.display = "flex";
+    }
+    showToast("Não foi possível acessar a câmera ao vivo. Use as opções abaixo para fotografar.", "warning", 5000);
   }
 }
 window.openBoletoLiveBarcodeScanner = openBoletoLiveBarcodeScanner;
@@ -7769,7 +7850,22 @@ window.openBoletoLiveBarcodeScanner = openBoletoLiveBarcodeScanner;
 function closeBoletoLiveBarcodeScanner() {
   const modal = document.getElementById("modalBoletoLiveScanner");
   const video = document.getElementById("boletoLiveVideo");
-  if (modal) modal.style.display = "none";
+  const fallbackBox = document.getElementById("boletoScannerFallbackActions");
+  const torchBtn = document.getElementById("btnToggleScannerTorch");
+
+  if (modal) {
+    modal.classList.remove("open");
+    modal.style.display = "none";
+  }
+
+  if (fallbackBox) {
+    fallbackBox.style.display = "none";
+  }
+
+  if (torchBtn) {
+    torchBtn.textContent = "Lanterna";
+    torchBtn.style.display = "none";
+  }
 
   if (boletoScannerAnimFrame) {
     cancelAnimationFrame(boletoScannerAnimFrame);
@@ -7785,6 +7881,15 @@ function closeBoletoLiveBarcodeScanner() {
   boletoScannerTorchActive = false;
 }
 window.closeBoletoLiveBarcodeScanner = closeBoletoLiveBarcodeScanner;
+
+function triggerBoletoCameraCapture(type) {
+  const inputId = type === 'completa' ? 'boletoCameraInput' : 'boletoLinhaDigitavelInput';
+  const inp = document.getElementById(inputId);
+  if (inp) {
+    inp.click();
+  }
+}
+window.triggerBoletoCameraCapture = triggerBoletoCameraCapture;
 
 async function switchBoletoScannerCamera() {
   boletoScannerCurrentFacing = boletoScannerCurrentFacing === 'environment' ? 'user' : 'environment';
