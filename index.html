@@ -700,7 +700,7 @@
         <div class="stat-box">
           <div class="stat-box-label">Outros Patrocinadores</div>
           <div class="stat-box-value" id="statInstaOtherSponsorsCount" style="color: #38bdf8;">0 posts</div>
-          <div class="stat-box-sub">Tr Fishing, Iscas Mathias, Titan</div>
+          <div class="stat-box-sub">Tr Fishing, Iscas Mathias, Titan, Fishing Co.</div>
         </div>
 
         <div class="stat-box">
@@ -715,7 +715,7 @@
         <div>
           <div style="font-size: 0.88rem; font-weight: 700; color: var(--primary-gold);">Metas Contratuais de Patrocinadores</div>
           <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;" id="instaWeeklyGoalNotice">
-            Steelfish: Meta contratual de 2 posts por semana • Parceiros Oficiais: Tr Fishing, Iscas Mathias e Titan Caiaques
+            Steelfish: Meta contratual de 2 posts por semana • Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company
           </div>
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -723,6 +723,7 @@
           <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Tr Fishing</span>
           <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Iscas Mathias</span>
           <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Titan Caiaques</span>
+          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Fishing Company</span>
         </div>
       </div>
 
@@ -737,9 +738,11 @@
           <button class="btn btn-secondary btn-sm" id="btnInstaToday" onclick="goToInstagramToday()">Ir para Hoje</button>
         </div>
 
-        <!-- Calendar Grid -->
-        <div class="calendar-grid" id="instagramCalendarGrid">
-          <!-- Rendered by JS -->
+        <!-- Calendar Grid Wrapper Responsivo -->
+        <div class="calendar-scroll-wrap" style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+          <div class="calendar-grid" id="instagramCalendarGrid">
+            <!-- Rendered by JS -->
+          </div>
         </div>
 
         <!-- Calendar Legend -->
@@ -2447,6 +2450,7 @@
                   <option value="tr_fishing">Tr Fishing</option>
                   <option value="iscas_mathias">Iscas Mathias</option>
                   <option value="titan_caiaques">Titan Caiaques</option>
+                  <option value="fishing_company">Fishing Company</option>
                 </optgroup>
                 <optgroup label="Conteúdos Eldorado Lake">
                   <option value="pesca">Pesca &amp; Troféus (Lake)</option>

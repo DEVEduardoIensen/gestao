@@ -155,6 +155,16 @@ function sanitizeAppData(data) {
             title: 'Iscas Mathias: Ataque Violento na Meia-Água ao Entardecer',
             caption: 'Registro direto da água pelo guia Thiago Witeck. Tucunaré bruto capturado com isca Mathias na caída de barranco.\n\n#iscasmathias #eldoradolake #pescaesportiva',
             status: 'published'
+          },
+          {
+            id: 'insta-sample-5',
+            date: getLocalDateStr(new Date(Date.now() + 86400000 * 5)),
+            time: '12:00',
+            format: 'feed',
+            theme: 'fishing_company',
+            title: 'Fishing Company: Camisas UV50+ e Conforto Térmico no Lake',
+            caption: 'Linha oficial de vestuário de alta performance para os dias ensolarados na represa de Foz do Areia. Proteção UV50+, secagem rápida e tecido antimicrobiano.\n\nParceiro oficial: @fishingcompanyoficial\n\n#fishingcompany #vestuariopesca #protecaouv #eldoradopesca',
+            status: 'ready'
           }
         ];
   }
@@ -5558,7 +5568,7 @@ function updateInstagramStats() {
 
   const totalMonth = monthPosts.length;
   const steelfishMonthPosts = monthPosts.filter(p => p.theme === "steelfish");
-  const otherSponsorMonthPosts = monthPosts.filter(p => ['tr_fishing', 'iscas_mathias', 'titan_caiaques'].includes(p.theme));
+  const otherSponsorMonthPosts = monthPosts.filter(p => ['tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme));
   const publishedCount = monthPosts.filter(p => p.status === "published").length;
 
   // Cálculo da semana atual para a meta da Steelfish (2 posts por semana)
@@ -5630,10 +5640,10 @@ function updateInstagramStats() {
     const mondayFmt = `${mondayStr.slice(8, 10)}/${mondayStr.slice(5, 7)}`;
     const sundayFmt = `${sundayStr.slice(8, 10)}/${sundayStr.slice(5, 7)}`;
     if (steelfishWeekCount >= 2) {
-      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Meta da Steelfish cumprida com ${steelfishWeekCount} postagens. Parceiros Oficiais: Tr Fishing, Iscas Mathias e Titan Caiaques.`;
+      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Meta da Steelfish cumprida com ${steelfishWeekCount} postagens. Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
     } else {
       const needed = 2 - steelfishWeekCount;
-      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): ${steelfishWeekCount} de 2 posts da Steelfish agendados (falta ${needed}). Parceiros Oficiais: Tr Fishing, Iscas Mathias e Titan Caiaques.`;
+      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): ${steelfishWeekCount} de 2 posts da Steelfish agendados (falta ${needed}). Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
     }
   }
 }
@@ -5716,13 +5726,30 @@ function renderInstagramCalendar() {
       } else if (p.theme === 'iscas_mathias') {
         chipClass = 'insta-day-chip chip-sponsor';
         prefix = '[Iscas Mathias]';
+      } else if (p.theme === 'fishing_company') {
+        chipClass = 'insta-day-chip chip-sponsor';
+        prefix = '[Fishing Co.]';
+      }
+
+      let displayTitle = (p.title || 'Sem título').trim();
+      const lowerTitle = displayTitle.toLowerCase();
+      if (lowerTitle.startsWith('steelfish:')) {
+        displayTitle = displayTitle.substring(10).trim();
+      } else if (lowerTitle.startsWith('titan caiaques:')) {
+        displayTitle = displayTitle.substring(15).trim();
+      } else if (lowerTitle.startsWith('tr fishing:')) {
+        displayTitle = displayTitle.substring(11).trim();
+      } else if (lowerTitle.startsWith('iscas mathias:')) {
+        displayTitle = displayTitle.substring(14).trim();
+      } else if (lowerTitle.startsWith('fishing company:')) {
+        displayTitle = displayTitle.substring(16).trim();
       }
 
       innerHtml += `
         <div class="${chipClass} ${isPub ? 'chip-published' : ''}" 
              title="${prefix} ${escapeHtml(p.title || '')} (${p.time || ''})"
              onclick="openEditInstagramPostModal('${p.id}')">
-          <strong style="font-size:0.64rem;">${prefix}</strong> ${escapeHtml(p.title || 'Sem título')}
+          <strong style="font-size:0.64rem;">${prefix}</strong> ${escapeHtml(displayTitle)}
         </div>
       `;
     });
@@ -5806,7 +5833,7 @@ function renderInstagramPostsList() {
   if (currentInstagramFilter === 'steelfish') {
     posts = posts.filter(p => p.theme === 'steelfish');
   } else if (currentInstagramFilter === 'sponsors') {
-    posts = posts.filter(p => ['steelfish', 'tr_fishing', 'iscas_mathias', 'titan_caiaques'].includes(p.theme));
+    posts = posts.filter(p => ['steelfish', 'tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme));
   } else if (currentInstagramFilter === 'ready') {
     posts = posts.filter(p => p.status === 'ready');
   } else if (currentInstagramFilter === 'draft') {
@@ -5851,6 +5878,7 @@ function renderInstagramPostsList() {
       tr_fishing: 'Patrocinador: Tr Fishing',
       iscas_mathias: 'Patrocinador: Iscas Mathias',
       titan_caiaques: 'Patrocinador: Titan Caiaques',
+      fishing_company: 'Patrocinador: Fishing Company',
       pesca: 'Pesca & Troféus',
       rifas: 'Rifas & Vales',
       rancho: 'Rancho Lake',
@@ -5864,7 +5892,7 @@ function renderInstagramPostsList() {
     if (p.theme === 'steelfish') {
       themeBadgeClass = 'badge-insta-sponsor-steelfish';
       themeBadgeStyle = '';
-    } else if (['tr_fishing', 'iscas_mathias', 'titan_caiaques'].includes(p.theme)) {
+    } else if (['tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme)) {
       themeBadgeClass = 'badge-insta-sponsor';
       themeBadgeStyle = '';
     }

@@ -62,7 +62,9 @@ assert(htmlContent.includes('value="steelfish"'), 'Opção Steelfish no select d
 assert(htmlContent.includes('value="tr_fishing"'), 'Opção Tr Fishing no select de patrocinadores');
 assert(htmlContent.includes('value="iscas_mathias"'), 'Opção Iscas Mathias no select de patrocinadores');
 assert(htmlContent.includes('value="titan_caiaques"'), 'Opção Titan Caiaques no select de patrocinadores');
-console.log('  ✓ [PASS] Patrocinadores (Steelfish, Tr Fishing, Iscas Mathias, Titan Caiaques) e metas 2/sem integrados');
+assert(htmlContent.includes('value="fishing_company"'), 'Opção Fishing Company no select de patrocinadores');
+assert(htmlContent.includes('Fishing Company'), 'Badge ou menção a Fishing Company no cabeçalho de metas');
+console.log('  ✓ [PASS] Patrocinadores (Steelfish, Tr Fishing, Iscas Mathias, Titan Caiaques, Fishing Company) e metas 2/sem integrados');
 
 // 5. Verificação de Lógica no app.js
 console.log('\n5. Verificando Lógica no app.js:');
@@ -73,18 +75,21 @@ assert(jsContent.includes('updateInstagramStats'), 'app.js implementa updateInst
 assert(jsContent.includes('steelfishWeekCount'), 'app.js calcula contagem semanal de posts da Steelfish para meta 2/sem');
 assert(jsContent.includes('filterInstaSteelfish'), 'app.js suporta filtro Steelfish');
 assert(jsContent.includes('filterInstaSponsors'), 'app.js suporta filtro Patrocinadores');
+assert(jsContent.includes('fishing_company'), 'app.js inclui fishing_company na filtragem e rotulação de patrocinadores');
 assert(jsContent.includes('openNewInstagramPostModal'), 'app.js implementa openNewInstagramPostModal');
 assert(jsContent.includes('openEditInstagramPostModal'), 'app.js implementa openEditInstagramPostModal');
 assert(jsContent.includes('copyInstagramCaption'), 'app.js implementa cópia de legenda');
 console.log('  ✓ [PASS] Lógica de patrocinadores e cálculo da meta semanal funcionando no app.js');
 
-// 6. Verificação de Estilos no styles.css
-console.log('\n6. Verificando Estilos Visuais no styles.css:');
+// 6. Verificação de Estilos e Responsividade no styles.css e index.html
+console.log('\n6. Verificando Estilos Visuais e Responsividade:');
 assert(cssContent.includes('.badge-insta-sponsor'), 'styles.css possui estilo para badge de patrocinador');
 assert(cssContent.includes('.badge-insta-sponsor-steelfish'), 'styles.css possui estilo destacado para Steelfish');
 assert(cssContent.includes('.insta-day-chip.chip-steelfish'), 'styles.css possui chip destacado da Steelfish no calendário');
 assert(cssContent.includes('.insta-day-chip.chip-sponsor'), 'styles.css possui chip de patrocinadores');
-console.log('  ✓ [PASS] Estilos específicos de patrocinadores definidos no CSS');
+assert(cssContent.includes('minmax(0, 1fr)'), 'styles.css utiliza minmax(0, 1fr) para evitar que chips longos estufem as colunas do calendário');
+assert(htmlContent.includes('class="calendar-scroll-wrap"'), 'index.html possui wrapper de rolagem responsiva para o calendário');
+console.log('  ✓ [PASS] Estilos específicos de patrocinadores e correção de responsividade validados');
 
 // 7. Verificação Estrutural de Tags HTML
 console.log('\n7. Verificando Integridade Estrutural do DOM em index.html:');
