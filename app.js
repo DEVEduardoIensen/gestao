@@ -753,7 +753,7 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const activeCache = 'eldorado-pwa-v2.8.9';
+        const activeCache = 'eldorado-pwa-v2.9.0';
         await Promise.all(
           cacheNames.map(name => {
             if (name !== activeCache) {
@@ -763,7 +763,7 @@ window.forceCheckAppUpdate = async function() {
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.8.9 PRO)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.9.0 PRO)!', 'success');
     } else {
       window.location.reload();
     }
@@ -6545,28 +6545,27 @@ function renderBoletoMonthPills() {
   const container = document.getElementById("boletoMonthPills");
   if (!container) return;
 
-  const months = [
-    { year: 2026, month: 8, label: 'Setembro' },
-    { year: 2026, month: 9, label: 'Outubro' },
-    { year: 2026, month: 10, label: 'Novembro' },
-    { year: 2026, month: 11, label: 'Dezembro' }
+  const monthNames = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
 
   const boletos = appData.boletos || [];
   container.innerHTML = "";
 
-  months.forEach(m => {
-    const prefix = `${m.year}-${String(m.month + 1).padStart(2, "0")}`;
+  for (let m = 0; m < 12; m++) {
+    const prefix = `${boletoSelectedYear}-${String(m + 1).padStart(2, "0")}`;
     const count = boletos.filter(b => b.dueDate && b.dueDate.startsWith(prefix)).length;
-    const isActive = (boletoSelectedYear === m.year && boletoSelectedMonth === m.month);
+    const isActive = (boletoSelectedMonth === m);
 
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `boleto-month-pill ${isActive ? 'active' : ''}`;
-    btn.innerHTML = `<span>${m.label}</span> ${count > 0 ? `<span style="font-size: 0.7rem; opacity: 0.85; padding: 1px 5px; border-radius: 9999px; background: rgba(0,0,0,0.25);">${count}</span>` : ''}`;
-    btn.onclick = () => selectBoletoMonth(m.year, m.month);
+    btn.title = `${monthNames[m]} de ${boletoSelectedYear} (${count} boleto${count === 1 ? '' : 's'})`;
+    btn.innerHTML = `<span>${monthNames[m]}</span>${count > 0 ? `<span class="pill-count" style="font-size: 0.72rem; font-weight: 800; padding: 1px 6px; border-radius: 9999px; background: ${isActive ? 'rgba(0,0,0,0.35)' : 'rgba(229,193,88,0.2)'}; color: ${isActive ? '#000000' : 'var(--primary-gold)'}; margin-left: 4px; border: 1px solid ${isActive ? 'transparent' : 'rgba(229,193,88,0.4)'};">${count}</span>` : ''}`;
+    btn.onclick = () => selectBoletoMonth(boletoSelectedYear, m);
     container.appendChild(btn);
-  });
+  }
 }
 window.renderBoletoMonthPills = renderBoletoMonthPills;
 

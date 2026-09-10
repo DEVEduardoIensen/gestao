@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.8.9">
+  <link rel="stylesheet" href="styles.css?v=2.9.0">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -1118,19 +1118,25 @@
         </div>
       </div>
 
-      <!-- Seletor de Meses em Abas / Pills -->
-      <div style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: var(--primary-gold);">Mês de Vencimento:</span>
-          <div id="boletoMonthPills" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
-            <!-- Rendered by JS -->
+      <!-- Seletor de Meses Idêntico à Agenda de Pesca (Design Profissional e Navegação Completa) -->
+      <div class="calendar-card" style="margin-bottom: 1.5rem; padding: 1.25rem 1.5rem;">
+        <div class="month-picker-bar" style="margin-bottom: 0;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btnBoletoCalPrevMonth" onclick="changeBoletoMonth(-1)" title="Mês Anterior">◀ Mês Anterior</button>
+            <h3 class="month-label" id="boletoCurrentMonthLabel" style="margin: 0; min-width: 190px;">Setembro de 2026</h3>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnBoletoCalNextMonth" onclick="changeBoletoMonth(1)" title="Próximo Mês">Próximo Mês ▶</button>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btnBoletoCalToday" onclick="goToBoletoToday()" title="Ir para o mês atual">Ir para Hoje</button>
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <button class="btn btn-secondary btn-sm" onclick="changeBoletoMonth(-1)" title="Mês Anterior">&lt;</button>
-          <span id="boletoCurrentMonthLabel" style="font-size: 0.85rem; font-weight: 700; color: var(--text-light); min-width: 130px; text-align: center;">Setembro de 2026</span>
-          <button class="btn btn-secondary btn-sm" onclick="changeBoletoMonth(1)" title="Próximo Mês">&gt;</button>
-          <button class="btn btn-secondary btn-sm" onclick="goToBoletoToday()" title="Ir para o mês atual">Hoje</button>
+
+        <!-- Barra com todos os 12 Meses do Ano Selecionado -->
+        <div style="margin-top: 1.15rem; padding-top: 0.85rem; border-top: 1px solid var(--border-light); display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Meses de Vencimento:</span>
+          <div id="boletoMonthPills" style="display: flex; gap: 0.35rem; flex-wrap: wrap; flex: 1;">
+            <!-- Rendered by JS: Todos os 12 meses (Janeiro a Dezembro) com contadores -->
+          </div>
         </div>
       </div>
 
@@ -1258,7 +1264,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.8.9 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.0 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -2845,14 +2851,14 @@
   <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
-  <script src="normalize_raffle.js?v=2.8.9"></script>
-  <script src="db_dexie.js?v=2.8.9"></script>
-  <script src="auth_manager.js?v=2.8.9"></script>
-  <script src="sync_engine.js?v=2.8.9"></script>
-  <script src="qrcode.js?v=2.8.9"></script>
-  <script src="pdf.min.js?v=2.8.9"></script>
-  <script src="instagram_cronograma_104.js?v=2.8.9"></script>
-  <script src="app.js?v=2.8.9"></script>
+  <script src="normalize_raffle.js?v=2.9.0"></script>
+  <script src="db_dexie.js?v=2.9.0"></script>
+  <script src="auth_manager.js?v=2.9.0"></script>
+  <script src="sync_engine.js?v=2.9.0"></script>
+  <script src="qrcode.js?v=2.9.0"></script>
+  <script src="pdf.min.js?v=2.9.0"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.0"></script>
+  <script src="app.js?v=2.9.0"></script>
 </body>
 
 </html>
