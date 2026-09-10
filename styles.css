@@ -3512,6 +3512,40 @@ html.show-auth-gate .offline-bar {
   border-left: 2px solid #f59e0b;
 }
 
+.badge-insta-sponsor {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.badge-insta-sponsor-steelfish {
+  background: rgba(229, 193, 88, 0.2);
+  color: var(--primary-gold);
+  border: 1px solid var(--border-gold);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.insta-day-chip.chip-sponsor {
+  background: rgba(56, 189, 248, 0.22);
+  color: #bae6fd;
+  border-left: 3px solid #38bdf8;
+}
+
+.insta-day-chip.chip-steelfish {
+  background: rgba(229, 193, 88, 0.25);
+  color: #fff;
+  border-left: 3px solid var(--primary-gold);
+  font-weight: 700;
+}
+
 .insta-day-chip.chip-published {
   opacity: 0.65;
   text-decoration: line-through;
