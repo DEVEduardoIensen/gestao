@@ -150,6 +150,9 @@
         <button class="nav-tab-btn" data-tab="tab-rancho" id="tabBtnRancho">
           Rancho
         </button>
+        <button class="nav-tab-btn" data-tab="tab-boletos" id="tabBtnBoletos">
+          Boletos
+        </button>
         <button class="nav-tab-btn" data-tab="tab-eduardo" id="tabBtnEduardo">
           Ponto do Eduardo
         </button>
@@ -671,14 +674,20 @@
       <div class="section-header">
         <div class="section-title">
           <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
-            <h2 style="margin: 0;">Calendário de Conteúdo • Instagram</h2>
+            <h2 style="margin: 0;">Calendário de Lembretes • Instagram</h2>
             <span class="badge" style="background: rgba(225, 48, 108, 0.15); border: 1px solid rgba(225, 48, 108, 0.4); color: #f472b6; font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 700;">@eldoradopesca</span>
           </div>
-          <p style="margin-top: 0.35rem;">Planejamento de postagens, cronograma de patrocinadores, reels e stories</p>
+          <p style="margin-top: 0.35rem;">Lembretes visuais de postagens, reels, stories e compromissos com patrocinadores</p>
         </div>
-        <div class="section-actions">
+        <div class="section-actions" style="gap: 0.5rem; flex-wrap: wrap;">
           <button class="btn btn-gold" onclick="openNewInstagramPostModal()">
-            + Novo Post / Agendamento
+            + Novo Lembrete
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="exportInstagramCalendarCSV()" title="Baixar planilha CSV do calendário de postagens">
+            Exportar CSV
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="loadOfficialInstagramSchedule()" title="Carregar os lembretes oficiais de Setembro a Dezembro">
+            Carregar 104 Lembretes
           </button>
         </div>
       </div>
@@ -769,35 +778,71 @@
           </div>
         </div>
         <div style="text-align: center; font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem;">
-          Clique em qualquer dia para agendar ou registrar uma nova postagem na data.
+          Clique em qualquer dia para ver ou agendar um lembrete de postagem.
         </div>
       </div>
 
-      <!-- Posts List Section with Filters -->
-      <div class="section-header" style="margin-top: 1.5rem;">
-        <div class="section-title">
-          <h3>Planejamento & Roteiros de Postagens</h3>
-          <p>Cronograma editorial, roteiros de patrocinadores, copies e legendas</p>
+      <!-- Datas Sazonais Integradas -->
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 0.65rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-light);">
+          Datas Sazonais Integradas (16 Semanas):
+        </div>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Primavera: 22/09</span>
+          <span class="badge" style="background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Dia das Criancas: 12/10</span>
+          <span class="badge" style="background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Black Friday: 23 a 30/11</span>
+          <span class="badge" style="background: rgba(52, 211, 153, 0.12); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Natal &amp; Verao: Dezembro</span>
         </div>
       </div>
 
-      <div class="grid-controls-bar" style="margin-bottom: 1.5rem;">
-        <div class="legend-items">
-          <button class="btn btn-secondary btn-sm active" id="filterInstaAll" onclick="setInstagramFilter('all')">Todos</button>
-          <button class="btn btn-secondary btn-sm" id="filterInstaSteelfish" onclick="setInstagramFilter('steelfish')">Steelfish (2/sem)</button>
-          <button class="btn btn-secondary btn-sm" id="filterInstaSponsors" onclick="setInstagramFilter('sponsors')">Patrocinadores</button>
-          <button class="btn btn-secondary btn-sm" id="filterInstaReady" onclick="setInstagramFilter('ready')">Prontos</button>
-          <button class="btn btn-secondary btn-sm" id="filterInstaDraft" onclick="setInstagramFilter('draft')">Rascunhos</button>
-          <button class="btn btn-secondary btn-sm" id="filterInstaPublished" onclick="setInstagramFilter('published')">Publicados</button>
+      <!-- Filtros e Consulta de Lembretes -->
+      <div class="grid-controls-bar" style="margin-bottom: 1rem; gap: 0.75rem; flex-direction: column; align-items: stretch;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div class="legend-items" style="flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm active" id="filterInstaAll" onclick="setInstagramFilter('all')">Todos</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaSteelfish" onclick="setInstagramFilter('steelfish')">Steelfish (2/sem)</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaFishingCo" onclick="setInstagramFilter('fishing_company')">Fishing Co. (2/sem)</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaTrFishing" onclick="setInstagramFilter('tr_fishing')">TR Fishing (1/sem)</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaMathias" onclick="setInstagramFilter('iscas_mathias')">Iscas Mathias (1/sem)</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaTitan" onclick="setInstagramFilter('titan_caiaques')">Titan (2/mes)</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaSponsors" onclick="setInstagramFilter('sponsors')">Patrocinadores</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <div style="display: flex; background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 2px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnViewInstagramCards" onclick="setInstagramViewMode('cards')" style="border: none; padding: 0.3rem 0.65rem; font-size: 0.75rem;">Cards</button>
+              <button type="button" class="btn btn-secondary btn-sm active" id="btnViewInstagramTable" onclick="setInstagramViewMode('table')" style="border: none; padding: 0.3rem 0.65rem; font-size: 0.75rem;">Tabela / Lista</button>
+            </div>
+            <input type="text" id="inputSearchInstagram" class="search-input" placeholder="Buscar por tema ou marca..." oninput="renderInstagramPostsList()" style="max-width: 220px;">
+          </div>
         </div>
 
-        <div>
-          <input type="text" id="inputSearchInstagram" class="search-input" placeholder="Buscar por patrocinador, tema ou legenda..." oninput="renderInstagramPostsList()">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-top: 1px solid var(--border-light); padding-top: 0.65rem;">
+          <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+            <span style="font-size: 0.75rem; color: var(--text-dim); font-weight: 700;">Mes:</span>
+            <button type="button" class="btn btn-secondary btn-sm active" id="filterMonthAll" onclick="setInstagramMonthFilter('all')">Todos</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthSep" onclick="setInstagramMonthFilter('2026-09')">Setembro</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthOct" onclick="setInstagramMonthFilter('2026-10')">Outubro</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthNov" onclick="setInstagramMonthFilter('2026-11')">Novembro</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthDec" onclick="setInstagramMonthFilter('2026-12')">Dezembro</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+            <span style="font-size: 0.75rem; color: var(--text-dim); font-weight: 700;">Status:</span>
+            <button type="button" class="btn btn-secondary btn-sm active" id="filterStatusAll" onclick="setInstagramStatusFilter('all')">Todos</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaDraft" onclick="setInstagramStatusFilter('draft')">Planejados</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaProducing" onclick="setInstagramStatusFilter('producing')">Gravando</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaReady" onclick="setInstagramStatusFilter('ready')">Prontos</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaPublished" onclick="setInstagramStatusFilter('published')">Postados</button>
+          </div>
         </div>
       </div>
 
-      <!-- Instagram Posts Grid Container -->
-      <div class="cards-grid-2" id="instagramPostsContainer">
+      <!-- Instagram Posts Grid Container (Cards View) -->
+      <div class="cards-grid-2" id="instagramPostsContainer" style="display: none;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Instagram Posts Table Container (Table View) -->
+      <div id="instagramTableView" style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 0.5rem;">
         <!-- Rendered by JS -->
       </div>
 
@@ -929,6 +974,183 @@
 
       <!-- Rancho Bookings Grid -->
       <div class="cards-grid-2" id="ranchoBookingsContainer">
+        <!-- Rendered by JS -->
+      </div>
+
+    </section>
+
+    <!-- ====================================================================
+         TAB 5: GESTÃO DE BOLETOS E CONTAS A PAGAR
+         ==================================================================== -->
+    <section class="tab-pane" id="tab-boletos">
+
+      <!-- Hidden Inputs para Captura Direta no iPhone (Camera nativa, Foto da Linha Digitável, Galeria e Leitor Universal de PDF/HTML) -->
+      <input type="file" accept="image/*" capture="environment" id="boletoLinhaDigitavelInput" style="display: none;" onchange="handleLinhaDigitavelPhotoInput(event)">
+      <input type="file" accept="image/*" capture="environment" id="boletoCameraInput" style="display: none;" onchange="handleBoletoFileInput(event)">
+      <input type="file" accept="image/*,application/pdf" multiple id="boletoGalleryInput" style="display: none;" onchange="handleBoletoFileInput(event)">
+      <input type="file" accept="application/pdf,.pdf,.html,.htm,.txt" id="boletoPdfInput" style="display: none;" onchange="handleBoletoUnifiedFileInput(event)">
+      <input type="file" accept=".html,.htm,.txt" id="inputImportReportFile" style="display: none;" onchange="handleReportFileUpload(event)">
+
+      <div class="section-header">
+        <div class="section-title">
+          <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+            <h2 style="margin: 0;">Gestão de Boletos</h2>
+          </div>
+          <p style="margin-top: 0.35rem;">Contas a pagar, duplicatas, boletos de empresas e controle de vencimentos</p>
+        </div>
+        <div class="section-actions" style="gap: 0.5rem; flex-wrap: wrap;">
+          <label for="boletoLinhaDigitavelInput" class="btn btn-gold" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Fotografar especificamente a linha digitável do boleto (47 ou 48 dígitos)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span>Foto Linha Digitável</span>
+          </label>
+          <label for="boletoPdfInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Importar PDF de empresa única ou relatório de contas FastReport">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span>Importar PDF / Relatório</span>
+          </label>
+          <label for="boletoCameraInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Tirar foto completa do boleto impresso">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span>Foto Completa</span>
+          </label>
+          <label for="boletoGalleryInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Escolha fotos ou PDFs da galeria">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <span>Galeria</span>
+          </label>
+          <button type="button" class="btn btn-secondary" onclick="openNewBoletoModal()" title="Digitar boleto manualmente">
+            + Novo Manual
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="loadDemoBoletos()" title="Carregar as contas reais de duplicatas do relatório">
+            Recarregar Relatório Real
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="exportBoletosBackupJSON()" title="Exportar backup JSON de todos os boletos">
+            Backup JSON
+          </button>
+        </div>
+      </div>
+
+      <!-- Dropzone Inteligente de Captura / Arraste -->
+      <div class="boletos-dropzone" id="boletosDropzone"
+        onclick="triggerBoletoUploadClick(event)"
+        ondragover="handleBoletoDragOver(event)"
+        ondragleave="handleBoletoDragLeave(event)"
+        ondrop="handleBoletoDrop(event)">
+        
+        <div style="display: flex; align-items: center; justify-content: center; gap: 1.25rem; flex-wrap: wrap;">
+          <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(229, 193, 88, 0.12); display: flex; align-items: center; justify-content: center; color: var(--primary-gold); border: 1px solid var(--border-gold);">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+              <line x1="6" y1="8" x2="6" y2="16"></line>
+              <line x1="10" y1="8" x2="10" y2="16"></line>
+              <line x1="14" y1="8" x2="14" y2="16"></line>
+              <line x1="18" y1="8" x2="18" y2="16"></line>
+            </svg>
+          </div>
+          <div style="text-align: left;">
+            <div style="font-size: 1rem; font-weight: 700; color: var(--text-light);">
+              Tire uma foto da linha digitável, envie qualquer PDF ou arraste aqui
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+              Lê PDFs de empresas, relatórios de contas, fotos da linha digitável e códigos de barras com QR Code automático
+            </div>
+          </div>
+          <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+            <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; padding: 0.25rem 0.6rem;">
+              Linha de 47/48 dígitos
+            </span>
+            <span class="badge" style="background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); font-size: 0.72rem; padding: 0.25rem 0.6rem;">
+              Auto-Vencimento &amp; Valor
+            </span>
+          </div>
+        </div>
+
+        <!-- Banner de Progresso do OCR -->
+        <div id="boletoOcrBanner" style="display: none; margin-top: 1rem; background: rgba(6, 10, 19, 0.8); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 0.85rem 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <span id="boletoOcrStatusText" style="font-size: 0.82rem; font-weight: 600; color: var(--primary-gold);">Processando imagem...</span>
+            <span id="boletoOcrPercentText" style="font-size: 0.82rem; color: var(--text-dim);">0%</span>
+          </div>
+          <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden;">
+            <div id="boletoOcrProgressBar" style="width: 0%; height: 100%; background: var(--primary-gold); transition: width 0.2s ease;"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Resumo Financeiro do Mês (4 KPIs) -->
+      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+          <div class="stat-box-label">Total a Pagar no Mês</div>
+          <div class="stat-box-value gold" id="statBoletoTotalToPay">R$ 0,00</div>
+          <div class="stat-box-sub" id="statBoletoPendingCount">0 boletos pendentes</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Total Já Quitado</div>
+          <div class="stat-box-value" id="statBoletoTotalPaid" style="color: #34d399;">R$ 0,00</div>
+          <div class="stat-box-sub" id="statBoletoPaidCount">0 boletos pagos</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Vencendo Hoje</div>
+          <div class="stat-box-value" id="statBoletoDueToday" style="color: #fbbf24;">R$ 0,00</div>
+          <div class="stat-box-sub" id="statBoletoDueTodayCount">0 boletos para hoje</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-box-label">Boletos Atrasados</div>
+          <div class="stat-box-value" id="statBoletoLate" style="color: #f87171;">R$ 0,00</div>
+          <div class="stat-box-sub" id="statBoletoLateCount">0 boletos em atraso</div>
+        </div>
+      </div>
+
+      <!-- Seletor de Meses em Abas / Pills -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--primary-gold);">Mês de Vencimento:</span>
+          <div id="boletoMonthPills" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <button class="btn btn-secondary btn-sm" onclick="changeBoletoMonth(-1)" title="Mês Anterior">&lt;</button>
+          <span id="boletoCurrentMonthLabel" style="font-size: 0.85rem; font-weight: 700; color: var(--text-light); min-width: 130px; text-align: center;">Setembro de 2026</span>
+          <button class="btn btn-secondary btn-sm" onclick="changeBoletoMonth(1)" title="Próximo Mês">&gt;</button>
+          <button class="btn btn-secondary btn-sm" onclick="goToBoletoToday()" title="Ir para o mês atual">Hoje</button>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros e Busca -->
+      <div class="grid-controls-bar" style="margin-bottom: 1.5rem;">
+        <div class="legend-items">
+          <button type="button" class="btn btn-secondary btn-sm active" id="filterBoletoAll" onclick="setBoletoFilter('all')">Todos</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="filterBoletoPending" onclick="setBoletoFilter('pending')">A Vencer</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="filterBoletoToday" onclick="setBoletoFilter('today')">Vence Hoje</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="filterBoletoLate" onclick="setBoletoFilter('late')">Atrasados</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="filterBoletoPaid" onclick="setBoletoFilter('paid')">Pagos</button>
+        </div>
+
+        <div style="flex: 1; max-width: 380px;">
+          <input type="text" id="inputSearchBoleto" class="search-input" placeholder="Buscar por beneficiário, código ou valor..." oninput="renderBoletosAgenda()">
+        </div>
+      </div>
+
+      <!-- Agenda de Pagamentos Agrupada Dia a Dia -->
+      <div id="boletosAgendaContainer">
         <!-- Rendered by JS -->
       </div>
 
@@ -2504,6 +2726,119 @@
     </div>
   </div>
 
+  <!-- 5. Modal: Registrar / Editar Boleto (BoletoScan Pro) -->
+  <div class="modal-backdrop" id="modalBoletoForm">
+    <div class="modal-dialog" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <span id="modalBoletoFormTitle">Registrar Boleto</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalBoletoForm')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="bfBoletoId" value="">
+
+        <!-- Miniatura da Imagem Escaneada se houver -->
+        <div id="bfImagePreviewContainer" style="display: none; margin-bottom: 1rem; text-align: center; background: rgba(0,0,0,0.4); border-radius: var(--radius-sm); padding: 0.5rem; border: 1px solid var(--border-light);">
+          <img id="bfImagePreview" src="" alt="Boleto Escaneado" style="max-height: 120px; max-width: 100%; border-radius: 4px; object-fit: contain;">
+          <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.3rem;" id="bfImageMeta">Foto otimizada via Canvas</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Beneficiário / Concessionária *</label>
+          <input type="text" id="bfBeneficiary" class="form-input" placeholder="Ex: Copel Energia, Sanepar, Starlink, Fornecedor..." required>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <label class="form-label" style="margin-bottom: 0;">Linha Digitável / Código de Barras (47 ou 48 dígitos)</label>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.5rem; font-size: 0.72rem;" onclick="decodeBoletoCodeManually()">
+              Auto-Decodificar
+            </button>
+          </div>
+          <input type="text" id="bfCode" class="form-input" placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000" style="font-family: monospace; font-size: 0.85rem;" oninput="onBoletoCodeInput(this.value)">
+          <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem;">
+            O sistema decodifica matematicamente o banco, o vencimento e o valor em R$ automaticamente.
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Data de Vencimento *</label>
+            <input type="date" id="bfDueDate" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor Cobrado (R$) *</label>
+            <input type="number" id="bfAmount" class="form-input" placeholder="0.00" step="0.01" required>
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Categoria / Destino</label>
+            <select id="bfCategory" class="form-select">
+              <option value="rancho">Rancho &amp; Hospedagem</option>
+              <option value="loja">Loja &amp; Fornecedores</option>
+              <option value="barcos">Barcos &amp; Manutenção Náutica</option>
+              <option value="combustivel">Combustível &amp; Operação</option>
+              <option value="internet">Internet &amp; Comunicação</option>
+              <option value="energia">Energia &amp; Água</option>
+              <option value="impostos">Impostos &amp; Taxas</option>
+              <option value="outros">Outros</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status do Pagamento</label>
+            <select id="bfStatus" class="form-select">
+              <option value="pending">Pendente (A Pagar)</option>
+              <option value="paid">Já Quitado (Pago)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label">Observações / Rota</label>
+          <input type="text" id="bfDescription" class="form-input" placeholder="Ex: Referente à fatura do mês anterior">
+        </div>
+
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modalBoletoForm')">Cancelar</button>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary" id="btnBoletoBatchNext" onclick="saveBoletoModalAndNext()" title="Salva este boleto e abre a câmera imediatamente para o próximo">
+            Fotografar Próximo
+          </button>
+          <button type="button" class="btn btn-gold" id="btnSaveBoleto" onclick="saveBoletoModal()">
+            Salvar Boleto
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Modal: Pagar Boleto / Código de Barras & QR Code -->
+  <div class="modal-backdrop" id="modalBoletoPay">
+    <div class="modal-dialog" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: var(--primary-gold);">Pagar Boleto • Código &amp; QR Code</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modalBoletoPay')">✕</button>
+      </div>
+      <div class="modal-body" id="modalBoletoPayBody">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalBoletoPay')">Fechar</button>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;" id="modalBoletoPayFooterActions">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
@@ -2514,6 +2849,9 @@
   <script src="db_dexie.js?v=2.8.9"></script>
   <script src="auth_manager.js?v=2.8.9"></script>
   <script src="sync_engine.js?v=2.8.9"></script>
+  <script src="qrcode.js?v=2.8.9"></script>
+  <script src="pdf.min.js?v=2.8.9"></script>
+  <script src="instagram_cronograma_104.js?v=2.8.9"></script>
   <script src="app.js?v=2.8.9"></script>
 </body>
 

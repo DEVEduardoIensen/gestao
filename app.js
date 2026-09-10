@@ -30,7 +30,8 @@ let appData = {
   eduardoWorkDays: [],
   fishingBookings: [],
   ranchoBookings: [],
-  instagramPosts: []
+  instagramPosts: [],
+  boletos: []
 };
 
 // UI State
@@ -66,6 +67,14 @@ let currentValesFilter = "all";
 let currentFishingFilter = "all";
 let currentRanchoFilter = "all";
 let currentInstagramFilter = "all";
+let currentInstagramViewMode = "cards";
+let currentInstagramMonthFilter = "all";
+let currentInstagramStatusFilter = "all";
+let currentBoletoFilter = "all";
+let boletoSelectedYear = 2026;
+let boletoSelectedMonth = 8; // 8 = Setembro
+let activeBoletoId = null;
+let lastScannedBoletoDataUrl = null;
 let calSelectedYear = new Date().getFullYear();
 let calSelectedMonth = new Date().getMonth(); // 0-indexed (7 = August)
 let fishCalSelectedYear = new Date().getFullYear();
@@ -167,6 +176,17 @@ function sanitizeAppData(data) {
             status: 'ready'
           }
         ];
+  }
+  if (!Array.isArray(data.boletos)) {
+    data.boletos = (data.settings && Array.isArray(data.settings.boletos))
+      ? data.settings.boletos
+      : [];
+  }
+  // Se estiver vazio ou contiver apenas mock antigo (bol-demo-001), carrega os 16 títulos reais do relatório
+  if (data.boletos.length === 0 || (data.boletos.length > 0 && String(data.boletos[0].id).startsWith('bol-demo-'))) {
+    data.boletos = getThiagoRealContasAPagar();
+    if (!data.settings) data.settings = {};
+    data.settings.boletos = data.boletos;
   }
   return data;
 }
@@ -1319,6 +1339,9 @@ function renderTab(tabId) {
     case "tab-rancho":
       renderRanchoView();
       break;
+    case "tab-boletos":
+      renderBoletosView();
+      break;
     case "tab-eduardo":
       renderEduardoView();
       break;
@@ -1342,6 +1365,7 @@ function renderAll(forceAll = false) {
     renderFishingAgendaView();
     renderInstagramView();
     renderRanchoView();
+    renderBoletosView();
     renderEduardoView();
     renderBackupView();
   } else {
@@ -5819,6 +5843,10 @@ function setInstagramFilter(filter) {
   const filterBtnMap = {
     all: 'filterInstaAll',
     steelfish: 'filterInstaSteelfish',
+    fishing_company: 'filterInstaFishingCo',
+    tr_fishing: 'filterInstaTrFishing',
+    iscas_mathias: 'filterInstaMathias',
+    titan_caiaques: 'filterInstaTitan',
     sponsors: 'filterInstaSponsors',
     ready: 'filterInstaReady',
     draft: 'filterInstaDraft',
@@ -5838,17 +5866,84 @@ function setInstagramFilter(filter) {
 }
 window.setInstagramFilter = setInstagramFilter;
 
+function setInstagramViewMode(mode) {
+  currentInstagramViewMode = mode || 'cards';
+  const btnCards = document.getElementById('btnViewInstagramCards');
+  const btnTable = document.getElementById('btnViewInstagramTable');
+  const cardsContainer = document.getElementById('instagramPostsContainer');
+  const tableContainer = document.getElementById('instagramTableView');
+
+  if (btnCards) btnCards.classList.toggle('active', currentInstagramViewMode === 'cards');
+  if (btnTable) btnTable.classList.toggle('active', currentInstagramViewMode === 'table');
+
+  if (cardsContainer) cardsContainer.style.display = currentInstagramViewMode === 'cards' ? 'grid' : 'none';
+  if (tableContainer) tableContainer.style.display = currentInstagramViewMode === 'table' ? 'block' : 'none';
+
+  renderInstagramPostsList();
+}
+window.setInstagramViewMode = setInstagramViewMode;
+
+function setInstagramMonthFilter(month) {
+  currentInstagramMonthFilter = month || 'all';
+  const map = {
+    'all': 'filterMonthAll',
+    '2026-09': 'filterMonthSep',
+    '2026-10': 'filterMonthOct',
+    '2026-11': 'filterMonthNov',
+    '2026-12': 'filterMonthDec'
+  };
+  Object.values(map).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const activeEl = document.getElementById(map[month] || 'filterMonthAll');
+  if (activeEl) activeEl.classList.add('active');
+
+  renderInstagramPostsList();
+}
+window.setInstagramMonthFilter = setInstagramMonthFilter;
+
+function setInstagramStatusFilter(status) {
+  currentInstagramStatusFilter = status || 'all';
+  const map = {
+    'all': 'filterStatusAll',
+    'draft': 'filterInstaDraft',
+    'producing': 'filterInstaProducing',
+    'ready': 'filterInstaReady',
+    'published': 'filterInstaPublished'
+  };
+  Object.values(map).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const activeEl = document.getElementById(map[status] || 'filterStatusAll');
+  if (activeEl) activeEl.classList.add('active');
+
+  renderInstagramPostsList();
+}
+window.setInstagramStatusFilter = setInstagramStatusFilter;
+
 function renderInstagramPostsList() {
-  const container = document.getElementById("instagramPostsContainer");
-  if (!container) return;
+  const cardsContainer = document.getElementById("instagramPostsContainer");
+  const tableContainer = document.getElementById("instagramTableView");
+  if (!cardsContainer && !tableContainer) return;
 
   const searchInput = document.getElementById("inputSearchInstagram");
   const query = (searchInput ? searchInput.value : "").toLowerCase().trim();
 
   let posts = (appData.instagramPosts || []).slice();
 
+  // Filtro de Marca / Patrocinador
   if (currentInstagramFilter === 'steelfish') {
     posts = posts.filter(p => p.theme === 'steelfish');
+  } else if (currentInstagramFilter === 'fishing_company') {
+    posts = posts.filter(p => p.theme === 'fishing_company');
+  } else if (currentInstagramFilter === 'tr_fishing') {
+    posts = posts.filter(p => p.theme === 'tr_fishing');
+  } else if (currentInstagramFilter === 'iscas_mathias') {
+    posts = posts.filter(p => p.theme === 'iscas_mathias');
+  } else if (currentInstagramFilter === 'titan_caiaques') {
+    posts = posts.filter(p => p.theme === 'titan_caiaques');
   } else if (currentInstagramFilter === 'sponsors') {
     posts = posts.filter(p => ['steelfish', 'tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme));
   } else if (currentInstagramFilter === 'ready') {
@@ -5859,27 +5954,59 @@ function renderInstagramPostsList() {
     posts = posts.filter(p => p.status === 'published');
   }
 
+  // Filtro de Mês
+  if (currentInstagramMonthFilter !== 'all') {
+    posts = posts.filter(p => p.date && p.date.startsWith(currentInstagramMonthFilter));
+  }
+
+  // Filtro de Status
+  if (currentInstagramStatusFilter === 'draft') {
+    posts = posts.filter(p => p.status === 'draft');
+  } else if (currentInstagramStatusFilter === 'producing') {
+    posts = posts.filter(p => p.status === 'producing');
+  } else if (currentInstagramStatusFilter === 'ready') {
+    posts = posts.filter(p => p.status === 'ready');
+  } else if (currentInstagramStatusFilter === 'published') {
+    posts = posts.filter(p => p.status === 'published');
+  }
+
+  // Busca textual
   if (query) {
     posts = posts.filter(p => 
       (p.title || "").toLowerCase().includes(query) ||
       (p.caption || "").toLowerCase().includes(query) ||
-      (p.theme || "").toLowerCase().includes(query)
+      (p.theme || "").toLowerCase().includes(query) ||
+      (p.pillar || "").toLowerCase().includes(query)
     );
   }
 
   posts.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.time || "").localeCompare(a.time || ""));
 
-  if (posts.length === 0) {
-    container.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align: center; padding: 2.5rem; color: var(--text-dim); background: var(--bg-card); border-radius: var(--radius-sm); border: 1px dashed var(--border-light);">
-        Nenhum conteúdo encontrado para os filtros selecionados.<br>
-        <button class="btn btn-gold" style="margin-top: 1rem;" onclick="openNewInstagramPostModal()">+ Criar Novo Post</button>
-      </div>
-    `;
+  if (currentInstagramViewMode === 'table') {
+    if (cardsContainer) cardsContainer.style.display = 'none';
+    if (tableContainer) {
+      tableContainer.style.display = 'block';
+      renderInstagramTable(posts);
+    }
     return;
   }
 
-  container.innerHTML = "";
+  if (tableContainer) tableContainer.style.display = 'none';
+  if (cardsContainer) cardsContainer.style.display = 'grid';
+
+  if (posts.length === 0) {
+    if (cardsContainer) {
+      cardsContainer.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 2.5rem; color: var(--text-dim); background: var(--bg-card); border-radius: var(--radius-sm); border: 1px dashed var(--border-light);">
+          Nenhum conteúdo encontrado para os filtros selecionados.<br>
+          <button class="btn btn-gold" style="margin-top: 1rem;" onclick="openNewInstagramPostModal()">+ Criar Novo Post</button>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  if (cardsContainer) cardsContainer.innerHTML = "";
   posts.forEach(p => {
     const card = document.createElement("div");
     card.className = "insta-post-card";
@@ -5945,19 +6072,18 @@ function renderInstagramPostsList() {
         `}
       </div>
 
-      <div style="display: flex; gap: 0.5rem; border-top: 1px solid var(--border-light); padding-top: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap;">
-        <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="copyInstagramCaption('${p.id}')">
-          Copiar Legenda
+        <button type="button" class="btn btn-secondary btn-sm" onclick="copyInstagramPauta('${p.id}')" title="Copiar pauta completa com roteiro">
+          Copiar Pauta
         </button>
-        <button class="btn ${p.status === 'published' ? 'btn-secondary' : 'btn-whatsapp'} btn-sm" onclick="toggleInstagramPostStatus('${p.id}')">
-          ${p.status === 'published' ? 'Reabrir' : 'Marcar Publicado'}
+        <button type="button" class="btn ${p.status === 'published' ? 'btn-secondary' : 'btn-whatsapp'} btn-sm" onclick="toggleInstagramPostStatus('${p.id}')">
+          ${p.status === 'published' ? 'Reabrir' : 'Publicado'}
         </button>
-        <button class="btn btn-gold btn-sm" onclick="openEditInstagramPostModal('${p.id}')">
+        <button type="button" class="btn btn-gold btn-sm" onclick="openEditInstagramPostModal('${p.id}')">
           Editar
         </button>
       </div>
     `;
-    container.appendChild(card);
+    if (cardsContainer) cardsContainer.appendChild(card);
   });
 }
 window.renderInstagramPostsList = renderInstagramPostsList;
@@ -6124,6 +6250,2184 @@ function copyModalCaptionToClipboard() {
   });
 }
 window.copyModalCaptionToClipboard = copyModalCaptionToClipboard;
+
+function copyInstagramPauta(postId) {
+  const post = (appData.instagramPosts || []).find(p => String(p.id) === String(postId));
+  if (!post) return;
+  const brandLabels = {
+    steelfish: 'Steelfish',
+    fishing_company: 'Fishing Company',
+    tr_fishing: 'TR Fishing',
+    iscas_mathias: 'Iscas Mathias',
+    titan_caiaques: 'Titan Caiaques'
+  };
+  const brandName = brandLabels[post.theme] || post.theme || 'Eldorado Pesca';
+  const parts = (post.date || '').split('-');
+  const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : post.date;
+
+  const text = `[CRONOGRAMA EDITORIAL • ${brandName.toUpperCase()}]\nData: ${formattedDate} (${post.dayOfWeek || ''})\nFormato: ${(post.format || 'feed').toUpperCase()}\nPilar: ${post.pillar || 'Geral'}${post.seasonalHook ? `\nSazonalidade: ${post.seasonalHook}` : ''}\n\nTÍTULO / HOOK:\n${post.title || ''}\n\nLEGENDA / PAUTA:\n${post.caption || ''}`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast("Pauta copiada para a Área de Transferência!", "success");
+  }).catch(() => {
+    showToast("Falha ao copiar pauta.", "error");
+  });
+}
+window.copyInstagramPauta = copyInstagramPauta;
+
+function renderInstagramTable(posts) {
+  const container = document.getElementById("instagramTableView");
+  if (!container) return;
+
+  if (!posts || posts.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2.5rem; color: var(--text-dim); background: var(--bg-card); border-radius: var(--radius-sm); border: 1px dashed var(--border-light);">
+        Nenhum conteúdo encontrado para os filtros selecionados.<br>
+        <button class="btn btn-gold btn-sm" style="margin-top: 1rem;" onclick="openNewInstagramPostModal()">+ Criar Novo Post</button>
+      </div>
+    `;
+    return;
+  }
+
+  const brandLabels = {
+    steelfish: 'Steelfish',
+    fishing_company: 'Fishing Company',
+    tr_fishing: 'TR Fishing',
+    iscas_mathias: 'Iscas Mathias',
+    titan_caiaques: 'Titan Caiaques',
+    pesca: 'Pesca & Troféus',
+    rifas: 'Rifas & Vales',
+    rancho: 'Rancho Lake',
+    dicas: 'Dicas Técnicas',
+    bastidores: 'Bastidores'
+  };
+
+  let html = `
+    <div class="table-editorial-wrap">
+      <table class="table-editorial">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Dia</th>
+            <th>Marca</th>
+            <th>Formato</th>
+            <th>Pilar</th>
+            <th>Pauta / Roteiro da Postagem</th>
+            <th>Status</th>
+            <th style="text-align: right;">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  posts.forEach(p => {
+    const parts = (p.date || '').split('-');
+    const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : p.date;
+
+    const brandName = brandLabels[p.theme] || p.theme || 'Geral';
+    let brandBadge = `<span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-light);">${brandName}</span>`;
+    if (p.theme === 'steelfish') {
+      brandBadge = `<span class="badge-insta-sponsor-steelfish">Steelfish</span>`;
+    } else if (['tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme)) {
+      brandBadge = `<span class="badge-insta-sponsor">${brandName}</span>`;
+    }
+
+    const formatBadge = p.format === 'reels' ? '<span class="badge-insta-reels">Reels</span>' : (p.format === 'stories' ? '<span class="badge-insta-stories">Stories</span>' : '<span class="badge-insta-feed">Feed</span>');
+
+    const statusBadgeClass = p.status === 'published' ? 'badge-insta-status-published' : (p.status === 'ready' ? 'badge-insta-status-ready' : (p.status === 'producing' ? 'badge-insta-status-producing' : 'badge-insta-status-draft'));
+    const statusLabel = p.status === 'published' ? 'Publicado' : (p.status === 'ready' ? 'Pronto' : (p.status === 'producing' ? 'Gravando' : 'Rascunho'));
+
+    const seasonalTag = p.seasonalHook ? `<span class="badge" style="background: rgba(229, 193, 88, 0.15); color: var(--primary-gold); font-size: 0.7rem; margin-left: 0.35rem; border: 1px solid var(--border-gold);">${escapeHtml(p.seasonalHook)}</span>` : '';
+
+    html += `
+      <tr>
+        <td style="font-weight: 700; white-space: nowrap;">${formattedDate}</td>
+        <td style="color: var(--text-muted); font-size: 0.78rem; white-space: nowrap;">${p.dayOfWeek || ''}</td>
+        <td style="white-space: nowrap;">${brandBadge}</td>
+        <td style="white-space: nowrap;">${formatBadge}</td>
+        <td style="color: var(--text-muted); font-size: 0.78rem; white-space: nowrap;">${escapeHtml(p.pillar || '-')}</td>
+        <td style="max-width: 320px;">
+          <div style="font-weight: 700; color: var(--text-light); line-height: 1.3;">${escapeHtml(p.title || 'Sem título')}${seasonalTag}</div>
+          ${p.caption ? `<div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; max-height: 42px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(p.caption.slice(0, 120))}...</div>` : ''}
+        </td>
+        <td style="white-space: nowrap;"><span class="${statusBadgeClass}">${statusLabel}</span></td>
+        <td style="text-align: right; white-space: nowrap;">
+          <div style="display: inline-flex; gap: 0.35rem;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="copyInstagramPauta('${p.id}')" title="Copiar pauta completa">Copiar</button>
+            <button type="button" class="btn ${p.status === 'published' ? 'btn-secondary' : 'btn-whatsapp'} btn-sm" onclick="toggleInstagramPostStatus('${p.id}')" title="Alternar status">${p.status === 'published' ? 'Reabrir' : 'Postar'}</button>
+            <button type="button" class="btn btn-gold btn-sm" onclick="openEditInstagramPostModal('${p.id}')" title="Editar">Editar</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+window.renderInstagramTable = renderInstagramTable;
+
+async function loadOfficialInstagramSchedule() {
+  const source = (typeof window !== 'undefined' && window.OFFICIAL_INSTAGRAM_104_POSTS) ? window.OFFICIAL_INSTAGRAM_104_POSTS : null;
+  if (!source || !Array.isArray(source) || source.length === 0) {
+    showToast("Cronograma oficial não encontrado.", "error");
+    return;
+  }
+  if (appData.instagramPosts && appData.instagramPosts.length > 0) {
+    if (!confirm(`Deseja carregar o cronograma oficial de 104 posts (09/Set a 31/Dez/2026)? Isso sincronizará as postagens de todas as marcas.`)) {
+      return;
+    }
+  }
+
+  appData.instagramPosts = JSON.parse(JSON.stringify(source));
+  if (!appData.settings) appData.settings = {};
+  appData.settings.instagramPosts = appData.instagramPosts;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: {
+      key: 'instagramPosts',
+      value: appData.instagramPosts
+    }
+  });
+
+  showToast(`Cronograma oficial com ${appData.instagramPosts.length} posts carregado com sucesso!`, "success");
+  renderInstagramView();
+}
+window.loadOfficialInstagramSchedule = loadOfficialInstagramSchedule;
+
+function exportInstagramCalendarCSV() {
+  const posts = (appData.instagramPosts || []).slice();
+  if (posts.length === 0) {
+    showToast("Nenhum post para exportar.", "warning");
+    return;
+  }
+
+  posts.sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.time || "").localeCompare(b.time || ""));
+
+  const brandLabels = {
+    steelfish: 'Steelfish',
+    fishing_company: 'Fishing Company',
+    tr_fishing: 'TR Fishing',
+    iscas_mathias: 'Iscas Mathias',
+    titan_caiaques: 'Titan Caiaques',
+    pesca: 'Pesca & Troféus',
+    rifas: 'Rifas & Vales',
+    rancho: 'Rancho Lake',
+    dicas: 'Dicas Técnicas',
+    bastidores: 'Bastidores'
+  };
+
+  const statusLabels = {
+    draft: 'Planejado / Rascunho',
+    producing: 'Em Produção',
+    ready: 'Agendado / Pronto',
+    published: 'Publicado'
+  };
+
+  const header = ['Data', 'Dia da Semana', 'Marca / Patrocinador', 'Formato', 'Pilar de Conteúdo', 'Título / Tema', 'Roteiro / Legenda', 'Sazonalidade', 'Status'];
+  const rows = [header.join(';')];
+
+  posts.forEach(p => {
+    const brand = brandLabels[p.theme] || p.theme || '';
+    const status = statusLabels[p.status] || p.status || '';
+    const row = [
+      p.date || '',
+      p.dayOfWeek || '',
+      brand,
+      (p.format || '').toUpperCase(),
+      p.pillar || '',
+      p.title || '',
+      (p.caption || '').replace(/\r?\n/g, ' '),
+      p.seasonalHook || '',
+      status
+    ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+    rows.push(row.join(';'));
+  });
+
+  const csvContent = rows.join('\r\n');
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `calendario_editorial_instagram_104_posts_2026.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast("Planilha CSV exportada com sucesso!", "success");
+}
+window.exportInstagramCalendarCSV = exportInstagramCalendarCSV;
+
+/* ==========================================================================
+   TAB 5: GESTÃO DE BOLETOS POR FOTO • BOLETOSCAN PRO
+   ========================================================================== */
+
+function renderBoletosView() {
+  updateBoletosStats();
+  renderBoletoMonthPills();
+  renderBoletosAgenda();
+}
+window.renderBoletosView = renderBoletosView;
+
+function updateBoletosStats() {
+  const boletos = appData.boletos || [];
+  const monthNames = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  const monthName = monthNames[boletoSelectedMonth] || "Mês";
+  const monthYearLabel = `${monthName} de ${boletoSelectedYear}`;
+
+  const monthPrefix = `${boletoSelectedYear}-${String(boletoSelectedMonth + 1).padStart(2, "0")}`;
+  const monthBoletos = boletos.filter(b => b.dueDate && b.dueDate.startsWith(monthPrefix));
+
+  const todayStr = getLocalDateStr();
+
+  let totalToPay = 0;
+  let pendingCount = 0;
+  let totalPaid = 0;
+  let paidCount = 0;
+  let dueTodayAmount = 0;
+  let dueTodayCount = 0;
+  let lateAmount = 0;
+  let lateCount = 0;
+
+  monthBoletos.forEach(b => {
+    const val = parseFloat(b.amount) || 0;
+    if (b.status === 'paid') {
+      totalPaid += val;
+      paidCount++;
+    } else {
+      totalToPay += val;
+      pendingCount++;
+      if (b.dueDate === todayStr) {
+        dueTodayAmount += val;
+        dueTodayCount++;
+      } else if (b.dueDate < todayStr) {
+        lateAmount += val;
+        lateCount++;
+      }
+    }
+  });
+
+  const lbl = document.getElementById("boletoCurrentMonthLabel");
+  if (lbl) lbl.textContent = monthYearLabel;
+
+  const elToPay = document.getElementById("statBoletoTotalToPay");
+  if (elToPay) elToPay.textContent = formatCurrency(totalToPay);
+  const elPendingCount = document.getElementById("statBoletoPendingCount");
+  if (elPendingCount) elPendingCount.textContent = `${pendingCount} boleto${pendingCount === 1 ? '' : 's'} pendente${pendingCount === 1 ? '' : 's'}`;
+
+  const elPaid = document.getElementById("statBoletoTotalPaid");
+  if (elPaid) elPaid.textContent = formatCurrency(totalPaid);
+  const elPaidCount = document.getElementById("statBoletoPaidCount");
+  if (elPaidCount) elPaidCount.textContent = `${paidCount} boleto${paidCount === 1 ? '' : 's'} pago${paidCount === 1 ? '' : 's'}`;
+
+  const elToday = document.getElementById("statBoletoDueToday");
+  if (elToday) elToday.textContent = formatCurrency(dueTodayAmount);
+  const elTodayCount = document.getElementById("statBoletoDueTodayCount");
+  if (elTodayCount) elTodayCount.textContent = `${dueTodayCount} vencendo hoje`;
+
+  const elLate = document.getElementById("statBoletoLate");
+  if (elLate) elLate.textContent = formatCurrency(lateAmount);
+  const elLateCount = document.getElementById("statBoletoLateCount");
+  if (elLateCount) elLateCount.textContent = `${lateCount} em atraso`;
+}
+window.updateBoletosStats = updateBoletosStats;
+
+function renderBoletoMonthPills() {
+  const container = document.getElementById("boletoMonthPills");
+  if (!container) return;
+
+  const months = [
+    { year: 2026, month: 8, label: 'Setembro' },
+    { year: 2026, month: 9, label: 'Outubro' },
+    { year: 2026, month: 10, label: 'Novembro' },
+    { year: 2026, month: 11, label: 'Dezembro' }
+  ];
+
+  const boletos = appData.boletos || [];
+  container.innerHTML = "";
+
+  months.forEach(m => {
+    const prefix = `${m.year}-${String(m.month + 1).padStart(2, "0")}`;
+    const count = boletos.filter(b => b.dueDate && b.dueDate.startsWith(prefix)).length;
+    const isActive = (boletoSelectedYear === m.year && boletoSelectedMonth === m.month);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `boleto-month-pill ${isActive ? 'active' : ''}`;
+    btn.innerHTML = `<span>${m.label}</span> ${count > 0 ? `<span style="font-size: 0.7rem; opacity: 0.85; padding: 1px 5px; border-radius: 9999px; background: rgba(0,0,0,0.25);">${count}</span>` : ''}`;
+    btn.onclick = () => selectBoletoMonth(m.year, m.month);
+    container.appendChild(btn);
+  });
+}
+window.renderBoletoMonthPills = renderBoletoMonthPills;
+
+function selectBoletoMonth(year, month) {
+  boletoSelectedYear = year;
+  boletoSelectedMonth = month;
+  renderBoletosView();
+}
+window.selectBoletoMonth = selectBoletoMonth;
+
+function changeBoletoMonth(delta) {
+  boletoSelectedMonth += delta;
+  if (boletoSelectedMonth < 0) {
+    boletoSelectedMonth = 11;
+    boletoSelectedYear--;
+  } else if (boletoSelectedMonth > 11) {
+    boletoSelectedMonth = 0;
+    boletoSelectedYear++;
+  }
+  renderBoletosView();
+}
+window.changeBoletoMonth = changeBoletoMonth;
+
+function goToBoletoToday() {
+  const now = new Date();
+  boletoSelectedYear = now.getFullYear();
+  boletoSelectedMonth = now.getMonth();
+  renderBoletosView();
+}
+window.goToBoletoToday = goToBoletoToday;
+
+function setBoletoFilter(filter) {
+  currentBoletoFilter = filter;
+  const map = {
+    all: 'filterBoletoAll',
+    pending: 'filterBoletoPending',
+    today: 'filterBoletoToday',
+    late: 'filterBoletoLate',
+    paid: 'filterBoletoPaid'
+  };
+  Object.values(map).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const activeEl = document.getElementById(map[filter] || 'filterBoletoAll');
+  if (activeEl) activeEl.classList.add('active');
+
+  renderBoletosAgenda();
+}
+window.setBoletoFilter = setBoletoFilter;
+
+function renderBoletosAgenda() {
+  const container = document.getElementById("boletosAgendaContainer");
+  if (!container) return;
+
+  const searchInput = document.getElementById("inputSearchBoleto");
+  const query = (searchInput ? searchInput.value : "").toLowerCase().trim();
+
+  let boletos = (appData.boletos || []).slice();
+  const todayStr = getLocalDateStr();
+
+  // Filtra por mês selecionado
+  const monthPrefix = `${boletoSelectedYear}-${String(boletoSelectedMonth + 1).padStart(2, "0")}`;
+  boletos = boletos.filter(b => b.dueDate && b.dueDate.startsWith(monthPrefix));
+
+  // Filtro de status
+  if (currentBoletoFilter === 'pending') {
+    boletos = boletos.filter(b => b.status !== 'paid');
+  } else if (currentBoletoFilter === 'today') {
+    boletos = boletos.filter(b => b.status !== 'paid' && b.dueDate === todayStr);
+  } else if (currentBoletoFilter === 'late') {
+    boletos = boletos.filter(b => b.status !== 'paid' && b.dueDate < todayStr);
+  } else if (currentBoletoFilter === 'paid') {
+    boletos = boletos.filter(b => b.status === 'paid');
+  }
+
+  // Busca textual
+  if (query) {
+    boletos = boletos.filter(b => 
+      (b.beneficiary || "").toLowerCase().includes(query) ||
+      (b.code || "").toLowerCase().includes(query) ||
+      (b.description || "").toLowerCase().includes(query) ||
+      String(b.amount || "").includes(query)
+    );
+  }
+
+  if (boletos.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1.5rem; background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border-light);">
+        <div style="font-size: 1.05rem; font-weight: 700; color: var(--text-light); margin-bottom: 0.4rem;">
+          Nenhum boleto encontrado para este mês ou filtro.
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-dim); max-width: 480px; margin: 0 auto 1.25rem;">
+          Tire uma foto do boleto pelo iPhone, anexe da galeria ou adicione manualmente para organizar a agenda.
+        </p>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+          <label for="boletoCameraInput" class="btn btn-gold btn-sm" style="cursor: pointer;">
+            Fotografar Boleto
+          </label>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openNewBoletoModal()">
+            + Digitar Manual
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="loadDemoBoletos()">
+            Carregar Demonstração
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Agrupamento por dia de vencimento (ordem cronológica)
+  const grouped = {};
+  boletos.forEach(b => {
+    const key = b.dueDate || 'sem-data';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(b);
+  });
+
+  const sortedDates = Object.keys(grouped).sort();
+  const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  const monthNames = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
+  let html = "";
+
+  sortedDates.forEach(dateStr => {
+    const dayBoletos = grouped[dateStr];
+    let dayTotal = 0;
+    dayBoletos.forEach(b => { dayTotal += (parseFloat(b.amount) || 0); });
+
+    let headerLabel = dateStr;
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      const dt = new Date(y, m, d);
+      const weekday = dayNames[dt.getDay()];
+      const mName = monthNames[m];
+      headerLabel = `Dia ${d} de ${mName} (${weekday})`;
+    }
+
+    html += `
+      <div class="boleto-day-block">
+        <div class="boleto-day-header">
+          <div class="boleto-day-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>${headerLabel}</span>
+          </div>
+          <div class="boleto-day-total">
+            Total do Dia: ${formatCurrency(dayTotal)} <span style="font-size: 0.75rem; color: var(--text-dim); font-weight: normal;">(${dayBoletos.length} boleto${dayBoletos.length === 1 ? '' : 's'})</span>
+          </div>
+        </div>
+        <div class="boleto-day-items">
+    `;
+
+    dayBoletos.forEach(b => {
+      const isPaid = b.status === 'paid';
+      const isLate = !isPaid && b.dueDate < todayStr;
+      const isToday = !isPaid && b.dueDate === todayStr;
+
+      let statusBadge = `<span class="badge-boleto-due">A Vencer</span>`;
+      if (isPaid) {
+        statusBadge = `<span class="badge-boleto-paid">Pago</span>`;
+      } else if (isLate) {
+        statusBadge = `<span class="badge-boleto-late">Atrasado</span>`;
+      } else if (isToday) {
+        statusBadge = `<span class="badge-boleto-today">Vence Hoje</span>`;
+      }
+
+      const valFormatted = formatCurrency(parseFloat(b.amount) || 0);
+
+      const categoryLabels = {
+        rancho: 'Rancho Lake',
+        loja: 'Loja',
+        barcos: 'Barcos Náuticos',
+        combustivel: 'Combustível',
+        internet: 'Internet / Starlink',
+        energia: 'Energia / Água',
+        impostos: 'Impostos',
+        outros: 'Geral'
+      };
+      const catLabel = categoryLabels[b.category] || b.category || 'Geral';
+
+      html += `
+        <div class="boleto-card ${isPaid ? 'is-paid' : ''}">
+          <div class="boleto-main-info">
+            <div class="boleto-beneficiary">
+              <span>${escapeHtml(b.beneficiary || 'Sem Beneficiário')}</span>
+              <span class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim); font-size: 0.7rem; border-radius: 4px; padding: 0.15rem 0.45rem;">
+                ${catLabel}
+              </span>
+              ${statusBadge}
+            </div>
+
+            ${b.description ? `<div style="font-size: 0.78rem; color: var(--text-muted);">${escapeHtml(b.description)}</div>` : ''}
+
+            ${b.code ? `
+              <div style="display: flex; align-items: center; gap: 0.45rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                <div class="boleto-code-box" title="Linha digitável do boleto">
+                  ${escapeHtml(b.code)}
+                </div>
+                <button type="button" class="btn btn-gold btn-sm btn-mobile-copy" onclick="copyBoletoLinhaDigitavel('${b.id}', this)" title="Copiar linha digitável para colar no app do banco">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <span>Copiar Linha</span>
+                </button>
+              </div>
+            ` : (b.nf ? `
+              <div style="display: flex; align-items: center; gap: 0.4rem; margin-top: 0.25rem; flex-wrap: wrap;">
+                <span class="badge" style="background: rgba(229,193,88,0.12); border: 1px solid rgba(229,193,88,0.3); color: var(--primary-gold); font-size: 0.72rem; padding: 0.15rem 0.45rem;">NF ${b.nf} • Parcela ${b.installment || '1'}</span>
+                <button type="button" class="btn btn-gold btn-sm" style="padding: 0.2rem 0.55rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.3rem;" onclick="triggerAttachPhotoLinhaDigitavel('${b.id}')" title="Fotografar a linha digitável (47 ou 48 dígitos) deste boleto">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                  <span>Foto Linha</span>
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.55rem; font-size: 0.72rem;" onclick="openBoletoPayModal('${b.id}')" title="Vincular linha digitável do boleto">
+                  + Código
+                </button>
+              </div>
+            ` : `
+              <div style="display: flex; align-items: center; gap: 0.4rem; margin-top: 0.25rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-gold btn-sm" style="padding: 0.2rem 0.55rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.3rem;" onclick="triggerAttachPhotoLinhaDigitavel('${b.id}')" title="Fotografar a linha digitável (47 ou 48 dígitos)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                  <span>Foto Linha</span>
+                </button>
+              </div>
+            `)}
+          </div>
+
+          <div class="boleto-value-box">
+            <div class="boleto-value-num">${valFormatted}</div>
+            <div class="boleto-value-sub">${isPaid ? 'Quitado' : 'A pagar'}</div>
+          </div>
+
+          <div class="boleto-actions-box">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openBoletoPayModal('${b.id}')" title="Ver Código de Barras e QR Code para pagamento">
+              Pagar / QR Code
+            </button>
+            <button type="button" class="btn ${isPaid ? 'btn-secondary' : 'btn-whatsapp'} btn-sm" onclick="toggleBoletoPaidStatus('${b.id}')" title="${isPaid ? 'Marcar como não pago' : 'Confirmar quitação deste boleto'}">
+              ${isPaid ? 'Reabrir' : 'Marcar como Pago'}
+            </button>
+            <button type="button" class="btn btn-gold btn-sm" onclick="openEditBoletoModal('${b.id}')" title="Editar informações">
+              Editar
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="deleteBoleto('${b.id}')" title="Excluir boleto">
+              ✕
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+window.renderBoletosAgenda = renderBoletosAgenda;
+
+let activeBoletoAttachId = null;
+
+function triggerAttachPhotoLinhaDigitavel(boletoId) {
+  activeBoletoAttachId = boletoId;
+  const input = document.getElementById("boletoLinhaDigitavelInput");
+  if (input) {
+    input.value = "";
+    input.click();
+  }
+}
+window.triggerAttachPhotoLinhaDigitavel = triggerAttachPhotoLinhaDigitavel;
+
+function copyBoletoLinhaDigitavel(id, btnElement) {
+  const b = (appData.boletos || []).find(item => String(item.id) === String(id));
+  if (!b || !b.code) {
+    showToast("Este boleto não possui linha digitável cadastrada.", "warning");
+    return;
+  }
+  const cleanCode = b.code.replace(/[^\d]/g, '');
+  if (!cleanCode) {
+    showToast("Nenhum dígito válido na linha digitável.", "warning");
+    return;
+  }
+
+  // Vibração háptica no celular
+  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    try { navigator.vibrate([40, 30, 40]); } catch (e) {}
+  }
+
+  const finishCopy = () => {
+    showToast("Linha digitável copiada com sucesso! Cole no app do seu banco.", "success", 4000);
+    if (btnElement) {
+      const originalHtml = btnElement.innerHTML;
+      btnElement.classList.add("btn-copy-success");
+      btnElement.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>✓ Copiado!</span>
+      `;
+      setTimeout(() => {
+        btnElement.classList.remove("btn-copy-success");
+        btnElement.innerHTML = originalHtml;
+      }, 2500);
+    }
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cleanCode).then(finishCopy).catch(() => {
+      fallbackCopyText(cleanCode, finishCopy);
+    });
+  } else {
+    fallbackCopyText(cleanCode, finishCopy);
+  }
+}
+window.copyBoletoLinhaDigitavel = copyBoletoLinhaDigitavel;
+
+function copyBoletoCode(id) {
+  copyBoletoLinhaDigitavel(id, null);
+}
+window.copyBoletoCode = copyBoletoCode;
+
+function fallbackCopyText(text, callback) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.top = "0";
+  ta.style.left = "0";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    if (callback) callback();
+  } catch (e) {
+    showToast("Não foi possível copiar automaticamente. Selecione e copie manualmente.", "error");
+  }
+  document.body.removeChild(ta);
+}
+
+async function toggleBoletoPaidStatus(id) {
+  const b = (appData.boletos || []).find(item => String(item.id) === String(id));
+  if (!b) return;
+
+  b.status = (b.status === 'paid' ? 'pending' : 'paid');
+  b.paidAt = b.status === 'paid' ? new Date().toISOString() : null;
+
+  if (!appData.settings) appData.settings = {};
+  appData.settings.boletos = appData.boletos;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: {
+      key: 'boletos',
+      value: appData.boletos
+    }
+  });
+
+  showToast(b.status === 'paid' ? "Boleto marcado como Pago!" : "Boleto reaberto como Pendente.", "success");
+  renderBoletosView();
+}
+window.toggleBoletoPaidStatus = toggleBoletoPaidStatus;
+
+async function deleteBoleto(id) {
+  const b = (appData.boletos || []).find(item => String(item.id) === String(id));
+  if (!b) return;
+
+  if (!confirm(`Deseja excluir o boleto de ${b.beneficiary || 'valor ' + formatCurrency(b.amount)}?`)) {
+    return;
+  }
+
+  appData.boletos = (appData.boletos || []).filter(item => String(item.id) !== String(id));
+  if (!appData.settings) appData.settings = {};
+  appData.settings.boletos = appData.boletos;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: {
+      key: 'boletos',
+      value: appData.boletos
+    }
+  });
+
+  showToast("Boleto excluído com sucesso.", "info");
+  renderBoletosView();
+}
+window.deleteBoleto = deleteBoleto;
+
+function openNewBoletoModal(prefill = {}) {
+  activeBoletoId = null;
+  document.getElementById("modalBoletoFormTitle").textContent = "Registrar Novo Boleto";
+  document.getElementById("bfBoletoId").value = "";
+  document.getElementById("bfBeneficiary").value = prefill.beneficiary || "";
+  document.getElementById("bfCode").value = prefill.code || "";
+  document.getElementById("bfDueDate").value = prefill.dueDate || getLocalDateStr();
+  document.getElementById("bfAmount").value = prefill.amount || "";
+  document.getElementById("bfCategory").value = prefill.category || "rancho";
+  document.getElementById("bfStatus").value = prefill.status || "pending";
+  document.getElementById("bfDescription").value = prefill.description || "";
+
+  const prevBox = document.getElementById("bfImagePreviewContainer");
+  const prevImg = document.getElementById("bfImagePreview");
+  if (lastScannedBoletoDataUrl && prevBox && prevImg) {
+    prevImg.src = lastScannedBoletoDataUrl;
+    prevBox.style.display = "block";
+  } else if (prevBox) {
+    prevBox.style.display = "none";
+  }
+
+  openModal("modalBoletoForm");
+}
+window.openNewBoletoModal = openNewBoletoModal;
+
+function openEditBoletoModal(id) {
+  const b = (appData.boletos || []).find(item => String(item.id) === String(id));
+  if (!b) return;
+
+  activeBoletoId = b.id;
+  document.getElementById("modalBoletoFormTitle").textContent = "Editar Boleto";
+  document.getElementById("bfBoletoId").value = b.id;
+  document.getElementById("bfBeneficiary").value = b.beneficiary || "";
+  document.getElementById("bfCode").value = b.code || "";
+  document.getElementById("bfDueDate").value = b.dueDate || getLocalDateStr();
+  document.getElementById("bfAmount").value = b.amount || "";
+  document.getElementById("bfCategory").value = b.category || "rancho";
+  document.getElementById("bfStatus").value = b.status || "pending";
+  document.getElementById("bfDescription").value = b.description || "";
+
+  const prevBox = document.getElementById("bfImagePreviewContainer");
+  const prevImg = document.getElementById("bfImagePreview");
+  if (b.imageUrl && prevBox && prevImg) {
+    prevImg.src = b.imageUrl;
+    prevBox.style.display = "block";
+  } else if (prevBox) {
+    prevBox.style.display = "none";
+  }
+
+  openModal("modalBoletoForm");
+}
+window.openEditBoletoModal = openEditBoletoModal;
+
+async function saveBoletoModal(batchNext = false) {
+  const beneficiary = document.getElementById("bfBeneficiary").value.trim();
+  const dueDate = document.getElementById("bfDueDate").value;
+  const amount = parseFloat(document.getElementById("bfAmount").value);
+
+  if (!beneficiary) {
+    showToast("Informe o beneficiário ou concessionária.", "warning");
+    return;
+  }
+  if (!dueDate) {
+    showToast("Informe a data de vencimento do boleto.", "warning");
+    return;
+  }
+  if (isNaN(amount) || amount <= 0) {
+    showToast("Informe um valor válido em R$.", "warning");
+    return;
+  }
+
+  const code = document.getElementById("bfCode").value.trim();
+  const category = document.getElementById("bfCategory").value;
+  const status = document.getElementById("bfStatus").value;
+  const description = document.getElementById("bfDescription").value.trim();
+
+  const idInput = document.getElementById("bfBoletoId").value;
+  const isEditing = !!idInput;
+  const boletoId = isEditing ? idInput : ('bol-' + Date.now());
+
+  const boletoObj = {
+    id: boletoId,
+    beneficiary,
+    code,
+    dueDate,
+    amount,
+    category,
+    status,
+    description,
+    imageUrl: lastScannedBoletoDataUrl || null,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (!Array.isArray(appData.boletos)) {
+    appData.boletos = [];
+  }
+
+  if (isEditing) {
+    const idx = appData.boletos.findIndex(b => String(b.id) === String(boletoId));
+    if (idx >= 0) appData.boletos[idx] = boletoObj;
+    else appData.boletos.push(boletoObj);
+  } else {
+    appData.boletos.unshift(boletoObj);
+  }
+
+  if (!appData.settings) appData.settings = {};
+  appData.settings.boletos = appData.boletos;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: {
+      key: 'boletos',
+      value: appData.boletos
+    }
+  });
+
+  closeModal("modalBoletoForm");
+  showToast(isEditing ? "Boleto atualizado com sucesso!" : "Boleto lançado na agenda com sucesso!", "success");
+
+  // Ajusta o mês do seletor para o mês do boleto salvo
+  if (dueDate) {
+    const parts = dueDate.split('-');
+    if (parts.length === 3) {
+      boletoSelectedYear = parseInt(parts[0], 10);
+      boletoSelectedMonth = parseInt(parts[1], 10) - 1;
+    }
+  }
+
+  renderBoletosView();
+  lastScannedBoletoDataUrl = null;
+
+  if (batchNext) {
+    const cam = document.getElementById("boletoCameraInput");
+    if (cam) cam.click();
+  }
+}
+window.saveBoletoModal = saveBoletoModal;
+
+function saveBoletoModalAndNext() {
+  saveBoletoModal(true);
+}
+window.saveBoletoModalAndNext = saveBoletoModalAndNext;
+
+function getThiagoRealContasAPagar() {
+  return [
+    { id: 'bol-real-001', dueDate: '2026-08-31', amount: 1475.96, beneficiary: 'JOGA INDUSTRIA E COMERCIO LTDA', nf: '018810', installment: '001', category: 'loja', status: 'pending', description: 'NF 018810 - Parcela 001 (Duplicata Joga)' },
+    { id: 'bol-real-002', dueDate: '2026-09-06', amount: 554.30, beneficiary: 'RICARDO PESCA LTDA', nf: '001869', installment: '001', category: 'loja', status: 'pending', description: 'NF 001869 - Parcela 001 (Duplicata Ricardo Pesca)' },
+    { id: 'bol-real-003', dueDate: '2026-09-17', amount: 432.88, beneficiary: 'KALA COMERCIO E DISTRIBUICAO LTDA', nf: '011865', installment: '001', category: 'loja', status: 'pending', description: 'NF 011865 - Parcela 001 (Duplicata Kala)' },
+    { id: 'bol-real-004', dueDate: '2026-09-19', amount: 458.50, beneficiary: 'MAJU - DIST. DE MAT. ELETR. E HIDRAULICOS LTDA', nf: '286266', installment: '001', category: 'loja', status: 'pending', description: 'NF 286266 - Parcela 001 (Duplicata Maju)' },
+    { id: 'bol-real-005', dueDate: '2026-09-21', amount: 185.03, beneficiary: 'NAKINE DECORACOES LTDA', nf: '004283', installment: '003', category: 'loja', status: 'pending', description: 'NF 004283 - Parcela 003 (Duplicata Nakine)' },
+    { id: 'bol-real-006', dueDate: '2026-09-30', amount: 1475.96, beneficiary: 'JOGA INDUSTRIA E COMERCIO LTDA', nf: '018810', installment: '002', category: 'loja', status: 'pending', description: 'NF 018810 - Parcela 002 (Duplicata Joga)' },
+    { id: 'bol-real-007', dueDate: '2026-10-02', amount: 432.87, beneficiary: 'KALA COMERCIO E DISTRIBUICAO LTDA', nf: '011865', installment: '002', category: 'loja', status: 'pending', description: 'NF 011865 - Parcela 002 (Duplicata Kala)' },
+    { id: 'bol-real-008', dueDate: '2026-10-04', amount: 1061.44, beneficiary: 'NAKINE DECORACOES LTDA', nf: '004403', installment: '001', category: 'loja', status: 'pending', description: 'NF 004403 - Parcela 001 (Duplicata Nakine)' },
+    { id: 'bol-real-009', dueDate: '2026-10-17', amount: 432.87, beneficiary: 'KALA COMERCIO E DISTRIBUICAO LTDA', nf: '011865', installment: '003', category: 'loja', status: 'pending', description: 'NF 011865 - Parcela 003 (Duplicata Kala)' },
+    { id: 'bol-real-010', dueDate: '2026-10-30', amount: 1475.96, beneficiary: 'JOGA INDUSTRIA E COMERCIO LTDA', nf: '018810', installment: '003', category: 'loja', status: 'pending', description: 'NF 018810 - Parcela 003 (Duplicata Joga)' },
+    { id: 'bol-real-011', dueDate: '2026-11-03', amount: 980.46, beneficiary: 'NAKINE DECORACOES LTDA', nf: '004403', installment: '002', category: 'loja', status: 'pending', description: 'NF 004403 - Parcela 002 (Duplicata Nakine)' },
+    { id: 'bol-real-012', dueDate: '2026-11-29', amount: 1475.96, beneficiary: 'JOGA INDUSTRIA E COMERCIO LTDA', nf: '018810', installment: '004', category: 'loja', status: 'pending', description: 'NF 018810 - Parcela 004 (Duplicata Joga)' },
+    { id: 'bol-real-013', dueDate: '2026-12-03', amount: 980.46, beneficiary: 'NAKINE DECORACOES LTDA', nf: '004403', installment: '003', category: 'loja', status: 'pending', description: 'NF 004403 - Parcela 003 (Duplicata Nakine)' },
+    { id: 'bol-real-014', dueDate: '2026-12-29', amount: 1475.94, beneficiary: 'JOGA INDUSTRIA E COMERCIO LTDA', nf: '018810', installment: '005', category: 'loja', status: 'pending', description: 'NF 018810 - Parcela 005 (Duplicata Joga)' },
+    { id: 'bol-real-015', dueDate: '2027-01-02', amount: 980.46, beneficiary: 'NAKINE DECORACOES LTDA', nf: '004403', installment: '004', category: 'loja', status: 'pending', description: 'NF 004403 - Parcela 004 (Duplicata Nakine)' },
+    { id: 'bol-real-016', dueDate: '2027-02-01', amount: 980.46, beneficiary: 'NAKINE DECORACOES LTDA', nf: '004403', installment: '005', category: 'loja', status: 'pending', description: 'NF 004403 - Parcela 005 (Duplicata Nakine)' }
+  ];
+}
+window.getThiagoRealContasAPagar = getThiagoRealContasAPagar;
+
+async function loadDemoBoletos() {
+  if (!confirm("Deseja carregar as 16 contas a pagar reais do relatório FastReport (Total R$ 14.859,51)?")) {
+    return;
+  }
+
+  const realBoletos = getThiagoRealContasAPagar();
+  appData.boletos = realBoletos.slice();
+  if (!appData.settings) appData.settings = {};
+  appData.settings.boletos = appData.boletos;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: {
+      key: 'boletos',
+      value: appData.boletos
+    }
+  });
+
+  showToast("16 contas a pagar reais do relatório carregadas com sucesso!", "success");
+  boletoSelectedYear = 2026;
+  boletoSelectedMonth = 8; // Setembro
+  renderBoletosView();
+}
+window.loadDemoBoletos = loadDemoBoletos;
+
+/* Parser & Importador de Relatório FastReport (HTML / PDF) */
+function parseFastReportContasAPagar(htmlContent) {
+  if (!htmlContent || typeof htmlContent !== 'string') return [];
+  const boletos = [];
+  const rowPattern = /<td[^>]*>(\d{2}\/\d{2}\/\d{4})<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>[\s\S]*?<td[^>]*>(\d+)<\/td>[\s\S]*?<td[^>]*>(\d+)<\/td>[\s\S]*?<td[^>]*class="s7"[^>]*>([\d\.,]+)<\/td>/gi;
+  
+  let match;
+  let idx = 1;
+  while ((match = rowPattern.exec(htmlContent)) !== null) {
+    const rawDate = match[1];
+    const [d, m, y] = rawDate.split('/');
+    const dueDate = `${y}-${m}-${d}`;
+    const supplier = match[2].trim();
+    const nf = match[3].trim();
+    const installment = match[4].trim();
+    const amountClean = match[5].replace(/\./g, '').replace(',', '.');
+    const amount = parseFloat(amountClean) || 0;
+    
+    let category = 'loja';
+    const sUpper = supplier.toUpperCase();
+    if (sUpper.includes('COPEL') || sUpper.includes('SANEPAR')) category = 'energia';
+    else if (sUpper.includes('STARLINK') || sUpper.includes('INTERNET')) category = 'internet';
+    else if (sUpper.includes('PETROLEO') || sUpper.includes('COMBUSTIVEL')) category = 'combustivel';
+    else if (sUpper.includes('NAUTICA') || sUpper.includes('BARCO') || sUpper.includes('MERCURY')) category = 'barcos';
+
+    boletos.push({
+      id: `bol-rel-${dueDate}-${nf}-${installment}-${idx++}`,
+      beneficiary: supplier,
+      code: '',
+      bankName: supplier.includes('JOGA') ? 'Joga Fornecedor' : (supplier.includes('KALA') ? 'Kala Distribuição' : (supplier.includes('NAKINE') ? 'Nakine Decorações' : 'Fornecedor')),
+      dueDate: dueDate,
+      amount: amount,
+      category: category,
+      status: 'pending',
+      description: `NF ${nf} - Parcela ${installment} (Duplicata FastReport)`,
+      nf: nf,
+      installment: installment,
+      source: 'relatorio_fastreport'
+    });
+  }
+  return boletos;
+}
+window.parseFastReportContasAPagar = parseFastReportContasAPagar;
+
+async function saveParsedContasAPagar(parsed, sourceLabel = "relatório") {
+  if (!parsed || parsed.length === 0) return;
+  if (!Array.isArray(appData.boletos)) appData.boletos = [];
+
+  let importedCount = 0;
+  let updatedCount = 0;
+  let totalAmount = 0;
+
+  parsed.forEach(newItem => {
+    totalAmount += (parseFloat(newItem.amount) || 0);
+    const existingIndex = appData.boletos.findIndex(b => 
+      (b.nf && b.installment && b.nf === newItem.nf && String(b.installment) === String(newItem.installment)) ||
+      (b.beneficiary === newItem.beneficiary && b.dueDate === newItem.dueDate && Math.abs(b.amount - newItem.amount) < 0.05)
+    );
+
+    if (existingIndex >= 0) {
+      const existing = appData.boletos[existingIndex];
+      appData.boletos[existingIndex] = {
+        ...existing,
+        dueDate: newItem.dueDate,
+        amount: newItem.amount,
+        beneficiary: newItem.beneficiary,
+        nf: newItem.nf,
+        installment: newItem.installment,
+        description: existing.description || newItem.description
+      };
+      updatedCount++;
+    } else {
+      appData.boletos.push(newItem);
+      importedCount++;
+    }
+  });
+
+  if (!appData.settings) appData.settings = {};
+  appData.settings.boletos = appData.boletos;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: { key: 'boletos', value: appData.boletos }
+  });
+
+  showToast(`${importedCount} contas adicionadas e ${updatedCount} atualizadas do ${sourceLabel}! Total: ${formatCurrency(totalAmount)}`, "success", 5000);
+
+  if (parsed[0] && parsed[0].dueDate) {
+    const parts = parsed[0].dueDate.split('-');
+    if (parts.length === 3) {
+      boletoSelectedYear = parseInt(parts[0], 10);
+      boletoSelectedMonth = parseInt(parts[1], 10) - 1;
+    }
+  }
+
+  renderBoletosView();
+}
+window.saveParsedContasAPagar = saveParsedContasAPagar;
+
+async function importFastReportHtml(htmlContent) {
+  const parsed = parseFastReportContasAPagar(htmlContent);
+  if (parsed.length === 0) {
+    showToast("Nenhuma conta a pagar identificada no arquivo HTML. Verifique se o formato é FastReport.", "warning");
+    return;
+  }
+  await saveParsedContasAPagar(parsed, "relatório HTML");
+}
+window.importFastReportHtml = importFastReportHtml;
+
+/* Parser de texto de relatório FastReport (extraído de PDF ou TXT) */
+function parseFastReportPdfText(textLines) {
+  if (!Array.isArray(textLines)) return [];
+  const boletos = [];
+  let currentBoleto = null;
+
+  for (let i = 0; i < textLines.length; i++) {
+    const line = textLines[i].trim();
+    if (!line) continue;
+    const dateMatch = line.match(/^([0-3]\d\/[0-1]\d\/202\d)/);
+
+    if (dateMatch) {
+      if (currentBoleto) {
+        boletos.push(currentBoleto);
+      }
+
+      const dueDateRaw = dateMatch[1];
+      const [d, m, y] = dueDateRaw.split('/');
+      const isoDueDate = `${y}-${m}-${d}`;
+
+      const rest = line.substring(dueDateRaw.length).trim();
+
+      let nf = '';
+      let installment = '';
+      const nfMatch = rest.match(/\b(\d{4,8})\s+(\d{1,4})\b/);
+      if (nfMatch) {
+        nf = nfMatch[1];
+        installment = String(parseInt(nfMatch[2], 10));
+      }
+
+      const amounts = line.match(/(\d{1,3}(?:\.\d{3})*,\d{2})/g) || [];
+
+      let supplier = rest;
+      if (nfMatch) {
+        supplier = rest.substring(0, rest.indexOf(nfMatch[0])).trim();
+      }
+
+      let category = 'loja';
+      const sUpper = supplier.toUpperCase();
+      if (sUpper.includes('COPEL') || sUpper.includes('SANEPAR')) category = 'energia';
+      else if (sUpper.includes('STARLINK') || sUpper.includes('INTERNET')) category = 'internet';
+      else if (sUpper.includes('PETROLEO') || sUpper.includes('COMBUSTIVEL')) category = 'combustivel';
+      else if (sUpper.includes('NAUTICA') || sUpper.includes('BARCO') || sUpper.includes('MERCURY')) category = 'barcos';
+
+      currentBoleto = {
+        id: `bol-pdf-${isoDueDate}-${nf || Date.now()}-${installment || '1'}-${boletos.length + 1}`,
+        dueDate: isoDueDate,
+        beneficiary: supplier,
+        bankName: supplier.includes('JOGA') ? 'Joga Fornecedor' : (supplier.includes('KALA') ? 'Kala Distribuição' : (supplier.includes('NAKINE') ? 'Nakine Decorações' : 'Fornecedor')),
+        code: '',
+        amount: amounts.length > 0 ? parseFloat(amounts[0].replace(/\./g, '').replace(',', '.')) : 0,
+        category: category,
+        status: 'pending',
+        description: nf ? `NF ${nf} - Parcela ${installment || '1'} (Duplicata FastReport)` : 'Duplicata a Pagar',
+        nf: nf,
+        installment: installment || '1',
+        source: 'relatorio_pdf'
+      };
+    } else if (currentBoleto) {
+      if (line.startsWith('TOTAL GERAL:') || line.startsWith('TOTAL:')) {
+        boletos.push(currentBoleto);
+        currentBoleto = null;
+        break;
+      }
+
+      const amounts = line.match(/(\d{1,3}(?:\.\d{3})*,\d{2})/g);
+      if (amounts && amounts.length > 0 && currentBoleto.amount === 0) {
+        currentBoleto.amount = parseFloat(amounts[0].replace(/\./g, '').replace(',', '.'));
+      }
+
+      const cleanLine = line.replace(/\bTA\b|\bDUPLICA\b|\bDuplicata a Pagar\b/gi, '').replace(/\b\d{1,3}(?:\.\d{3})*,\d{2}\b/g, '').trim();
+      if (cleanLine && !cleanLine.includes('TOTAL') && !cleanLine.includes('0,00')) {
+        currentBoleto.beneficiary = (currentBoleto.beneficiary + ' ' + cleanLine).replace(/\bLTDA\b(\s+\bLTDA\b)+/gi, 'LTDA').replace(/\s+/g, ' ').trim();
+      }
+    }
+  }
+  if (currentBoleto) boletos.push(currentBoleto);
+  return boletos;
+}
+window.parseFastReportPdfText = parseFastReportPdfText;
+
+async function parseAndImportFastReportTextLines(textLines, label = "relatório") {
+  const parsed = parseFastReportPdfText(textLines);
+  if (parsed.length === 0) {
+    showToast("Nenhuma conta encontrada no formato do relatório.", "warning");
+    return;
+  }
+  await saveParsedContasAPagar(parsed, label);
+}
+window.parseAndImportFastReportTextLines = parseAndImportFastReportTextLines;
+
+function triggerImportReportClick() {
+  const input = document.getElementById("boletoPdfInput") || document.getElementById("inputImportReportFile");
+  if (input) {
+    input.value = "";
+    input.click();
+  }
+}
+window.triggerImportReportClick = triggerImportReportClick;
+
+function handleReportFileUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const lowerName = file.name.toLowerCase();
+
+  if (lowerName.endsWith('.pdf') || file.type === 'application/pdf') {
+    processBoletoPdf(file);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const content = e.target.result;
+    if (lowerName.endsWith('.txt')) {
+      parseAndImportFastReportTextLines(content.split(/\r?\n/), 'arquivo texto');
+    } else {
+      importFastReportHtml(content);
+    }
+  };
+  reader.onerror = () => {
+    showToast("Erro ao ler arquivo do relatório.", "danger");
+  };
+  reader.readAsText(file);
+}
+window.handleReportFileUpload = handleReportFileUpload;
+
+/* Conversões FEBRABAN: Linha Digitável <-> Código de Barras (44 dígitos) */
+function calcMod10(seq) {
+  let mult = 2;
+  let sum = 0;
+  for (let i = seq.length - 1; i >= 0; i--) {
+    let mul = parseInt(seq[i], 10) * mult;
+    if (mul > 9) mul = Math.floor(mul / 10) + (mul % 10);
+    sum += mul;
+    mult = mult === 2 ? 1 : 2;
+  }
+  const rem = sum % 10;
+  return rem === 0 ? '0' : String(10 - rem);
+}
+
+function linhaDigitavelToCodigoBarras(linha) {
+  const c = String(linha || '').replace(/\D/g, '');
+  if (c.length === 47) {
+    const banco = c.slice(0, 3);
+    const moeda = c.slice(3, 4);
+    const campoLivre1 = c.slice(4, 9);
+    const campoLivre2 = c.slice(10, 20);
+    const campoLivre3 = c.slice(21, 31);
+    const dvGeral = c.slice(32, 33);
+    const fatorVenc = c.slice(33, 37);
+    const valor = c.slice(37, 47);
+    return banco + moeda + dvGeral + fatorVenc + valor + campoLivre1 + campoLivre2 + campoLivre3;
+  } else if (c.length === 48) {
+    return c.slice(0, 11) + c.slice(12, 23) + c.slice(24, 35) + c.slice(36, 47);
+  }
+  return c;
+}
+window.linhaDigitavelToCodigoBarras = linhaDigitavelToCodigoBarras;
+
+function codigoBarrasToLinhaDigitavel(barcode) {
+  const c = String(barcode || '').replace(/\D/g, '');
+  if (c.length === 44) {
+    if (c.startsWith('8')) {
+      const b1 = c.slice(0, 11);
+      const b2 = c.slice(11, 22);
+      const b3 = c.slice(22, 33);
+      const b4 = c.slice(33, 44);
+      return `${b1}${calcMod10(b1)} ${b2}${calcMod10(b2)} ${b3}${calcMod10(b3)} ${b4}${calcMod10(b4)}`;
+    }
+    const banco = c.slice(0, 3);
+    const moeda = c.slice(3, 4);
+    const dvGeral = c.slice(4, 5);
+    const fator = c.slice(5, 9);
+    const valor = c.slice(9, 19);
+    const campoLivre1 = c.slice(19, 24);
+    const campoLivre2 = c.slice(24, 34);
+    const campoLivre3 = c.slice(34, 44);
+
+    const f1 = banco + moeda + campoLivre1;
+    const f2 = campoLivre2;
+    const f3 = campoLivre3;
+
+    const part1 = f1 + calcMod10(f1);
+    const part2 = f2 + calcMod10(f2);
+    const part3 = f3 + calcMod10(f3);
+    const part4 = dvGeral;
+    const part5 = fator + valor;
+
+    return `${part1.slice(0, 5)}.${part1.slice(5)} ${part2.slice(0, 5)}.${part2.slice(5)} ${part3.slice(0, 5)}.${part3.slice(5)} ${part4} ${part5}`;
+  }
+  return barcode;
+}
+window.codigoBarrasToLinhaDigitavel = codigoBarrasToLinhaDigitavel;
+
+/* Geradores de Código de Barras (ITF / FEBRABAN) e QR Code */
+function generateItfBarcodeSvg(digits, height = 70) {
+  let clean = String(digits || '').replace(/\D/g, '');
+  if (clean.length === 0) return '';
+  if (clean.length % 2 !== 0) clean = '0' + clean;
+  
+  const ITF_PATTERNS = [
+    '00110', '10001', '01001', '11000', '00101',
+    '10100', '01100', '00011', '10010', '01010'
+  ];
+  
+  const narrow = 2;
+  const wide = 5;
+  let elements = [];
+  let x = 12;
+  
+  elements.push({ x, w: narrow }); x += narrow;
+  x += narrow;
+  elements.push({ x, w: narrow }); x += narrow;
+  x += narrow;
+  
+  for (let i = 0; i < clean.length; i += 2) {
+    const p1 = ITF_PATTERNS[parseInt(clean[i], 10)];
+    const p2 = ITF_PATTERNS[parseInt(clean[i + 1], 10)];
+    for (let j = 0; j < 5; j++) {
+      const barW = p1[j] === '1' ? wide : narrow;
+      const spaceW = p2[j] === '1' ? wide : narrow;
+      elements.push({ x, w: barW });
+      x += barW;
+      x += spaceW;
+    }
+  }
+  
+  elements.push({ x, w: wide }); x += wide;
+  x += narrow;
+  elements.push({ x, w: narrow }); x += narrow;
+  x += 12;
+  
+  const barHeight = height - 20;
+  const rects = elements.map(e => `<rect x="${e.x}" y="6" width="${e.w}" height="${barHeight}" fill="#111827"/>`).join('');
+  
+  return `<svg viewBox="0 0 ${x} ${height}" width="100%" height="${height}" xmlns="http://www.w3.org/2000/svg" style="background:#ffffff; border-radius:6px; padding:4px; box-sizing:border-box;">
+    ${rects}
+    <text x="${x / 2}" y="${height - 4}" text-anchor="middle" font-family="monospace" font-size="10" fill="#1f2937" font-weight="bold">${clean}</text>
+  </svg>`;
+}
+window.generateItfBarcodeSvg = generateItfBarcodeSvg;
+
+function generateQRCodeSvg(text, cellSize = 4, margin = 8) {
+  if (!text) return '';
+  try {
+    if (typeof window.qrcode === 'function') {
+      const qr = window.qrcode(0, 'M');
+      qr.addData(String(text));
+      qr.make();
+      return qr.createSvgTag(cellSize, margin);
+    }
+  } catch (err) {
+    console.warn('Erro ao gerar QR Code SVG:', err);
+  }
+  return '';
+}
+window.generateQRCodeSvg = generateQRCodeSvg;
+
+/* Modal de Pagamento: Código de Barras & QR Code */
+function openBoletoPayModal(id) {
+  const b = (appData.boletos || []).find(item => String(item.id) === String(id));
+  if (!b) return;
+
+  const modal = document.getElementById("modalBoletoPay");
+  const body = document.getElementById("modalBoletoPayBody");
+  const footerActions = document.getElementById("modalBoletoPayFooterActions");
+  if (!modal || !body) return;
+
+  const isPaid = b.status === 'paid';
+  const valFormatted = formatCurrency(parseFloat(b.amount) || 0);
+
+  const parts = (b.dueDate || '').split('-');
+  const formattedDueDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : b.dueDate;
+
+  const hasCode = !!(b.code && b.code.trim().length >= 20);
+
+  let barcodeSvg = '';
+  let qrcodeSvg = '';
+
+  if (hasCode) {
+    const barcode44 = linhaDigitavelToCodigoBarras(b.code);
+    barcodeSvg = generateItfBarcodeSvg(barcode44 || b.code, 75);
+    qrcodeSvg = generateQRCodeSvg(barcode44 || b.code, 4, 8);
+  } else {
+    const pixReference = `Duplicata: ${b.beneficiary} | NF: ${b.nf || 'S/N'} | Valor: ${valFormatted} | Venc: ${formattedDueDate}`;
+    qrcodeSvg = generateQRCodeSvg(pixReference, 4, 8);
+  }
+
+  let html = `
+    <div style="background: rgba(13, 22, 38, 0.6); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+          <div style="font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Beneficiário / Fornecedor</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${escapeHtml(b.beneficiary || 'Sem Beneficiário')}</div>
+          ${b.nf ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Nota Fiscal: <strong>${b.nf}</strong> • Parcela: <strong>${b.installment || '1'}</strong></div>` : ''}
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Valor a Pagar</div>
+          <div style="font-size: 1.4rem; font-weight: 900; color: var(--primary-gold);">${valFormatted}</div>
+          <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.2rem;">Vencimento: <strong>${formattedDueDate}</strong></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (hasCode) {
+    html += `
+      <!-- Botão Hero Copiar Linha Digitável no Mobile / Desktop -->
+      <div style="margin-bottom: 1.15rem;">
+        <button type="button" class="btn-copy-linha-hero" onclick="copyBoletoLinhaDigitavel('${b.id}', this)" title="Copiar Linha Digitável para colar no app do banco">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copiar Linha Digitável (Para Pagar no Banco)</span>
+        </button>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label class="form-label" style="font-size: 0.82rem; color: var(--primary-gold); margin-bottom: 0.4rem;">
+          Linha Digitável (47 / 48 Dígitos):
+        </label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input type="text" readonly value="${escapeHtml(b.code)}" class="form-input" style="font-family: monospace; font-size: 0.82rem; background: rgba(0,0,0,0.5);" id="modalPayBoletoCodeInput">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="copyBoletoLinhaDigitavel('${b.id}', this)" style="white-space: nowrap; padding: 0.6rem 0.85rem;">
+            Copiar
+          </button>
+        </div>
+      </div>
+
+      <!-- Código de Barras Visual FEBRABAN -->
+      <div style="margin-bottom: 1.25rem;">
+        <label class="form-label" style="font-size: 0.82rem; color: var(--text-light); margin-bottom: 0.35rem;">
+          Código de Barras FEBRABAN (Escaneável na Tela):
+        </label>
+        <div class="barcode-preview-box">
+          ${barcodeSvg}
+        </div>
+      </div>
+
+      <!-- QR Code para Pagamento -->
+      <div style="text-align: center; margin-bottom: 1rem;">
+        <label class="form-label" style="font-size: 0.82rem; color: var(--text-light); margin-bottom: 0.35rem; display: block;">
+          QR Code do Boleto / Pagamento:
+        </label>
+        <div class="qrcode-preview-box">
+          ${qrcodeSvg}
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem;">
+          Aponte a câmera do aplicativo do seu banco para o QR Code ou use o botão de copiar linha digitável.
+        </div>
+      </div>
+    `;
+  } else {
+    html += `
+      <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-sm); padding: 0.9rem 1.15rem; margin-bottom: 1.25rem;">
+        <div style="font-size: 0.85rem; font-weight: 700; color: #fbbf24; margin-bottom: 0.35rem;">
+          Duplicata Contábil (Relatório de Contas a Pagar)
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-light); line-height: 1.45;">
+          Esta duplicata foi importada do seu relatório de contas a pagar. Para pagar via internet banking (Banco do Brasil, Itaú, Nubank, etc.), vincule a <strong>linha digitável de 47 ou 48 dígitos</strong>.
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label class="form-label">Adicionar Linha Digitável do Boleto (47 ou 48 dígitos):</label>
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <input type="text" id="modalAttachBoletoCodeInput" class="form-input" placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000" style="font-family: monospace; font-size: 0.82rem;">
+          <button type="button" class="btn btn-gold btn-sm" onclick="saveBoletoAttachedCodeDirect('${b.id}')" style="white-space: nowrap;">
+            Salvar Código
+          </button>
+        </div>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn btn-gold btn-sm" style="flex: 1; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;" onclick="triggerAttachPhotoLinhaDigitavel('${b.id}')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            <span>Fotografar Linha Digitável</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 1rem;">
+        <label class="form-label" style="font-size: 0.82rem; color: var(--text-dim); margin-bottom: 0.35rem; display: block;">
+          QR Code de Referência da Conta:
+        </label>
+        <div class="qrcode-preview-box">
+          ${qrcodeSvg}
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem;">
+          Contém os dados contábeis da duplicata para referência rápida de pagamento.
+        </div>
+      </div>
+    `;
+  }
+
+  body.innerHTML = html;
+
+  if (footerActions) {
+    footerActions.innerHTML = `
+      ${!hasCode ? `
+        <label for="boletoCameraInput" class="btn btn-secondary btn-sm" style="cursor: pointer;" onclick="closeModal('modalBoletoPay');" title="Fotografar o boleto físico com a câmera do iPhone">
+          Fotografar Boleto Completo
+        </label>
+      ` : ''}
+      <button type="button" class="btn ${isPaid ? 'btn-secondary' : 'btn-whatsapp'} btn-sm" onclick="toggleBoletoPaidStatus('${b.id}'); closeModal('modalBoletoPay');">
+        ${isPaid ? 'Reabrir Conta' : 'Confirmar Pagamento / Quitar'}
+      </button>
+    `;
+  }
+
+  openModal("modalBoletoPay");
+}
+window.openBoletoPayModal = openBoletoPayModal;
+
+async function saveBoletoAttachedCodeDirect(id) {
+  const input = document.getElementById("modalAttachBoletoCodeInput");
+  const code = (input ? input.value : "").trim();
+  if (!code) {
+    showToast("Informe a linha digitável do boleto.", "warning");
+    return;
+  }
+  
+  const b = (appData.boletos || []).find(item => String(item.id) === String(id));
+  if (!b) return;
+  
+  b.code = code;
+  
+  try {
+    const dec = decodeFebrabanBoleto(code);
+    if (dec && dec.bankName) b.bankName = dec.bankName;
+  } catch (e) {}
+
+  if (!appData.settings) appData.settings = {};
+  appData.settings.boletos = appData.boletos;
+
+  await saveState({
+    type: 'UPDATE_SETTINGS',
+    payload: { key: 'boletos', value: appData.boletos }
+  });
+
+  showToast("Código de barras vinculado com sucesso!", "success");
+  openBoletoPayModal(id);
+  renderBoletosAgenda();
+}
+window.saveBoletoAttachedCodeDirect = saveBoletoAttachedCodeDirect;
+
+function exportBoletosBackupJSON() {
+  const boletos = appData.boletos || [];
+  const jsonStr = JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    system: "Eldorado Pesca • Gestão de Boletos",
+    totalBoletos: boletos.length,
+    boletos
+  }, null, 2);
+
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup_boletos_eldorado_${getLocalDateStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast("Backup JSON dos boletos baixado com sucesso!", "success");
+}
+window.exportBoletosBackupJSON = exportBoletosBackupJSON;
+
+/* Preprocessamento de imagem em Canvas para iPhone / OCR */
+function triggerBoletoUploadClick(e) {
+  if (e.target.closest('button') || e.target.closest('label') || e.target.closest('input')) return;
+  const cam = document.getElementById("boletoCameraInput");
+  if (cam) cam.click();
+}
+window.triggerBoletoUploadClick = triggerBoletoUploadClick;
+
+async function processBoletoPdf(file) {
+  const banner = document.getElementById("boletoOcrBanner");
+  const statusText = document.getElementById("boletoOcrStatusText");
+  const percentText = document.getElementById("boletoOcrPercentText");
+  const progressBar = document.getElementById("boletoOcrProgressBar");
+
+  try {
+    if (banner) banner.style.display = "block";
+    if (statusText) statusText.textContent = "Carregando motor PDF no navegador...";
+    if (progressBar) progressBar.style.width = "20%";
+    if (percentText) percentText.textContent = "20%";
+
+    if (typeof window !== 'undefined' && window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
+    }
+
+    const pdfjs = (typeof window !== 'undefined' && window.pdfjsLib) ? window.pdfjsLib : (typeof require === 'function' ? require('./pdf.min.js') : null);
+    if (!pdfjs) {
+      throw new Error("Biblioteca PDF.js não encontrada.");
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+    if (statusText) statusText.textContent = `Lendo ${doc.numPages} página(s) do PDF...`;
+    if (progressBar) progressBar.style.width = "40%";
+    if (percentText) percentText.textContent = "40%";
+
+    const textLines = [];
+    let fullRawText = "";
+    let firstPageCanvas = null;
+
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      
+      const groups = {};
+      content.items.forEach(it => {
+        const y = Math.round(it.transform[5]);
+        if (!groups[y]) groups[y] = [];
+        groups[y].push({ x: it.transform[4], str: it.str });
+      });
+      const sortedY = Object.keys(groups).map(Number).sort((a,b) => b - a);
+      sortedY.forEach(y => {
+        const line = groups[y].sort((a,b) => a.x - b.x).map(it => it.str.trim()).filter(Boolean).join(' ');
+        if (line) textLines.push(line);
+      });
+      fullRawText += " " + content.items.map(it => it.str).join(' ');
+
+      if (p === 1) {
+        try {
+          const viewport = page.getViewport({ scale: 1.5 });
+          const cvs = document.createElement('canvas');
+          cvs.width = viewport.width;
+          cvs.height = viewport.height;
+          const ctx = cvs.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          firstPageCanvas = cvs;
+          lastScannedBoletoDataUrl = cvs.toDataURL('image/jpeg', 0.85);
+        } catch (cvsErr) {
+          console.warn("Não foi possível renderizar miniatura da página 1 do PDF:", cvsErr);
+        }
+      }
+    }
+
+    if (progressBar) progressBar.style.width = "65%";
+    if (percentText) percentText.textContent = "65%";
+    if (statusText) statusText.textContent = "Identificando tipo do documento...";
+
+    // Caso 1: Relatório de Contas a Pagar com múltiplas duplicatas (FastReport ou similar)
+    const upperText = fullRawText.toUpperCase();
+    const isReport = upperText.includes("RELATÓRIO DE CONTAS A PAGAR") ||
+                     upperText.includes("DUPLICATA A PAGAR") ||
+                     textLines.filter(l => /^[0-3]\d\/[0-1]\d\/202\d/.test(l)).length >= 2;
+
+    if (isReport) {
+      const parsed = parseFastReportPdfText(textLines);
+      if (parsed && parsed.length > 0) {
+        await saveParsedContasAPagar(parsed, "relatório PDF");
+        if (progressBar) progressBar.style.width = "100%";
+        if (percentText) percentText.textContent = "100%";
+        if (statusText) statusText.textContent = "Relatório importado com sucesso!";
+        setTimeout(() => { if (banner) banner.style.display = "none"; }, 1200);
+        return;
+      }
+    }
+
+    // Caso 2: Boleto individual de empresa única
+    let decoded = decodeFebrabanBoleto(fullRawText);
+
+    // Se o PDF for escaneado (sem texto selecionável) ou a linha digitável não foi encontrada no texto:
+    if ((!decoded || !decoded.code) && firstPageCanvas) {
+      if (statusText) statusText.textContent = "Lendo código de barras / linha digitável na imagem...";
+      if (progressBar) progressBar.style.width = "75%";
+      
+      // Tentativa 1: BarcodeDetector nativo no canvas (ultra rápido)
+      if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+        try {
+          const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
+          const detectedBarcodes = await detector.detect(firstPageCanvas);
+          if (detectedBarcodes && detectedBarcodes.length > 0) {
+            const rawVal = detectedBarcodes[0].rawValue;
+            const dec = decodeFebrabanBoleto(rawVal);
+            if (dec && dec.code) decoded = dec;
+          }
+        } catch (bErr) {}
+      }
+
+      // Tentativa 2: Tesseract OCR no canvas
+      if (!decoded || !decoded.code) {
+        try {
+          const Tesseract = await loadTesseract();
+          const workerRes = await Tesseract.recognize(firstPageCanvas, 'por');
+          const ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
+          const dec = decodeFebrabanBoleto(ocrText);
+          if (dec && (dec.code || dec.amount)) decoded = dec;
+        } catch (ocrErr) {
+          console.warn("OCR no canvas do PDF:", ocrErr);
+        }
+      }
+    }
+
+    if (progressBar) progressBar.style.width = "100%";
+    if (percentText) percentText.textContent = "100%";
+    if (statusText) statusText.textContent = "Leitura do PDF concluída!";
+    setTimeout(() => { if (banner) banner.style.display = "none"; }, 1200);
+
+    // Abrir modal com os dados preenchidos
+    openNewBoletoModal({
+      beneficiary: (decoded && decoded.beneficiary) || file.name.replace(/\.pdf$/i, ''),
+      code: (decoded && (decoded.formattedCode || decoded.code)) || '',
+      dueDate: (decoded && decoded.dueDate) || getLocalDateStr(),
+      amount: (decoded && decoded.amount) || '',
+      category: 'loja'
+    });
+
+    showToast("PDF de boleto processado com sucesso! Confira e confirme os dados.", "success");
+
+  } catch (err) {
+    console.error("Erro ao processar PDF:", err);
+    if (banner) banner.style.display = "none";
+    showToast("Não foi possível ler o arquivo PDF. Você pode cadastrar manualmente.", "error");
+    openNewBoletoModal();
+  }
+}
+window.processBoletoPdf = processBoletoPdf;
+
+function handleBoletoUnifiedFileInput(e) {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const lowerName = file.name.toLowerCase();
+
+  if (lowerName.endsWith('.pdf') || file.type === 'application/pdf') {
+    processBoletoPdf(file);
+    e.target.value = "";
+    return;
+  }
+
+  if (lowerName.endsWith('.html') || lowerName.endsWith('.htm') || file.type.includes('html')) {
+    const reader = new FileReader();
+    reader.onload = (ev) => importFastReportHtml(ev.target.result);
+    reader.readAsText(file);
+    e.target.value = "";
+    return;
+  }
+
+  if (lowerName.endsWith('.txt')) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const lines = ev.target.result.split(/\r?\n/);
+      parseAndImportFastReportTextLines(lines, 'arquivo texto');
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+    return;
+  }
+
+  processBoletoImage(file);
+  e.target.value = "";
+}
+window.handleBoletoUnifiedFileInput = handleBoletoUnifiedFileInput;
+
+async function handleLinhaDigitavelPhotoInput(e) {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const targetBoletoId = activeBoletoAttachId;
+  activeBoletoAttachId = null;
+
+  const banner = document.getElementById("boletoOcrBanner");
+  const statusText = document.getElementById("boletoOcrStatusText");
+  const percentText = document.getElementById("boletoOcrPercentText");
+  const progressBar = document.getElementById("boletoOcrProgressBar");
+
+  try {
+    if (banner) banner.style.display = "block";
+    if (statusText) statusText.textContent = "Otimizando foco da linha digitável...";
+    if (progressBar) progressBar.style.width = "25%";
+    if (percentText) percentText.textContent = "25%";
+
+    const { canvas, dataUrl } = await preprocessImageForCanvas(file);
+    lastScannedBoletoDataUrl = dataUrl;
+
+    if (statusText) statusText.textContent = "Lendo dígitos da linha numérica (47 / 48 dígitos)...";
+    if (progressBar) progressBar.style.width = "50%";
+    if (percentText) percentText.textContent = "50%";
+
+    let detectedCode = "";
+
+    // 1. Tenta leitor nativo de código de barras
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
+        const barcodes = await detector.detect(canvas);
+        if (barcodes && barcodes.length > 0) {
+          detectedCode = barcodes[0].rawValue;
+        }
+      } catch (bErr) {}
+    }
+
+    // 2. OCR focado na linha numérica
+    if (!detectedCode) {
+      try {
+        const Tesseract = await loadTesseract();
+        const workerRes = await Tesseract.recognize(canvas, 'por');
+        const ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
+        detectedCode = ocrText;
+      } catch (ocrErr) {
+        console.warn("OCR na foto da linha digitável:", ocrErr);
+      }
+    }
+
+    const decoded = decodeFebrabanBoleto(detectedCode);
+
+    if (progressBar) progressBar.style.width = "100%";
+    if (percentText) percentText.textContent = "100%";
+    if (statusText) statusText.textContent = "Linha digitável capturada!";
+    setTimeout(() => { if (banner) banner.style.display = "none"; }, 1200);
+
+    if (targetBoletoId) {
+      const b = (appData.boletos || []).find(item => String(item.id) === String(targetBoletoId));
+      if (b) {
+        if (decoded && decoded.code) {
+          b.code = decoded.formattedCode || decoded.code;
+          if (decoded.bankName) b.bankName = decoded.bankName;
+          if (decoded.dueDate && !b.dueDate) b.dueDate = decoded.dueDate;
+          if (decoded.amount && (!b.amount || b.amount === 0)) b.amount = parseFloat(decoded.amount);
+
+          if (!appData.settings) appData.settings = {};
+          appData.settings.boletos = appData.boletos;
+          await saveState({
+            type: 'UPDATE_SETTINGS',
+            payload: { key: 'boletos', value: appData.boletos }
+          });
+
+          showToast(`Linha digitável vinculada com sucesso a ${b.beneficiary}!`, "success", 4500);
+          renderBoletosAgenda();
+          openBoletoPayModal(b.id);
+          e.target.value = "";
+          return;
+        }
+      }
+    }
+
+    openNewBoletoModal({
+      beneficiary: (decoded && decoded.beneficiary) || "",
+      code: (decoded && (decoded.formattedCode || decoded.code)) || "",
+      dueDate: (decoded && decoded.dueDate) || getLocalDateStr(),
+      amount: (decoded && decoded.amount) || "",
+      category: "loja"
+    });
+
+    if (decoded && decoded.code) {
+      showToast("Linha digitável identificada! Confira os dados e salve.", "success");
+    } else {
+      showToast("Foto registrada! Digite ou ajuste os números da linha digitável.", "warning");
+    }
+
+  } catch (err) {
+    console.error("Erro ao fotografar linha digitável:", err);
+    if (banner) banner.style.display = "none";
+    showToast("Erro ao processar imagem. Você pode digitar o código manualmente.", "error");
+    openNewBoletoModal();
+  }
+
+  e.target.value = "";
+}
+window.handleLinhaDigitavelPhotoInput = handleLinhaDigitavelPhotoInput;
+
+function handleBoletoFileInput(e) {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const lowerName = file.name.toLowerCase();
+
+  if (lowerName.endsWith('.pdf') || file.type === 'application/pdf') {
+    processBoletoPdf(file);
+    e.target.value = "";
+    return;
+  }
+
+  if (lowerName.endsWith('.html') || lowerName.endsWith('.htm') || file.type.includes('html')) {
+    const reader = new FileReader();
+    reader.onload = (ev) => importFastReportHtml(ev.target.result);
+    reader.readAsText(file);
+    e.target.value = "";
+    return;
+  }
+  processBoletoImage(file);
+  e.target.value = "";
+}
+window.handleBoletoFileInput = handleBoletoFileInput;
+
+function handleBoletoDragOver(e) {
+  e.preventDefault();
+  const dz = document.getElementById("boletosDropzone");
+  if (dz) dz.classList.add("drag-over");
+}
+window.handleBoletoDragOver = handleBoletoDragOver;
+
+function handleBoletoDragLeave(e) {
+  const dz = document.getElementById("boletosDropzone");
+  if (dz) dz.classList.remove("drag-over");
+}
+window.handleBoletoDragLeave = handleBoletoDragLeave;
+
+function handleBoletoDrop(e) {
+  e.preventDefault();
+  const dz = document.getElementById("boletosDropzone");
+  if (dz) dz.classList.remove("drag-over");
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    const lowerName = file.name.toLowerCase();
+
+    if (lowerName.endsWith('.pdf') || file.type === 'application/pdf') {
+      processBoletoPdf(file);
+      return;
+    }
+
+    if (lowerName.endsWith('.html') || lowerName.endsWith('.htm') || file.type.includes('html')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => importFastReportHtml(ev.target.result);
+      reader.readAsText(file);
+      return;
+    }
+    processBoletoImage(file);
+  }
+}
+window.handleBoletoDrop = handleBoletoDrop;
+
+// Suporte a colar foto da área de transferência (Ctrl+V)
+window.addEventListener('paste', (e) => {
+  if (activeTab !== 'tab-boletos') return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      const file = items[i].getAsFile();
+      if (file) {
+        processBoletoImage(file);
+        break;
+      }
+    }
+  }
+});
+
+function preprocessImageForCanvas(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Redimensionamento inteligente para não estourar memória no Safari iOS (12MP a 48MP -> max 1600px)
+        const maxDim = 1600;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Realce de contraste e tons de cinza para destacar números pretos do FEBRABAN
+        try {
+          const imgData = ctx.getImageData(0, 0, width, height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            const contrast = 1.35;
+            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+            const val = Math.min(255, Math.max(0, factor * (gray - 128) + 128));
+            d[i] = val;
+            d[i + 1] = val;
+            d[i + 2] = val;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        } catch (err) {
+          console.warn('Processamento de pixels em canvas ignorado:', err);
+        }
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        resolve({ canvas, dataUrl, width, height });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+let tesseractLoaderPromise = null;
+function loadTesseract() {
+  if (typeof window !== 'undefined' && window.Tesseract) {
+    return Promise.resolve(window.Tesseract);
+  }
+  if (tesseractLoaderPromise) return tesseractLoaderPromise;
+  tesseractLoaderPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload = () => {
+      resolve(window.Tesseract);
+    };
+    script.onerror = () => {
+      tesseractLoaderPromise = null;
+      reject(new Error('Falha ao carregar Tesseract.js (sem internet ou CDN bloqueada).'));
+    };
+    document.head.appendChild(script);
+  });
+  return tesseractLoaderPromise;
+}
+
+function decodeFebrabanBoleto(rawText) {
+  let cleanDigits = (rawText || '').replace(/\D/g, '');
+
+  // Correção de ruído comum de OCR em dígitos
+  if (!cleanDigits.match(/\d{47}/) && !cleanDigits.match(/\d{48}/) && !cleanDigits.match(/\d{44}/)) {
+    const fixedText = (rawText || '')
+      .replace(/[oO]/g, '0')
+      .replace(/[lI\|]/g, '1')
+      .replace(/[sS]/g, '5')
+      .replace(/[bB]/g, '8')
+      .replace(/[zZ]/g, '2');
+    const fixedDigits = fixedText.replace(/\D/g, '');
+    if (fixedDigits.match(/\d{47}/) || fixedDigits.match(/\d{48}/) || fixedDigits.match(/\d{44}/)) {
+      cleanDigits = fixedDigits;
+    }
+  }
+
+  const result = {
+    code: '',
+    formattedCode: '',
+    dueDate: '',
+    amount: '',
+    beneficiary: '',
+    bankName: ''
+  };
+
+  const bankNames = {
+    '001': 'Banco do Brasil',
+    '033': 'Santander',
+    '104': 'Caixa Econômica Federal',
+    '237': 'Bradesco',
+    '341': 'Itaú Unibanco',
+    '748': 'Sicredi',
+    '756': 'Sicoob',
+    '260': 'Nubank',
+    '077': 'Banco Inter',
+    '212': 'Banco Original',
+    '041': 'Banrisul'
+  };
+
+  // 1. Procurar sequência de 47 dígitos (Cobrança Bancária)
+  const match47 = cleanDigits.match(/\d{47}/);
+  if (match47) {
+    const c = match47[0];
+    result.code = c;
+    result.formattedCode = c.slice(0, 5) + '.' + c.slice(5, 10) + ' ' + c.slice(10, 15) + '.' + c.slice(15, 21) + ' ' + c.slice(21, 26) + '.' + c.slice(26, 32) + ' ' + c.slice(32, 33) + ' ' + c.slice(33, 47);
+
+    const bankCode = c.slice(0, 3);
+    result.bankName = bankNames[bankCode] || ('Banco ' + bankCode);
+
+    // Fator de vencimento (posições 33 a 37 - 4 dígitos)
+    const factor = parseInt(c.slice(33, 37), 10);
+    if (factor >= 1000) {
+      if (factor < 3000) {
+        // Ciclo 2 (FEBRABAN pós fev/2025: base 22/02/2025)
+        const base2025 = new Date(2025, 1, 22);
+        const d = new Date(base2025.getTime() + (factor - 1000) * 86400000);
+        result.dueDate = d.toISOString().slice(0, 10);
+      } else {
+        // Ciclo 1 (Base 07/10/1997)
+        const base1997 = new Date(1997, 9, 7);
+        const d = new Date(base1997.getTime() + factor * 86400000);
+        result.dueDate = d.toISOString().slice(0, 10);
+      }
+    }
+
+    // Valor nominal (posições 37 a 47 - 10 dígitos em centavos)
+    const valCentavos = parseInt(c.slice(37, 47), 10);
+    if (valCentavos > 0) {
+      result.amount = (valCentavos / 100).toFixed(2);
+    }
+  }
+
+  // 2. Procurar sequência de 48 dígitos (Concessionárias de Água, Luz, Telefone ou Tributos)
+  if (!result.code) {
+    const match48 = cleanDigits.match(/\d{48}/);
+    if (match48) {
+      const c = match48[0];
+      result.code = c;
+      result.formattedCode = c.slice(0, 12) + ' ' + c.slice(12, 24) + ' ' + c.slice(24, 36) + ' ' + c.slice(36, 48);
+      if (c.startsWith('8')) {
+        result.beneficiary = 'Concessionária / Tributo';
+        const valCentavos = parseInt(c.slice(4, 15), 10);
+        if (valCentavos > 0 && valCentavos < 10000000) {
+          result.amount = (valCentavos / 100).toFixed(2);
+        }
+      }
+    }
+  }
+
+  // 3. Procurar código de barras direto de 44 dígitos e converter para linha digitável
+  if (!result.code) {
+    const match44 = cleanDigits.match(/\b\d{44}\b/);
+    if (match44) {
+      const convertedLinha = codigoBarrasToLinhaDigitavel(match44[0]);
+      if (convertedLinha && convertedLinha.length >= 44) {
+        return decodeFebrabanBoleto(convertedLinha);
+      }
+    }
+  }
+
+  // 4. Regex para data visual no texto (Vencimento: DD/MM/AAAA)
+  if (!result.dueDate) {
+    const dateMatch = rawText.match(/(?:vencimento|venc|pagar\s*ate)[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
+                      rawText.match(/\b([0-3]\d)[\/\.-]([0-1]\d)[\/\.-](202\d)\b/);
+    if (dateMatch) {
+      const day = dateMatch[1].padStart(2, '0');
+      const month = dateMatch[2].padStart(2, '0');
+      const year = dateMatch[3];
+      result.dueDate = `${year}-${month}-${day}`;
+    }
+  }
+
+  // 5. Regex para valor visual no texto (R$ 123,45)
+  if (!result.amount) {
+    const valMatch = rawText.match(/(?:valor|total|cobrado|líquido)[:\s]*R?\$?\s*([\d\.]+(?:,\d{2}))/i) ||
+                     rawText.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
+    if (valMatch) {
+      const numStr = valMatch[1].replace(/\./g, '').replace(',', '.');
+      result.amount = parseFloat(numStr).toFixed(2);
+    }
+  }
+
+  // 6. Reconhecimento de Beneficiários e Fornecedores comuns
+  const lower = rawText.toLowerCase();
+  if (lower.includes('joga')) result.beneficiary = 'Joga Indústria e Comércio';
+  else if (lower.includes('kala')) result.beneficiary = 'Kala Comércio e Distribuição';
+  else if (lower.includes('nakine')) result.beneficiary = 'Nakine Decorações';
+  else if (lower.includes('ricardo pesca')) result.beneficiary = 'Ricardo Pesca';
+  else if (lower.includes('maju')) result.beneficiary = 'Maju Dist. Mat. Elétricos';
+  else if (lower.includes('copel')) result.beneficiary = 'Copel Energia';
+  else if (lower.includes('sanepar')) result.beneficiary = 'Sanepar Água';
+  else if (lower.includes('starlink')) result.beneficiary = 'Starlink Internet';
+  else if (lower.includes('claro')) result.beneficiary = 'Claro Telecom';
+  else if (lower.includes('vivo') || lower.includes('telefonica')) result.beneficiary = 'Vivo Telefônica';
+  else if (lower.includes('steelfish')) result.beneficiary = 'Steelfish';
+  else if (lower.includes('mathias')) result.beneficiary = 'Iscas Mathias';
+  else if (lower.includes('titan')) result.beneficiary = 'Titan Caiaques';
+  else if (!result.beneficiary && result.bankName) result.beneficiary = result.bankName;
+
+  return result;
+}
+
+function decodeBoletoCodeManually() {
+  const codeVal = document.getElementById("bfCode").value;
+  if (!codeVal) {
+    showToast("Digite ou cole a linha digitável primeiro.", "warning");
+    return;
+  }
+  const decoded = decodeFebrabanBoleto(codeVal);
+  if (decoded.formattedCode) document.getElementById("bfCode").value = decoded.formattedCode;
+  if (decoded.dueDate) document.getElementById("bfDueDate").value = decoded.dueDate;
+  if (decoded.amount) document.getElementById("bfAmount").value = decoded.amount;
+  if (decoded.beneficiary && !document.getElementById("bfBeneficiary").value) {
+    document.getElementById("bfBeneficiary").value = decoded.beneficiary;
+  }
+  showToast("Código decodificado com sucesso!", "success");
+}
+window.decodeBoletoCodeManually = decodeBoletoCodeManually;
+
+function onBoletoCodeInput(val) {
+  const clean = val.replace(/\D/g, '');
+  if (clean.length === 47 || clean.length === 48) {
+    const decoded = decodeFebrabanBoleto(val);
+    if (decoded.dueDate && !document.getElementById("bfDueDate").value) {
+      document.getElementById("bfDueDate").value = decoded.dueDate;
+    }
+    if (decoded.amount && !document.getElementById("bfAmount").value) {
+      document.getElementById("bfAmount").value = decoded.amount;
+    }
+    if (decoded.beneficiary && !document.getElementById("bfBeneficiary").value) {
+      document.getElementById("bfBeneficiary").value = decoded.beneficiary;
+    }
+  }
+}
+window.onBoletoCodeInput = onBoletoCodeInput;
+
+async function processBoletoImage(file) {
+  const banner = document.getElementById("boletoOcrBanner");
+  const statusText = document.getElementById("boletoOcrStatusText");
+  const percentText = document.getElementById("boletoOcrPercentText");
+  const progressBar = document.getElementById("boletoOcrProgressBar");
+
+  try {
+    if (banner) banner.style.display = "block";
+    if (statusText) statusText.textContent = "Otimizando imagem para iPhone no Canvas...";
+    if (progressBar) progressBar.style.width = "20%";
+    if (percentText) percentText.textContent = "20%";
+
+    const { canvas, dataUrl, width, height } = await preprocessImageForCanvas(file);
+    lastScannedBoletoDataUrl = dataUrl;
+
+    if (statusText) statusText.textContent = "Carregando motor OCR no navegador...";
+    if (progressBar) progressBar.style.width = "40%";
+    if (percentText) percentText.textContent = "40%";
+
+    let ocrText = "";
+    try {
+      const Tesseract = await loadTesseract();
+      if (statusText) statusText.textContent = "Reconhecendo dados bancários e código de barras...";
+      
+      const workerRes = await Tesseract.recognize(canvas, 'por', {
+        logger: m => {
+          if (m.status === 'recognizing text' && m.progress) {
+            const p = Math.round(40 + m.progress * 50);
+            if (progressBar) progressBar.style.width = p + "%";
+            if (percentText) percentText.textContent = p + "%";
+          }
+        }
+      });
+      ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
+    } catch (ocrErr) {
+      console.warn("Tesseract indisponível ou offline:", ocrErr);
+    }
+
+    if (progressBar) progressBar.style.width = "100%";
+    if (percentText) percentText.textContent = "100%";
+    if (statusText) statusText.textContent = "Leitura concluída!";
+
+    setTimeout(() => {
+      if (banner) banner.style.display = "none";
+    }, 1200);
+
+    const decoded = decodeFebrabanBoleto(ocrText);
+
+    openNewBoletoModal({
+      beneficiary: decoded.beneficiary || "",
+      code: decoded.formattedCode || decoded.code || "",
+      dueDate: decoded.dueDate || getLocalDateStr(),
+      amount: decoded.amount || "",
+      category: "rancho"
+    });
+
+    showToast("Foto lida com sucesso! Confira os dados e confirme.", "success");
+
+  } catch (err) {
+    console.error("Erro ao processar imagem do boleto:", err);
+    if (banner) banner.style.display = "none";
+    showToast("Não foi possível ler o arquivo. Você pode digitar manualmente.", "error");
+    openNewBoletoModal();
+  }
+}
+window.processBoletoImage = processBoletoImage;
 
 /* ==========================================================================
    TAB 4: CONTROLE DE PONTO DO EDUARDO (DIÁRIAS)

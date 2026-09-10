@@ -3642,3 +3642,391 @@ html.show-auth-gate .offline-bar {
   line-height: 1.4;
 }
 
+/* ==========================================================================
+   TABELA EDITORIAL DO INSTAGRAM (104 POSTS)
+   ========================================================================== */
+.table-editorial-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  margin-top: 0.75rem;
+}
+
+/* ==========================================================================
+   TAB INSTAGRAM: CALENDÁRIO DE LEMBRETES E METAS
+   ========================================================================== */
+#tab-instagram {
+  font-family: var(--font-body);
+}
+
+#tab-instagram h2,
+#tab-instagram h3,
+#tab-instagram .month-label,
+#tab-instagram .stat-box-value {
+  font-family: var(--font-heading);
+}
+
+.table-editorial {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  text-align: left;
+  min-width: 860px;
+}
+
+.table-editorial th {
+  background: rgba(13, 22, 38, 0.95);
+  color: var(--primary-gold);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--border-gold);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.table-editorial td {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+  color: var(--text-light);
+  font-family: var(--font-body);
+}
+
+.table-editorial tr:hover td {
+  background: rgba(229, 193, 88, 0.04);
+}
+
+.table-editorial tr:last-child td {
+  border-bottom: none;
+}
+
+/* ==========================================================================
+   GESTÃO DE BOLETOS E CONTAS A PAGAR
+   ========================================================================== */
+.barcode-preview-box {
+  background: #ffffff;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  text-align: center;
+  margin: 1rem 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  overflow-x: auto;
+}
+
+.qrcode-preview-box {
+  background: #ffffff;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.5rem auto 1rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.boletos-dropzone {
+  background: linear-gradient(145deg, rgba(13, 22, 38, 0.7), rgba(6, 10, 19, 0.85));
+  border: 2px dashed rgba(229, 193, 88, 0.45);
+  border-radius: var(--radius-md);
+  padding: 1.75rem 1.5rem;
+  margin-bottom: 1.75rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  font-family: var(--font-body);
+}
+
+.boletos-dropzone:hover,
+.boletos-dropzone.drag-over {
+  border-color: var(--primary-gold);
+  background: linear-gradient(145deg, rgba(229, 193, 88, 0.08), rgba(6, 10, 19, 0.95));
+  box-shadow: 0 4px 20px rgba(229, 193, 88, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Blocos Agrupados Dia a Dia */
+.boleto-day-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.2s ease;
+}
+
+.boleto-day-block:hover {
+  border-color: rgba(229, 193, 88, 0.4);
+}
+
+.boleto-day-header {
+  background: linear-gradient(90deg, rgba(13, 22, 38, 0.95), rgba(229, 193, 88, 0.08));
+  border-bottom: 1px solid var(--border-gold);
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.boleto-day-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--primary-gold);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.boleto-day-total {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text-light);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border-light);
+}
+
+.boleto-day-items {
+  display: flex;
+  flex-direction: column;
+  divide-y: 1px solid var(--border-light);
+}
+
+/* Card Individual de Boleto */
+.boleto-card {
+  padding: 1.15rem 1.25rem;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 1.25rem;
+  transition: background 0.15s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.boleto-card:last-child {
+  border-bottom: none;
+}
+
+.boleto-card:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.boleto-card.is-paid {
+  opacity: 0.75;
+}
+
+.boleto-main-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.boleto-beneficiary {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.boleto-code-box {
+  background: rgba(6, 10, 19, 0.6);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 0.35rem 0.65rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  overflow-x: auto;
+  word-break: break-all;
+}
+
+.boleto-value-box {
+  text-align: right;
+  min-width: 130px;
+}
+
+.boleto-value-num {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--primary-gold);
+  letter-spacing: -0.3px;
+}
+
+.boleto-value-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+.boleto-actions-box {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Badges de Status do Boleto */
+.badge-boleto-late {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.badge-boleto-today {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.badge-boleto-due {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+}
+
+.badge-boleto-paid {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+}
+
+/* Month Pills */
+.boleto-month-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.boleto-month-pill:hover {
+  background: rgba(229, 193, 88, 0.12);
+  color: var(--text-light);
+  border-color: var(--border-gold);
+}
+
+.boleto-month-pill.active {
+  background: var(--primary-gold);
+  color: #000;
+  font-weight: 800;
+  border-color: var(--primary-gold);
+}
+
+/* Responsividade Mobile para Boletos e Botão Copiar Linha Digitável */
+.btn-copy-linha-hero {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #ffd700 0%, #e5c158 100%);
+  color: #0d1626;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(229, 193, 88, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 48px;
+}
+
+.btn-copy-linha-hero:active {
+  transform: scale(0.98);
+}
+
+.btn-copy-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35) !important;
+}
+
+.btn-mobile-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  min-height: 36px;
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .boleto-card {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    padding: 1rem;
+  }
+  
+  .boleto-value-box {
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .boleto-actions-box {
+    justify-content: flex-start;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .boleto-actions-box .btn {
+    flex: 1 1 auto;
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .btn-mobile-copy {
+    width: 100%;
+    min-height: 42px;
+    font-size: 0.85rem;
+  }
+}
+
+
