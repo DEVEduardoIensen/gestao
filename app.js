@@ -753,7 +753,7 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const activeCache = 'eldorado-pwa-v2.9.0';
+        const activeCache = 'eldorado-pwa-v2.9.1';
         await Promise.all(
           cacheNames.map(name => {
             if (name !== activeCache) {
@@ -763,7 +763,7 @@ window.forceCheckAppUpdate = async function() {
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.9.0 PRO)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.9.1 PRO)!', 'success');
     } else {
       window.location.reload();
     }
@@ -7524,6 +7524,395 @@ function generateQRCodeSvg(text, cellSize = 4, margin = 8) {
 }
 window.generateQRCodeSvg = generateQRCodeSvg;
 
+/* ==========================================================================
+   DECODIFICADOR DE CÓDIGO DE BARRAS (ITF / I2OF5) & LEITOR DE CÂMERA AO VIVO
+   ========================================================================== */
+const ITF_PATTERNS = [
+  '00110', '10001', '01001', '11000', '00101',
+  '10100', '01100', '00011', '10010', '01010'
+];
+
+function calcDvGeralFebraban(code44) {
+  if (!code44 || code44.length !== 44) return null;
+  const digits = code44.slice(0, 4) + code44.slice(5);
+  let sum = 0;
+  let weight = 2;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    sum += parseInt(digits[i], 10) * weight;
+    weight = weight === 9 ? 2 : weight + 1;
+  }
+  const rem = sum % 11;
+  const dv = 11 - rem;
+  if (dv === 0 || dv === 10 || dv === 11) return '1';
+  return String(dv);
+}
+window.calcDvGeralFebraban = calcDvGeralFebraban;
+
+function decode5Elements(widths) {
+  if (!widths || widths.length !== 5) return -1;
+  const indexed = widths.map((w, idx) => ({ w, idx }));
+  indexed.sort((a, b) => b.w - a.w);
+  const bits = ['0', '0', '0', '0', '0'];
+  bits[indexed[0].idx] = '1';
+  bits[indexed[1].idx] = '1';
+  return ITF_PATTERNS.indexOf(bits.join(''));
+}
+
+function decodeItfRunLengths(runs) {
+  if (!runs || runs.length < 227) return null;
+
+  for (let startIdx = 0; startIdx <= runs.length - 227; startIdx++) {
+    if (!runs[startIdx].isBlack) continue;
+    const s1 = runs[startIdx].width;
+    const s2 = runs[startIdx + 1].width;
+    const s3 = runs[startIdx + 2].width;
+    const s4 = runs[startIdx + 3].width;
+
+    const avgNarrow = (s1 + s2 + s3 + s4) / 4;
+    if (avgNarrow < 0.75) continue;
+
+    const maxDiff = Math.max(
+      Math.abs(s1 - avgNarrow),
+      Math.abs(s2 - avgNarrow),
+      Math.abs(s3 - avgNarrow),
+      Math.abs(s4 - avgNarrow)
+    );
+    if (maxDiff > avgNarrow * 0.9) continue;
+
+    let pos = startIdx + 4;
+    let code = '';
+    let valid = true;
+
+    for (let pair = 0; pair < 22; pair++) {
+      if (pos + 10 > runs.length) { valid = false; break; }
+      const bars = [];
+      const spaces = [];
+      for (let j = 0; j < 5; j++) {
+        bars.push(runs[pos++].width);
+        spaces.push(runs[pos++].width);
+      }
+      const d1 = decode5Elements(bars);
+      const d2 = decode5Elements(spaces);
+      if (d1 === -1 || d2 === -1) { valid = false; break; }
+      code += String(d1) + String(d2);
+    }
+
+    if (valid && code.length === 44) {
+      // Valida se atende padrão FEBRABAN
+      if (code.startsWith('8')) return code; // Concessionária
+      const dvCalc = calcDvGeralFebraban(code);
+      if (dvCalc && (dvCalc === code[4] || !code.startsWith('000'))) {
+        return code;
+      }
+    }
+  }
+  return null;
+}
+window.decodeItfRunLengths = decodeItfRunLengths;
+
+function scanItfBarcodeFromCanvas(canvas) {
+  if (!canvas || !canvas.width || !canvas.height) return null;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const w = canvas.width;
+  const h = canvas.height;
+
+  try {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    // Varredura horizontal em múltiplas alturas
+    const ySteps = [0.5, 0.7, 0.75, 0.8, 0.85, 0.65, 0.6, 0.55, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.9];
+    for (const yp of ySteps) {
+      const y = Math.floor(h * yp);
+      const rowLum = new Uint8Array(w);
+      let rowSum = 0;
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const lum = (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
+        rowLum[x] = lum;
+        rowSum += lum;
+      }
+      const avgLum = rowSum / w;
+
+      const thresholds = [avgLum, avgLum * 0.85, avgLum * 1.15];
+      for (const thresh of thresholds) {
+        const runs = [];
+        let isBlack = rowLum[0] < thresh;
+        let curW = 0;
+        for (let x = 0; x < w; x++) {
+          const pixBlack = rowLum[x] < thresh;
+          if (pixBlack === isBlack) {
+            curW++;
+          } else {
+            runs.push({ isBlack, width: curW });
+            isBlack = pixBlack;
+            curW = 1;
+          }
+        }
+        runs.push({ isBlack, width: curW });
+
+        const code = decodeItfRunLengths(runs);
+        if (code) return code;
+      }
+    }
+
+    // Se não achou na horizontal, testa verticalmente (caso o boleto esteja em pé ou girado 90 graus)
+    const xSteps = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8];
+    for (const xp of xSteps) {
+      const x = Math.floor(w * xp);
+      const colLum = new Uint8Array(h);
+      let colSum = 0;
+      for (let y = 0; y < h; y++) {
+        const idx = (y * w + x) * 4;
+        const lum = (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
+        colLum[y] = lum;
+        colSum += lum;
+      }
+      const avgLum = colSum / h;
+
+      const runs = [];
+      let isBlack = colLum[0] < avgLum;
+      let curW = 0;
+      for (let y = 0; y < h; y++) {
+        const pixBlack = colLum[y] < avgLum;
+        if (pixBlack === isBlack) {
+          curW++;
+        } else {
+          runs.push({ isBlack, width: curW });
+          isBlack = pixBlack;
+          curW = 1;
+        }
+      }
+      runs.push({ isBlack, width: curW });
+
+      const code = decodeItfRunLengths(runs);
+      if (code) return code;
+    }
+  } catch (err) {
+    console.warn('Erro ao escanear canvas para ITF:', err);
+  }
+
+  return null;
+}
+window.scanItfBarcodeFromCanvas = scanItfBarcodeFromCanvas;
+
+/* Câmera Leitora em Tempo Real (Live Scanner) */
+let boletoScannerStream = null;
+let boletoScannerAnimFrame = null;
+let boletoScannerCurrentFacing = 'environment';
+let boletoScannerTrack = null;
+let boletoScannerTorchActive = false;
+let lastScannerCheckTime = 0;
+
+async function openBoletoLiveBarcodeScanner() {
+  const modal = document.getElementById("modalBoletoLiveScanner");
+  const video = document.getElementById("boletoLiveVideo");
+  const torchBtn = document.getElementById("btnToggleScannerTorch");
+  const helpMsg = document.getElementById("boletoScannerHelpMsg");
+  const box = document.getElementById("boletoViewfinderBox");
+
+  if (!modal || !video) {
+    showToast("Componente de câmera não encontrado no DOM.", "error");
+    return;
+  }
+
+  if (box) box.classList.remove("detected");
+  if (helpMsg) helpMsg.textContent = "Aponte a mira para o Código de Barras do boleto";
+
+  modal.style.display = "flex";
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast("Câmera não suportada neste navegador.", "error");
+    closeBoletoLiveBarcodeScanner();
+    return;
+  }
+
+  try {
+    if (boletoScannerStream) {
+      boletoScannerStream.getTracks().forEach(t => t.stop());
+    }
+
+    const constraints = {
+      video: {
+        facingMode: { ideal: boletoScannerCurrentFacing },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    };
+
+    boletoScannerStream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = boletoScannerStream;
+    await video.play();
+
+    const tracks = boletoScannerStream.getVideoTracks();
+    if (tracks && tracks.length > 0) {
+      boletoScannerTrack = tracks[0];
+      const caps = typeof boletoScannerTrack.getCapabilities === 'function' ? boletoScannerTrack.getCapabilities() : {};
+      if (caps && caps.torch && torchBtn) {
+        torchBtn.style.display = "inline-flex";
+      } else if (torchBtn) {
+        torchBtn.style.display = "none";
+      }
+    }
+
+    startBoletoScannerLoop();
+
+  } catch (err) {
+    console.error("Erro ao iniciar câmera para leitura de boleto:", err);
+    showToast("Não foi possível acessar a câmera. Você pode usar 'Foto da Linha' ou galeria.", "warning");
+    closeBoletoLiveBarcodeScanner();
+  }
+}
+window.openBoletoLiveBarcodeScanner = openBoletoLiveBarcodeScanner;
+
+function closeBoletoLiveBarcodeScanner() {
+  const modal = document.getElementById("modalBoletoLiveScanner");
+  const video = document.getElementById("boletoLiveVideo");
+  if (modal) modal.style.display = "none";
+
+  if (boletoScannerAnimFrame) {
+    cancelAnimationFrame(boletoScannerAnimFrame);
+    boletoScannerAnimFrame = null;
+  }
+
+  if (boletoScannerStream) {
+    boletoScannerStream.getTracks().forEach(t => t.stop());
+    boletoScannerStream = null;
+  }
+  if (video) video.srcObject = null;
+  boletoScannerTrack = null;
+  boletoScannerTorchActive = false;
+}
+window.closeBoletoLiveBarcodeScanner = closeBoletoLiveBarcodeScanner;
+
+async function switchBoletoScannerCamera() {
+  boletoScannerCurrentFacing = boletoScannerCurrentFacing === 'environment' ? 'user' : 'environment';
+  await openBoletoLiveBarcodeScanner();
+}
+window.switchBoletoScannerCamera = switchBoletoScannerCamera;
+
+async function toggleBoletoScannerTorch() {
+  if (!boletoScannerTrack) return;
+  try {
+    boletoScannerTorchActive = !boletoScannerTorchActive;
+    await boletoScannerTrack.applyConstraints({
+      advanced: [{ torch: boletoScannerTorchActive }]
+    });
+    const btn = document.getElementById("btnToggleScannerTorch");
+    if (btn) btn.textContent = boletoScannerTorchActive ? "Desligar Luz" : "Lanterna";
+  } catch (err) {
+    console.warn("Lanterna não suportada:", err);
+  }
+}
+window.toggleBoletoScannerTorch = toggleBoletoScannerTorch;
+
+function startBoletoScannerLoop() {
+  const video = document.getElementById("boletoLiveVideo");
+  const canvas = document.getElementById("boletoLiveCanvas");
+  const box = document.getElementById("boletoViewfinderBox");
+  const helpMsg = document.getElementById("boletoScannerHelpMsg");
+  if (!video || !canvas) return;
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const scanFrame = async () => {
+    if (!boletoScannerStream || video.paused || video.ended) return;
+
+    const now = Date.now();
+    if (now - lastScannerCheckTime >= 85 && video.videoWidth > 0 && video.videoHeight > 0) {
+      lastScannerCheckTime = now;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const cropW = Math.min(vw, 1200);
+      const cropH = Math.round(cropW * 0.45);
+      const cropX = Math.round((vw - cropW) / 2);
+      const cropY = Math.round((vh - cropH) / 2);
+
+      canvas.width = cropW;
+      canvas.height = cropH;
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+      let foundCode = null;
+
+      // 1. Tenta decodificador direto ITF
+      foundCode = scanItfBarcodeFromCanvas(canvas);
+
+      // 2. Tenta BarcodeDetector nativo se o dispositivo suportar
+      if (!foundCode && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+        try {
+          const det = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
+          const bcs = await det.detect(canvas);
+          if (bcs && bcs.length > 0) {
+            foundCode = bcs[0].rawValue;
+          }
+        } catch (e) {}
+      }
+
+      if (foundCode) {
+        const decoded = decodeFebrabanBoleto(foundCode);
+        if (decoded && (decoded.code || decoded.amount)) {
+          if (box) box.classList.add("detected");
+          if (helpMsg) helpMsg.textContent = "✓ Código identificado! Carregando boleto...";
+
+          if (navigator.vibrate) {
+            try { navigator.vibrate([100, 50, 100]); } catch(e) {}
+          }
+
+          setTimeout(() => {
+            closeBoletoLiveBarcodeScanner();
+            openNewBoletoModal({
+              beneficiary: decoded.beneficiary || "",
+              code: decoded.formattedCode || decoded.code || foundCode,
+              dueDate: decoded.dueDate || getLocalDateStr(),
+              amount: decoded.amount || "",
+              category: "loja"
+            });
+            showToast("Código de barras lido com sucesso! R$ " + (decoded.amount || "0,00"), "success", 4500);
+          }, 450);
+          return;
+        }
+      }
+    }
+
+    boletoScannerAnimFrame = requestAnimationFrame(scanFrame);
+  };
+
+  boletoScannerAnimFrame = requestAnimationFrame(scanFrame);
+}
+
+/* Fallback de OCR via API Cloud Online (Gratuita) */
+async function callOcrSpaceApi(base64DataUrl, customKey) {
+  try {
+    const apiKey = customKey || (appData.settings && appData.settings.ocrApiKey) || 'K88725835788957';
+    const formData = new FormData();
+    formData.append('base64Image', base64DataUrl);
+    formData.append('language', 'por');
+    formData.append('isTable', 'true');
+    formData.append('scale', 'true');
+    formData.append('OCREngine', '2');
+
+    const networkFn = window['fetch'];
+    if (typeof networkFn !== 'function') return null;
+
+    const response = await networkFn('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: { 'apikey': apiKey },
+      body: formData
+    });
+    if (!response.ok) throw new Error('API OCR retornou status ' + response.status);
+    const json = await response.json();
+    if (json && json.ParsedResults && json.ParsedResults.length > 0) {
+      return json.ParsedResults[0].ParsedText || "";
+    }
+  } catch (err) {
+    console.warn('API OCR Cloud indisponível ou offline:', err);
+  }
+  return null;
+}
+window.callOcrSpaceApi = callOcrSpaceApi;
+
 /* Modal de Pagamento: Código de Barras & QR Code */
 function openBoletoPayModal(id) {
   const b = (appData.boletos || []).find(item => String(item.id) === String(id));
@@ -7938,21 +8327,27 @@ async function handleLinhaDigitavelPhotoInput(e) {
 
   try {
     if (banner) banner.style.display = "block";
-    if (statusText) statusText.textContent = "Otimizando foco da linha digitável...";
-    if (progressBar) progressBar.style.width = "25%";
-    if (percentText) percentText.textContent = "25%";
+    if (statusText) statusText.textContent = "Otimizando imagem no Canvas...";
+    if (progressBar) progressBar.style.width = "20%";
+    if (percentText) percentText.textContent = "20%";
 
     const { canvas, dataUrl } = await preprocessImageForCanvas(file);
     lastScannedBoletoDataUrl = dataUrl;
 
-    if (statusText) statusText.textContent = "Lendo dígitos da linha numérica (47 / 48 dígitos)...";
-    if (progressBar) progressBar.style.width = "50%";
-    if (percentText) percentText.textContent = "50%";
+    if (statusText) statusText.textContent = "Buscando Código de Barras (44 dígitos)...";
+    if (progressBar) progressBar.style.width = "40%";
+    if (percentText) percentText.textContent = "40%";
 
     let detectedCode = "";
 
-    // 1. Tenta leitor nativo de código de barras
-    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    // 1. Tenta decodificador de código de barras ITF em Canvas
+    const itfCode = scanItfBarcodeFromCanvas(canvas);
+    if (itfCode) {
+      detectedCode = itfCode;
+    }
+
+    // 2. Tenta BarcodeDetector nativo se disponível
+    if (!detectedCode && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
         const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
         const barcodes = await detector.detect(canvas);
@@ -7962,11 +8357,23 @@ async function handleLinhaDigitavelPhotoInput(e) {
       } catch (bErr) {}
     }
 
-    // 2. OCR focado na linha numérica
+    // 3. Se não achou código de barras, executa OCR Tesseract
     if (!detectedCode) {
+      if (statusText) statusText.textContent = "Lendo dígitos da linha numérica via OCR...";
+      if (progressBar) progressBar.style.width = "60%";
+      if (percentText) percentText.textContent = "60%";
+
       try {
         const Tesseract = await loadTesseract();
-        const workerRes = await Tesseract.recognize(canvas, 'por');
+        const workerRes = await Tesseract.recognize(canvas, 'por', {
+          logger: m => {
+            if (m.status === 'recognizing text' && m.progress) {
+              const p = Math.round(60 + m.progress * 35);
+              if (progressBar) progressBar.style.width = p + "%";
+              if (percentText) percentText.textContent = p + "%";
+            }
+          }
+        });
         const ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
         detectedCode = ocrText;
       } catch (ocrErr) {
@@ -7974,11 +8381,27 @@ async function handleLinhaDigitavelPhotoInput(e) {
       }
     }
 
-    const decoded = decodeFebrabanBoleto(detectedCode);
+    let decoded = decodeFebrabanBoleto(detectedCode);
+
+    // 4. Fallback de nuvem via API se OCR local falhou ou não encontrou valor
+    if (!decoded || (!decoded.code && !decoded.amount)) {
+      if (statusText) statusText.textContent = "Consultando API Cloud para alta precisão...";
+      try {
+        const cloudText = await callOcrSpaceApi(dataUrl);
+        if (cloudText) {
+          const cloudDec = decodeFebrabanBoleto(cloudText);
+          if (cloudDec && (cloudDec.code || cloudDec.amount)) {
+            decoded = cloudDec;
+          }
+        }
+      } catch (cloudErr) {
+        console.warn("Fallback de API Cloud falhou:", cloudErr);
+      }
+    }
 
     if (progressBar) progressBar.style.width = "100%";
     if (percentText) percentText.textContent = "100%";
-    if (statusText) statusText.textContent = "Linha digitável capturada!";
+    if (statusText) statusText.textContent = "Leitura concluída com sucesso!";
     setTimeout(() => { if (banner) banner.style.display = "none"; }, 1200);
 
     if (targetBoletoId) {
@@ -8014,10 +8437,12 @@ async function handleLinhaDigitavelPhotoInput(e) {
       category: "loja"
     });
 
-    if (decoded && decoded.code) {
+    if (decoded && decoded.amount) {
+      showToast(`Boleto processado! Valor identificado: R$ ${decoded.amount}`, "success");
+    } else if (decoded && decoded.code) {
       showToast("Linha digitável identificada! Confira os dados e salve.", "success");
     } else {
-      showToast("Foto registrada! Digite ou ajuste os números da linha digitável.", "warning");
+      showToast("Foto registrada! Confira os dados para salvar.", "warning");
     }
 
   } catch (err) {
@@ -8185,22 +8610,6 @@ function loadTesseract() {
 }
 
 function decodeFebrabanBoleto(rawText) {
-  let cleanDigits = (rawText || '').replace(/\D/g, '');
-
-  // Correção de ruído comum de OCR em dígitos
-  if (!cleanDigits.match(/\d{47}/) && !cleanDigits.match(/\d{48}/) && !cleanDigits.match(/\d{44}/)) {
-    const fixedText = (rawText || '')
-      .replace(/[oO]/g, '0')
-      .replace(/[lI\|]/g, '1')
-      .replace(/[sS]/g, '5')
-      .replace(/[bB]/g, '8')
-      .replace(/[zZ]/g, '2');
-    const fixedDigits = fixedText.replace(/\D/g, '');
-    if (fixedDigits.match(/\d{47}/) || fixedDigits.match(/\d{48}/) || fixedDigits.match(/\d{44}/)) {
-      cleanDigits = fixedDigits;
-    }
-  }
-
   const result = {
     code: '',
     formattedCode: '',
@@ -8224,68 +8633,119 @@ function decodeFebrabanBoleto(rawText) {
     '041': 'Banrisul'
   };
 
-  // 1. Procurar sequência de 47 dígitos (Cobrança Bancária)
-  const match47 = cleanDigits.match(/\d{47}/);
-  if (match47) {
-    const c = match47[0];
-    result.code = c;
-    result.formattedCode = c.slice(0, 5) + '.' + c.slice(5, 10) + ' ' + c.slice(10, 15) + '.' + c.slice(15, 21) + ' ' + c.slice(21, 26) + '.' + c.slice(26, 32) + ' ' + c.slice(32, 33) + ' ' + c.slice(33, 47);
+  if (!rawText) return result;
 
-    const bankCode = c.slice(0, 3);
-    result.bankName = bankNames[bankCode] || ('Banco ' + bankCode);
-
-    // Fator de vencimento (posições 33 a 37 - 4 dígitos)
-    const factor = parseInt(c.slice(33, 37), 10);
-    if (factor >= 1000) {
-      if (factor < 3000) {
-        // Ciclo 2 (FEBRABAN pós fev/2025: base 22/02/2025)
-        const base2025 = new Date(2025, 1, 22);
-        const d = new Date(base2025.getTime() + (factor - 1000) * 86400000);
-        result.dueDate = d.toISOString().slice(0, 10);
-      } else {
-        // Ciclo 1 (Base 07/10/1997)
-        const base1997 = new Date(1997, 9, 7);
-        const d = new Date(base1997.getTime() + factor * 86400000);
-        result.dueDate = d.toISOString().slice(0, 10);
-      }
-    }
-
-    // Valor nominal (posições 37 a 47 - 10 dígitos em centavos)
-    const valCentavos = parseInt(c.slice(37, 47), 10);
-    if (valCentavos > 0) {
-      result.amount = (valCentavos / 100).toFixed(2);
+  // 1. Se for entrada direta de código de barras (44 dígitos)
+  const trimmed = String(rawText).trim();
+  const directDigits = trimmed.replace(/\D/g, '');
+  if (directDigits.length === 44) {
+    const convertedLinha = codigoBarrasToLinhaDigitavel(directDigits);
+    if (convertedLinha && convertedLinha !== directDigits) {
+      return decodeFebrabanBoleto(convertedLinha);
     }
   }
 
-  // 2. Procurar sequência de 48 dígitos (Concessionárias de Água, Luz, Telefone ou Tributos)
-  if (!result.code) {
-    const match48 = cleanDigits.match(/\d{48}/);
-    if (match48) {
-      const c = match48[0];
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // 2. Procura bloco padrão de 5 grupos (47 dígitos bancários)
+  // Formato FEBRABAN: 00190.00009 01881.000002 00000.000003 1 98150000147596
+  const block5Regex = /(\d{5})[.\s-]*(\d{5})\s+(\d{5})[.\s-]*(\d{6})\s+(\d{5})[.\s-]*(\d{6})\s+(\d)\s+(\d{14})/;
+  for (const line of lines) {
+    const cleanLine = line
+      .replace(/[oO]/g, '0')
+      .replace(/[lI\|]/g, '1')
+      .replace(/[sS]/g, '5')
+      .replace(/[bB]/g, '8')
+      .replace(/[zZ]/g, '2');
+
+    const m = cleanLine.match(block5Regex);
+    if (m) {
+      const c = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
       result.code = c;
-      result.formattedCode = c.slice(0, 12) + ' ' + c.slice(12, 24) + ' ' + c.slice(24, 36) + ' ' + c.slice(36, 48);
-      if (c.startsWith('8')) {
-        result.beneficiary = 'Concessionária / Tributo';
-        const valCentavos = parseInt(c.slice(4, 15), 10);
-        if (valCentavos > 0 && valCentavos < 10000000) {
-          result.amount = (valCentavos / 100).toFixed(2);
+      result.formattedCode = m[1] + '.' + m[2] + ' ' + m[3] + '.' + m[4] + ' ' + m[5] + '.' + m[6] + ' ' + m[7] + ' ' + m[8];
+      const bankCode = m[1].slice(0, 3);
+      result.bankName = bankNames[bankCode] || ('Banco ' + bankCode);
+
+      const factor = parseInt(m[8].slice(0, 4), 10);
+      if (factor >= 1000) {
+        if (factor < 3000) {
+          const base2025 = new Date(2025, 1, 22);
+          const d = new Date(base2025.getTime() + (factor - 1000) * 86400000);
+          result.dueDate = d.toISOString().slice(0, 10);
+        } else {
+          const base1997 = new Date(1997, 9, 7);
+          const d = new Date(base1997.getTime() + factor * 86400000);
+          result.dueDate = d.toISOString().slice(0, 10);
+        }
+      }
+
+      const valCentavos = parseInt(m[8].slice(4, 14), 10);
+      if (valCentavos > 0) {
+        result.amount = (valCentavos / 100).toFixed(2);
+      }
+      break;
+    }
+  }
+
+  // 3. Procura 4 blocos de concessionárias (48 dígitos: 4 blocos de 11 dígitos + 1 DV)
+  if (!result.code) {
+    const block4Regex = /(\d{11})[.\s-]*(\d)\s+(\d{11})[.\s-]*(\d)\s+(\d{11})[.\s-]*(\d)\s+(\d{11})[.\s-]*(\d)/;
+    for (const line of lines) {
+      const cleanLine = line.replace(/[oO]/g, '0').replace(/[lI\|]/g, '1');
+      const m = cleanLine.match(block4Regex);
+      if (m) {
+        const c = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
+        if (c.length === 48 && c.startsWith('8')) {
+          result.code = c;
+          result.formattedCode = m[1] + '-' + m[2] + ' ' + m[3] + '-' + m[4] + ' ' + m[5] + '-' + m[6] + ' ' + m[7] + '-' + m[8];
+          result.beneficiary = 'Concessionária / Tributo';
+          const valCentavos = parseInt(c.slice(4, 11) + c.slice(12, 16), 10);
+          if (valCentavos > 0) {
+            result.amount = (valCentavos / 100).toFixed(2);
+          }
+          break;
         }
       }
     }
   }
 
-  // 3. Procurar código de barras direto de 44 dígitos e converter para linha digitável
+  // 4. Procura linha única com 47 ou 48 dígitos
   if (!result.code) {
-    const match44 = cleanDigits.match(/\b\d{44}\b/);
-    if (match44) {
-      const convertedLinha = codigoBarrasToLinhaDigitavel(match44[0]);
-      if (convertedLinha && convertedLinha.length >= 44) {
-        return decodeFebrabanBoleto(convertedLinha);
+    for (const line of lines) {
+      const d = line.replace(/[oO]/g, '0').replace(/[lI\|]/g, '1').replace(/\D/g, '');
+      if (d.length === 47) {
+        const bankCode = d.slice(0, 3);
+        result.code = d;
+        result.formattedCode = d.slice(0, 5) + '.' + d.slice(5, 10) + ' ' + d.slice(10, 15) + '.' + d.slice(15, 21) + ' ' + d.slice(21, 26) + '.' + d.slice(26, 32) + ' ' + d.slice(32, 33) + ' ' + d.slice(33, 47);
+        result.bankName = bankNames[bankCode] || ('Banco ' + bankCode);
+
+        const factor = parseInt(d.slice(33, 37), 10);
+        if (factor >= 1000) {
+          if (factor < 3000) {
+            const base2025 = new Date(2025, 1, 22);
+            const dt = new Date(base2025.getTime() + (factor - 1000) * 86400000);
+            result.dueDate = dt.toISOString().slice(0, 10);
+          } else {
+            const base1997 = new Date(1997, 9, 7);
+            const dt = new Date(base1997.getTime() + factor * 86400000);
+            result.dueDate = dt.toISOString().slice(0, 10);
+          }
+        }
+        const valCentavos = parseInt(d.slice(37, 47), 10);
+        if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
+        break;
+      } else if (d.length === 48 && d.startsWith('8')) {
+        result.code = d;
+        result.formattedCode = d.slice(0, 12) + ' ' + d.slice(12, 24) + ' ' + d.slice(24, 36) + ' ' + d.slice(36, 48);
+        result.beneficiary = 'Concessionária / Tributo';
+        const valCentavos = parseInt(d.slice(4, 11) + d.slice(12, 16), 10);
+        if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
+        break;
       }
     }
   }
 
-  // 4. Regex para data visual no texto (Vencimento: DD/MM/AAAA)
+  // 5. Regex para data visual no texto (Vencimento: DD/MM/AAAA)
   if (!result.dueDate) {
     const dateMatch = rawText.match(/(?:vencimento|venc|pagar\s*ate)[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
                       rawText.match(/\b([0-3]\d)[\/\.-]([0-1]\d)[\/\.-](202\d)\b/);
@@ -8297,17 +8757,23 @@ function decodeFebrabanBoleto(rawText) {
     }
   }
 
-  // 5. Regex para valor visual no texto (R$ 123,45)
+  // 6. Regex para valor visual no texto (R$ 123,45) — estritamente ignorando linhas de desconto/multa
   if (!result.amount) {
-    const valMatch = rawText.match(/(?:valor|total|cobrado|líquido)[:\s]*R?\$?\s*([\d\.]+(?:,\d{2}))/i) ||
-                     rawText.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
-    if (valMatch) {
-      const numStr = valMatch[1].replace(/\./g, '').replace(',', '.');
-      result.amount = parseFloat(numStr).toFixed(2);
+    const valorRegex = /(?:valor(?:\s*(?:do\s*documento|cobrado|total|líquido|a\s*pagar))?|total\s*a\s*pagar)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
+    for (const line of lines) {
+      if (/desconto|abatimento|mora|multa|dedu[cç]/i.test(line)) continue;
+      const vm = line.match(valorRegex) || line.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
+      if (vm) {
+        const parsed = parseFloat(vm[1].replace(/\./g, '').replace(',', '.'));
+        if (parsed > 0) {
+          result.amount = parsed.toFixed(2);
+          break;
+        }
+      }
     }
   }
 
-  // 6. Reconhecimento de Beneficiários e Fornecedores comuns
+  // 7. Reconhecimento de Beneficiários e Fornecedores comuns
   const lower = rawText.toLowerCase();
   if (lower.includes('joga')) result.beneficiary = 'Joga Indústria e Comércio';
   else if (lower.includes('kala')) result.beneficiary = 'Kala Comércio e Distribuição';
@@ -8346,7 +8812,7 @@ window.decodeBoletoCodeManually = decodeBoletoCodeManually;
 
 function onBoletoCodeInput(val) {
   const clean = val.replace(/\D/g, '');
-  if (clean.length === 47 || clean.length === 48) {
+  if (clean.length === 47 || clean.length === 48 || clean.length === 44) {
     const decoded = decodeFebrabanBoleto(val);
     if (decoded.dueDate && !document.getElementById("bfDueDate").value) {
       document.getElementById("bfDueDate").value = decoded.dueDate;
@@ -8376,27 +8842,73 @@ async function processBoletoImage(file) {
     const { canvas, dataUrl, width, height } = await preprocessImageForCanvas(file);
     lastScannedBoletoDataUrl = dataUrl;
 
-    if (statusText) statusText.textContent = "Carregando motor OCR no navegador...";
+    if (statusText) statusText.textContent = "Buscando Código de Barras (44 dígitos)...";
     if (progressBar) progressBar.style.width = "40%";
     if (percentText) percentText.textContent = "40%";
 
+    let detectedCode = "";
+
+    // 1. Tenta decodificador direto de código de barras ITF
+    const itfCode = scanItfBarcodeFromCanvas(canvas);
+    if (itfCode) {
+      detectedCode = itfCode;
+    }
+
+    // 2. Tenta BarcodeDetector nativo se o dispositivo suportar
+    if (!detectedCode && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
+        const barcodes = await detector.detect(canvas);
+        if (barcodes && barcodes.length > 0) {
+          detectedCode = barcodes[0].rawValue;
+        }
+      } catch (bErr) {}
+    }
+
     let ocrText = "";
-    try {
-      const Tesseract = await loadTesseract();
-      if (statusText) statusText.textContent = "Reconhecendo dados bancários e código de barras...";
-      
-      const workerRes = await Tesseract.recognize(canvas, 'por', {
-        logger: m => {
-          if (m.status === 'recognizing text' && m.progress) {
-            const p = Math.round(40 + m.progress * 50);
-            if (progressBar) progressBar.style.width = p + "%";
-            if (percentText) percentText.textContent = p + "%";
+
+    // 3. Se não achou código de barras direto, executa OCR no texto
+    if (!detectedCode) {
+      if (statusText) statusText.textContent = "Carregando motor OCR no navegador...";
+      if (progressBar) progressBar.style.width = "60%";
+      if (percentText) percentText.textContent = "60%";
+
+      try {
+        const Tesseract = await loadTesseract();
+        if (statusText) statusText.textContent = "Reconhecendo dados bancários e valores...";
+        
+        const workerRes = await Tesseract.recognize(canvas, 'por', {
+          logger: m => {
+            if (m.status === 'recognizing text' && m.progress) {
+              const p = Math.round(60 + m.progress * 35);
+              if (progressBar) progressBar.style.width = p + "%";
+              if (percentText) percentText.textContent = p + "%";
+            }
+          }
+        });
+        ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
+        detectedCode = ocrText;
+      } catch (ocrErr) {
+        console.warn("Tesseract indisponível ou offline:", ocrErr);
+      }
+    }
+
+    let decoded = decodeFebrabanBoleto(detectedCode || ocrText);
+
+    // 4. Fallback de nuvem via API se OCR local falhou ou não encontrou valor
+    if (!decoded || (!decoded.code && !decoded.amount)) {
+      if (statusText) statusText.textContent = "Consultando API Cloud para alta precisão...";
+      try {
+        const cloudText = await callOcrSpaceApi(dataUrl);
+        if (cloudText) {
+          const cloudDec = decodeFebrabanBoleto(cloudText);
+          if (cloudDec && (cloudDec.code || cloudDec.amount)) {
+            decoded = cloudDec;
           }
         }
-      });
-      ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
-    } catch (ocrErr) {
-      console.warn("Tesseract indisponível ou offline:", ocrErr);
+      } catch (cloudErr) {
+        console.warn("Fallback de API Cloud falhou:", cloudErr);
+      }
     }
 
     if (progressBar) progressBar.style.width = "100%";
@@ -8407,8 +8919,6 @@ async function processBoletoImage(file) {
       if (banner) banner.style.display = "none";
     }, 1200);
 
-    const decoded = decodeFebrabanBoleto(ocrText);
-
     openNewBoletoModal({
       beneficiary: decoded.beneficiary || "",
       code: decoded.formattedCode || decoded.code || "",
@@ -8417,7 +8927,11 @@ async function processBoletoImage(file) {
       category: "rancho"
     });
 
-    showToast("Foto lida com sucesso! Confira os dados e confirme.", "success");
+    if (decoded.amount) {
+      showToast(`Boleto lido com sucesso! Valor: R$ ${decoded.amount}`, "success");
+    } else {
+      showToast("Foto lida! Confira os dados e confirme.", "success");
+    }
 
   } catch (err) {
     console.error("Erro ao processar imagem do boleto:", err);

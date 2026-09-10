@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.9.0">
+  <link rel="stylesheet" href="styles.css?v=2.9.1">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -999,7 +999,17 @@
           <p style="margin-top: 0.35rem;">Contas a pagar, duplicatas, boletos de empresas e controle de vencimentos</p>
         </div>
         <div class="section-actions" style="gap: 0.5rem; flex-wrap: wrap;">
-          <label for="boletoLinhaDigitavelInput" class="btn btn-gold" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Fotografar especificamente a linha digitável do boleto (47 ou 48 dígitos)">
+          <button type="button" class="btn btn-gold" onclick="openBoletoLiveBarcodeScanner()" title="Escanear código de barras do boleto em tempo real com a câmera" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 0 14px rgba(229, 193, 88, 0.35);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+              <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+              <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+              <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+              <line x1="7" y1="12" x2="17" y2="12"></line>
+            </svg>
+            <span>Escanear Código de Barras (Câmera)</span>
+          </button>
+          <label for="boletoLinhaDigitavelInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Fotografar especificamente a linha digitável do boleto (47 ou 48 dígitos)">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
               <circle cx="12" cy="13" r="4"></circle>
@@ -1264,7 +1274,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.0 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.1 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -2845,20 +2855,70 @@
     </div>
   </div>
 
+  <!-- 7. Modal: Scanner de Código de Barras e Linha Digitável com Câmera ao Vivo -->
+  <div class="modal-backdrop" id="modalBoletoLiveScanner" style="display: none; z-index: 10050; padding: 0; background: rgba(5, 8, 15, 0.96);">
+    <div style="position: relative; width: 100vw; height: 100vh; max-width: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+      <!-- Header do Scanner -->
+      <div style="padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%); z-index: 10;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: pulse 1.5s infinite;"></span>
+          <h3 style="margin: 0; font-size: 1.05rem; color: #ffffff; font-weight: 700;">Leitor de Boletos &amp; Código de Barras</h3>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeBoletoLiveBarcodeScanner()" style="font-size: 1.4rem; color: #ffffff; background: rgba(255,255,255,0.15); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none;">✕</button>
+      </div>
+
+      <!-- Área Central com Vídeo e Mira / Laser -->
+      <div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+        <video id="boletoLiveVideo" playsinline autoplay muted style="position: absolute; width: 100%; height: 100%; object-fit: cover;"></video>
+        <canvas id="boletoLiveCanvas" style="display: none;"></canvas>
+
+        <!-- Retângulo Orientador / Mira do Código de Barras -->
+        <div id="boletoViewfinderBox" class="scanner-viewfinder">
+          <div class="scanner-laser"></div>
+          <div class="scanner-corner corner-tl"></div>
+          <div class="scanner-corner corner-tr"></div>
+          <div class="scanner-corner corner-bl"></div>
+          <div class="scanner-corner corner-br"></div>
+        </div>
+
+        <!-- Instruções flutuantes -->
+        <div id="boletoScannerHelpMsg" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); border: 1px solid var(--border-light); padding: 0.5rem 1rem; border-radius: 9999px; color: #ffffff; font-size: 0.85rem; font-weight: 600; text-align: center; white-space: nowrap; z-index: 5;">
+          Aponte a mira para o Código de Barras do boleto
+        </div>
+      </div>
+
+      <!-- Rodapé com Botões de Ação da Câmera -->
+      <div style="padding: 1.25rem 1rem; background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%); display: flex; justify-content: center; align-items: center; gap: 0.65rem; flex-wrap: wrap; z-index: 10;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleScannerTorch" onclick="toggleBoletoScannerTorch()" style="display: none;">
+          Lanterna
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="switchBoletoScannerCamera()">
+          Alternar Câmera
+        </button>
+        <label for="boletoLinhaDigitavelInput" class="btn btn-gold btn-sm" style="cursor: pointer; margin: 0;" onclick="closeBoletoLiveBarcodeScanner()">
+          Foto da Linha
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeBoletoLiveBarcodeScanner(); openNewBoletoModal();">
+          Digitar Manual
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
-  <script src="normalize_raffle.js?v=2.9.0"></script>
-  <script src="db_dexie.js?v=2.9.0"></script>
-  <script src="auth_manager.js?v=2.9.0"></script>
-  <script src="sync_engine.js?v=2.9.0"></script>
-  <script src="qrcode.js?v=2.9.0"></script>
-  <script src="pdf.min.js?v=2.9.0"></script>
-  <script src="instagram_cronograma_104.js?v=2.9.0"></script>
-  <script src="app.js?v=2.9.0"></script>
+  <script src="normalize_raffle.js?v=2.9.1"></script>
+  <script src="db_dexie.js?v=2.9.1"></script>
+  <script src="auth_manager.js?v=2.9.1"></script>
+  <script src="sync_engine.js?v=2.9.1"></script>
+  <script src="qrcode.js?v=2.9.1"></script>
+  <script src="pdf.min.js?v=2.9.1"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.1"></script>
+  <script src="app.js?v=2.9.1"></script>
 </body>
 
 </html>
