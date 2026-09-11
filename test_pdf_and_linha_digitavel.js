@@ -19,10 +19,12 @@ assert(html.includes('pdf.min.js'), "index.html deve incluir pdf.min.js");
 assert(html.includes('qrcode.js'), "index.html deve incluir qrcode.js");
 assert(html.includes('id="boletoLinhaDigitavelInput"'), "Input boletoLinhaDigitavelInput deve existir");
 assert(html.includes('id="boletoPdfInput"'), "Input boletoPdfInput deve existir");
-assert(html.includes('Foto Linha Digitável'), "Botão 'Foto Linha Digitável' deve estar visível");
-assert(html.includes('Importar PDF / Relatório'), "Botão 'Importar PDF / Relatório' deve estar visível");
+assert(html.includes('Sincronizar Nuvem'), "Botão 'Sincronizar Nuvem' deve estar visível");
+assert(html.includes('+ Novo Manual'), "Botão '+ Novo Manual' deve estar visível");
+assert(html.includes('Recarregar Relatório Real'), "Botão 'Recarregar Relatório Real' deve estar visível");
+assert(html.includes('Backup JSON'), "Botão 'Backup JSON' deve estar visível");
 assert(html.includes('modalBoletoPay'), "Modal de pagamento com código de barras e QR Code deve existir");
-console.log("  ✓ [PASS] Todos os inputs nativos, botões e modais configurados no DOM");
+console.log("  ✓ [PASS] Todos os inputs nativos, 4 botões oficiais e modais configurados no DOM");
 
 // 3. Verificação do Service Worker (sw.js)
 console.log("\n3. Verificando Cache Offline no sw.js:");
@@ -95,6 +97,18 @@ console.log("  ✓ [PASS] SVG de código de barras ITF e SVG de QR Code gerados 
 console.log("\n6. Teste de Leitura e Parsing do PDF Real (media_1789045569159.pdf):");
 async function testUserPdf() {
   const pdfPath = 'C:/Users/User/.gemini/antigravity-ide/brain/1a44370e-d420-41c8-9fa7-003364d5173a/.user_uploaded/media_1789045569159.pdf';
+  if (!fs.existsSync(pdfPath)) {
+    console.log("  ℹ [INFO] Arquivo media_1789045569159.pdf temporário não encontrado neste ambiente; testando parser com dados sintéticos.");
+    vm.runInContext(appJs.slice(appJs.indexOf('function parseFastReportPdfText'), appJs.indexOf('window.parseFastReportPdfText =')), sandbox);
+    const mockLines = [
+      '31/08/2026 JOGA INDUSTRIA E COMERCIO LTDA 018810 001 1.475,96',
+      '06/09/2026 RICARDO PESCA LTDA 001869 001 554,30'
+    ];
+    const boletos = sandbox.parseFastReportPdfText(mockLines);
+    assert.strictEqual(boletos.length, 2, 'Parser sintético deve extrair 2 boletos');
+    console.log("  ✓ [PASS] Parser de texto FastReport validado com sucesso!");
+    return;
+  }
   const data = new Uint8Array(fs.readFileSync(pdfPath));
   const doc = await pdfjs.getDocument({ data }).promise;
   

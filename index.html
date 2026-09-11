@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.9.4">
+  <link rel="stylesheet" href="styles.css?v=2.9.5">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -999,55 +999,13 @@
           <p style="margin-top: 0.35rem;">Contas a pagar, duplicatas, boletos de empresas e controle de vencimentos</p>
         </div>
         <div class="section-actions" style="gap: 0.5rem; flex-wrap: wrap;">
-          <button type="button" class="btn btn-gold" id="btnOpenBoletoLiveScanner" onclick="openBoletoLiveBarcodeScanner()" title="Escanear código de barras do boleto em tempo real com a câmera" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 0 14px rgba(229, 193, 88, 0.35); touch-action: manipulation; -webkit-tap-highlight-color: transparent;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
-              <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
-              <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
-              <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
-              <line x1="7" y1="12" x2="17" y2="12"></line>
-            </svg>
-            <span>Escanear Código de Barras (Câmera)</span>
-          </button>
-          <label for="boletoLinhaDigitavelInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Fotografar especificamente a linha digitável do boleto (47 ou 48 dígitos)">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-              <circle cx="12" cy="13" r="4"></circle>
-            </svg>
-            <span>Foto Linha Digitável</span>
-          </label>
-          <label for="boletoPdfInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Importar PDF de empresa única ou relatório de contas FastReport">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span>Importar PDF / Relatório</span>
-          </label>
-          <label for="boletoCameraInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Tirar foto completa do boleto impresso">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-            <span>Foto Completa</span>
-          </label>
-          <label for="boletoGalleryInput" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;" title="Escolha fotos ou PDFs da galeria">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-              <polyline points="21 15 16 10 5 21"></polyline>
-            </svg>
-            <span>Galeria</span>
-          </label>
           <button type="button" class="btn btn-secondary" id="btnSyncBoletosCloud" onclick="forceSyncBoletosFromCloud()" title="Sincronizar boletos instantaneamente com a nuvem (Supabase)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; color: #60a5fa; border-color: rgba(96, 165, 250, 0.4);">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
             </svg>
             <span id="btnSyncBoletosText">Sincronizar Nuvem</span>
           </button>
-          <button type="button" class="btn btn-secondary" onclick="openNewBoletoModal()" title="Digitar boleto manualmente">
+          <button type="button" class="btn btn-gold" onclick="openNewBoletoModal()" title="Cadastrar boleto manualmente ou por foto da câmera">
             + Novo Manual
           </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="loadDemoBoletos()" title="Carregar as contas reais de duplicatas do relatório">
@@ -1059,8 +1017,9 @@
         </div>
       </div>
 
-      <!-- Dropzone Inteligente de Captura / Arraste -->
-      <div class="boletos-dropzone" id="boletosDropzone"
+      <!-- Dropzone Inteligente de Captura / Arraste (Label nativa para disparo direto de Câmera no iPhone) -->
+      <label for="boletoCameraInput" class="boletos-dropzone" id="boletosDropzone"
+        role="button" tabindex="0"
         onclick="triggerBoletoUploadClick(event)"
         ondragover="handleBoletoDragOver(event)"
         ondragleave="handleBoletoDragLeave(event)"
@@ -1105,7 +1064,7 @@
           </div>
         </div>
 
-      </div>
+      </label>
 
       <!-- Resumo Financeiro do Mês (4 KPIs) -->
       <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
@@ -1280,7 +1239,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.4 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.5 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -2774,9 +2733,18 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
             <label class="form-label" style="margin-bottom: 0;">Linha Digitável / Código de Barras (47 ou 48 dígitos)</label>
-            <button type="button" class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.5rem; font-size: 0.72rem;" onclick="decodeBoletoCodeManually()">
-              Auto-Decodificar
-            </button>
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <label for="boletoCameraInput" class="btn btn-secondary btn-sm" style="padding: 0.18rem 0.55rem; font-size: 0.72rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem;" title="Tirar foto do boleto com a câmera do iPhone">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <span>📸 Ler com Câmera</span>
+              </label>
+              <button type="button" class="btn btn-secondary btn-sm" style="padding: 0.18rem 0.5rem; font-size: 0.72rem;" onclick="decodeBoletoCodeManually()">
+                Auto-Decodificar
+              </button>
+            </div>
           </div>
           <input type="text" id="bfCode" class="form-input" placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000" style="font-family: monospace; font-size: 0.85rem;" oninput="onBoletoCodeInput(this.value)">
           <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem;">
@@ -2937,14 +2905,14 @@
   <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
-  <script src="normalize_raffle.js?v=2.9.4"></script>
-  <script src="db_dexie.js?v=2.9.4"></script>
-  <script src="auth_manager.js?v=2.9.4"></script>
-  <script src="sync_engine.js?v=2.9.4"></script>
-  <script src="qrcode.js?v=2.9.4"></script>
-  <script src="pdf.min.js?v=2.9.4"></script>
-  <script src="instagram_cronograma_104.js?v=2.9.4"></script>
-  <script src="app.js?v=2.9.4"></script>
+  <script src="normalize_raffle.js?v=2.9.5"></script>
+  <script src="db_dexie.js?v=2.9.5"></script>
+  <script src="auth_manager.js?v=2.9.5"></script>
+  <script src="sync_engine.js?v=2.9.5"></script>
+  <script src="qrcode.js?v=2.9.5"></script>
+  <script src="pdf.min.js?v=2.9.5"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.5"></script>
+  <script src="app.js?v=2.9.5"></script>
 </body>
 
 </html>

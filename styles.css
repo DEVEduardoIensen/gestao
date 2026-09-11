@@ -3732,6 +3732,7 @@ html.show-auth-gate .offline-bar {
 }
 
 .boletos-dropzone {
+  display: block;
   background: linear-gradient(145deg, rgba(13, 22, 38, 0.7), rgba(6, 10, 19, 0.85));
   border: 2px dashed rgba(229, 193, 88, 0.45);
   border-radius: var(--radius-md);
@@ -3741,6 +3742,9 @@ html.show-auth-gate .offline-bar {
   transition: all 0.25s ease;
   position: relative;
   font-family: var(--font-body);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .boletos-dropzone:hover,
