@@ -3,7 +3,7 @@ const path = require('path');
 const assert = require('assert');
 
 console.log('================================================================');
-console.log('  TESTE: ABERTURA DO SCANNER DE CÓDIGO DE BARRAS NO MOBILE (v2.9.2)');
+console.log('  TESTE: ABERTURA DO SCANNER DE CÓDIGO DE BARRAS NO MOBILE (v2.9.3)');
 console.log('================================================================\n');
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');

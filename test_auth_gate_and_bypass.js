@@ -24,7 +24,7 @@ console.log('✓ [PASS] index.html bloqueia visitantes não autenticados e atual
 // 3. Validar sw.js e package.json
 const swFile = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
 assert(swFile.includes(`const CACHE_NAME = 'eldorado-pwa-v${pkgFile.version}';`), `sw.js atualizado para versão v${pkgFile.version}`);
-assert.strictEqual(pkgFile.version, '2.9.2', 'package.json atualizado para 2.9.2');
+assert.strictEqual(pkgFile.version, '2.9.3', 'package.json atualizado para 2.9.3');
 console.log(`✓ [PASS] sw.js e package.json sincronizados na versão ${pkgFile.version}`);
 
 console.log('\n============================================================');

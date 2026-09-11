@@ -753,7 +753,7 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const activeCache = 'eldorado-pwa-v2.9.1';
+        const activeCache = 'eldorado-pwa-v2.9.3';
         await Promise.all(
           cacheNames.map(name => {
             if (name !== activeCache) {
@@ -763,7 +763,7 @@ window.forceCheckAppUpdate = async function() {
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.9.1 PRO)!', 'success');
+      showToast('O aplicativo já está na versão mais recente (v2.9.3 PRO)!', 'success');
     } else {
       window.location.reload();
     }
@@ -6811,8 +6811,8 @@ function renderBoletosAgenda() {
           </div>
 
           <div class="boleto-actions-box">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="openBoletoPayModal('${b.id}')" title="Ver Código de Barras e QR Code para pagamento">
-              Pagar / QR Code
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openBoletoPayModal('${b.id}')" title="Ver código de barras e copiar linha digitável">
+              Ver Código / Copiar
             </button>
             <button type="button" class="btn ${isPaid ? 'btn-secondary' : 'btn-whatsapp'} btn-sm" onclick="toggleBoletoPaidStatus('${b.id}')" title="${isPaid ? 'Marcar como não pago' : 'Confirmar quitação deste boleto'}">
               ${isPaid ? 'Reabrir' : 'Marcar como Pago'}
@@ -6967,12 +6967,24 @@ async function deleteBoleto(id) {
 }
 window.deleteBoleto = deleteBoleto;
 
+let currentBoletoPrefillMetadata = {};
+
 function openNewBoletoModal(prefill = {}) {
   activeBoletoId = null;
+  currentBoletoPrefillMetadata = {
+    beneficiaryDocument: prefill.beneficiaryDocument || '',
+    bankCode: prefill.bankCode || '',
+    bankName: prefill.bankName || '',
+    barcode: prefill.barcode || '',
+    digitLine: prefill.digitLine || prefill.code || '',
+    confidence: prefill.confidence || 'manual',
+    source: prefill.source || 'manual'
+  };
+
   document.getElementById("modalBoletoFormTitle").textContent = "Registrar Novo Boleto";
   document.getElementById("bfBoletoId").value = "";
   document.getElementById("bfBeneficiary").value = prefill.beneficiary || "";
-  document.getElementById("bfCode").value = prefill.code || "";
+  document.getElementById("bfCode").value = prefill.formattedCode || prefill.code || "";
   document.getElementById("bfDueDate").value = prefill.dueDate || getLocalDateStr();
   document.getElementById("bfAmount").value = prefill.amount || "";
   document.getElementById("bfCategory").value = prefill.category || "rancho";
@@ -6997,6 +7009,16 @@ function openEditBoletoModal(id) {
   if (!b) return;
 
   activeBoletoId = b.id;
+  currentBoletoPrefillMetadata = {
+    beneficiaryDocument: b.beneficiaryDocument || '',
+    bankCode: b.bankCode || '',
+    bankName: b.bankName || '',
+    barcode: b.barcode || '',
+    digitLine: b.digitLine || b.code || '',
+    confidence: b.confidence || 'manual',
+    source: b.source || 'manual'
+  };
+
   document.getElementById("modalBoletoFormTitle").textContent = "Editar Boleto";
   document.getElementById("bfBoletoId").value = b.id;
   document.getElementById("bfBeneficiary").value = b.beneficiary || "";
@@ -7047,16 +7069,31 @@ async function saveBoletoModal(batchNext = false) {
   const isEditing = !!idInput;
   const boletoId = isEditing ? idInput : ('bol-' + Date.now());
 
+  const existing = isEditing ? (appData.boletos || []).find(b => String(b.id) === String(boletoId)) : null;
+
+  let codeValidation = null;
+  if (code) {
+    codeValidation = validateBoletoCode(code, { allowDvGeralMismatch: true });
+  }
+
   const boletoObj = {
     id: boletoId,
     beneficiary,
-    code,
+    beneficiaryDocument: currentBoletoPrefillMetadata.beneficiaryDocument || (existing && existing.beneficiaryDocument) || '',
+    code: (codeValidation && codeValidation.formattedDigitLine) || code,
+    digitLine: (codeValidation && codeValidation.digitLine) || currentBoletoPrefillMetadata.digitLine || (existing && existing.digitLine) || '',
+    barcode: (codeValidation && codeValidation.barcode) || currentBoletoPrefillMetadata.barcode || (existing && existing.barcode) || '',
+    bankCode: (codeValidation && codeValidation.bankCode) || currentBoletoPrefillMetadata.bankCode || (existing && existing.bankCode) || '',
+    bankName: (codeValidation && codeValidation.bankName) || currentBoletoPrefillMetadata.bankName || (existing && existing.bankName) || '',
     dueDate,
     amount,
     category,
     status,
     description,
-    imageUrl: lastScannedBoletoDataUrl || null,
+    confidence: (codeValidation && codeValidation.confidence) || currentBoletoPrefillMetadata.confidence || (existing && existing.confidence) || 'manual',
+    source: currentBoletoPrefillMetadata.source || (existing && existing.source) || 'manual',
+    imageUrl: lastScannedBoletoDataUrl || (existing && existing.imageUrl) || null,
+    createdAt: (existing && existing.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
@@ -7405,6 +7442,97 @@ function calcMod10(seq) {
   const rem = sum % 10;
   return rem === 0 ? '0' : String(10 - rem);
 }
+window.calcMod10 = calcMod10;
+if (typeof globalThis !== 'undefined') globalThis.calcMod10 = calcMod10;
+
+function calcMod11Arrecadacao(seq) {
+  let sum = 0;
+  let weight = 2;
+  for (let i = seq.length - 1; i >= 0; i--) {
+    sum += parseInt(seq[i], 10) * weight;
+    weight = weight === 9 ? 2 : weight + 1;
+  }
+  const rem = sum % 11;
+  if (rem === 0 || rem === 1) return '0';
+  if (rem === 10) return '1';
+  return String(11 - rem);
+}
+window.calcMod11Arrecadacao = calcMod11Arrecadacao;
+if (typeof globalThis !== 'undefined') globalThis.calcMod11Arrecadacao = calcMod11Arrecadacao;
+
+function calcDvGeralFebraban(code44) {
+  if (!code44 || code44.length !== 44) return null;
+  const digits = code44.slice(0, 4) + code44.slice(5);
+  let sum = 0;
+  let weight = 2;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    sum += parseInt(digits[i], 10) * weight;
+    weight = weight === 9 ? 2 : weight + 1;
+  }
+  const rem = sum % 11;
+  const dv = 11 - rem;
+  if (dv === 0 || dv === 10 || dv === 11) return '1';
+  return String(dv);
+}
+window.calcDvGeralFebraban = calcDvGeralFebraban;
+if (typeof globalThis !== 'undefined') globalThis.calcDvGeralFebraban = calcDvGeralFebraban;
+
+function calcFactorDueDate(factor) {
+  const f = parseInt(factor, 10);
+  if (isNaN(f) || f < 1000) return null;
+
+  let dt = null;
+  // Regra FEBRABAN: Ciclo 1 base 1997-10-07 atingiu 9999 em 21/02/2025.
+  // Em 22/02/2025 reiniciou em 1000 (Ciclo 2).
+  // Fatores de 1000 a 3000 pertencem ao Ciclo 2 (datas de 2025 a ~2030).
+  // Fatores > 3000 (ex: 8000 a 9999) pertencem ao Ciclo 1 (datas históricas 2019 a fev/2025).
+  if (f < 3000) {
+    const base2025 = new Date(2025, 1, 22);
+    dt = new Date(base2025.getTime() + (f - 1000) * 86400000);
+  } else {
+    const base1997 = new Date(1997, 9, 7);
+    dt = new Date(base1997.getTime() + f * 86400000);
+  }
+
+  if (!dt || isNaN(dt.getTime())) return null;
+  const year = dt.getFullYear();
+  if (year < 2000 || year > 2040) return null; // Sanidade temporal estrita
+
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+window.calcFactorDueDate = calcFactorDueDate;
+if (typeof globalThis !== 'undefined') globalThis.calcFactorDueDate = calcFactorDueDate;
+
+const FEBRABAN_BANK_NAMES = {
+  '001': 'Banco do Brasil',
+  '033': 'Santander',
+  '104': 'Caixa Econômica Federal',
+  '237': 'Bradesco',
+  '341': 'Itaú Unibanco',
+  '748': 'Sicredi',
+  '756': 'Sicoob',
+  '260': 'Nubank',
+  '077': 'Banco Inter',
+  '212': 'Banco Original',
+  '041': 'Banrisul',
+  '422': 'Banco Safra',
+  '655': 'Banco Votorantim / BV',
+  '070': 'BRB - Banco de Brasília',
+  '085': 'Ailos / Viacredi',
+  '136': 'Unicred',
+  '290': 'PagBank',
+  '380': 'PicPay',
+  '336': 'C6 Bank',
+  '633': 'Banco Rendimento',
+  '208': 'Banco BTG Pactual',
+  '021': 'Banestes',
+  '047': 'Banese'
+};
+window.FEBRABAN_BANK_NAMES = FEBRABAN_BANK_NAMES;
+if (typeof globalThis !== 'undefined') globalThis.FEBRABAN_BANK_NAMES = FEBRABAN_BANK_NAMES;
 
 function linhaDigitavelToCodigoBarras(linha) {
   const c = String(linha || '').replace(/\D/g, '');
@@ -7424,6 +7552,7 @@ function linhaDigitavelToCodigoBarras(linha) {
   return c;
 }
 window.linhaDigitavelToCodigoBarras = linhaDigitavelToCodigoBarras;
+if (typeof globalThis !== 'undefined') globalThis.linhaDigitavelToCodigoBarras = linhaDigitavelToCodigoBarras;
 
 function codigoBarrasToLinhaDigitavel(barcode) {
   const c = String(barcode || '').replace(/\D/g, '');
@@ -7433,7 +7562,10 @@ function codigoBarrasToLinhaDigitavel(barcode) {
       const b2 = c.slice(11, 22);
       const b3 = c.slice(22, 33);
       const b4 = c.slice(33, 44);
-      return `${b1}${calcMod10(b1)} ${b2}${calcMod10(b2)} ${b3}${calcMod10(b3)} ${b4}${calcMod10(b4)}`;
+      const moedaMod = c[2];
+      const isMod10 = (moedaMod === '6' || moedaMod === '7');
+      const calcFn = isMod10 ? calcMod10 : calcMod11Arrecadacao;
+      return `${b1}-${calcFn(b1)} ${b2}-${calcFn(b2)} ${b3}-${calcFn(b3)} ${b4}-${calcFn(b4)}`;
     }
     const banco = c.slice(0, 3);
     const moeda = c.slice(3, 4);
@@ -7459,6 +7591,234 @@ function codigoBarrasToLinhaDigitavel(barcode) {
   return barcode;
 }
 window.codigoBarrasToLinhaDigitavel = codigoBarrasToLinhaDigitavel;
+if (typeof globalThis !== 'undefined') globalThis.codigoBarrasToLinhaDigitavel = codigoBarrasToLinhaDigitavel;
+
+function validateBoletoCode(code, options = {}) {
+  const result = {
+    valid: false,
+    type: null,
+    barcode: '',
+    digitLine: '',
+    formattedDigitLine: '',
+    formattedBarcode: '',
+    bankCode: null,
+    bankName: null,
+    amount: null,
+    dueDate: null,
+    factor: null,
+    confidence: 'low',
+    errors: []
+  };
+
+  if (!code) {
+    result.errors.push('Código vazio');
+    return result;
+  }
+
+  const clean = String(code).trim().replace(/\D/g, '');
+
+  if (clean.length === 44) {
+    if (clean.startsWith('8')) {
+      // Arrecadação / Concessionária (44 dígitos)
+      const moedaMod = clean[2];
+      const dvGeral = clean[3];
+      const valCentavos = parseInt(clean.slice(4, 15), 10);
+      const isMod10 = (moedaMod === '6' || moedaMod === '7');
+      const isMod11 = (moedaMod === '8' || moedaMod === '9');
+
+      if (!isMod10 && !isMod11) {
+        result.errors.push('Identificador de valor/módulo inválido no boleto de arrecadação');
+        return result;
+      }
+
+      const seqSemDv = clean.slice(0, 3) + clean.slice(4);
+      const calcDv = isMod10 ? calcMod10(seqSemDv) : calcMod11Arrecadacao(seqSemDv);
+
+      if (calcDv !== dvGeral) {
+        result.errors.push(`Dígito verificador geral de arrecadação inválido (esperado ${calcDv}, obtido ${dvGeral})`);
+        return result;
+      }
+
+      result.valid = true;
+      result.type = 'utility';
+      result.barcode = clean;
+      result.formattedBarcode = `${clean.slice(0, 11)} ${clean.slice(11, 22)} ${clean.slice(22, 33)} ${clean.slice(33, 44)}`;
+      result.digitLine = codigoBarrasToLinhaDigitavel(clean).replace(/\D/g, '');
+      result.formattedDigitLine = codigoBarrasToLinhaDigitavel(clean);
+      if (valCentavos > 0 && (moedaMod === '6' || moedaMod === '8')) {
+        result.amount = (valCentavos / 100).toFixed(2);
+      }
+      result.confidence = 'high';
+      return result;
+
+    } else {
+      // Boleto Bancário (44 dígitos)
+      const bankCode = clean.slice(0, 3);
+      const moeda = clean.slice(3, 4);
+      const dvGeral = clean.slice(4, 5);
+      const fator = parseInt(clean.slice(5, 9), 10);
+      const valCentavos = parseInt(clean.slice(9, 19), 10);
+
+      if (moeda !== '9' && moeda !== '0') {
+        result.errors.push('Código de moeda bancária inválido');
+        return result;
+      }
+
+      const dvCalc = calcDvGeralFebraban(clean);
+      if (dvCalc !== dvGeral) {
+        result.errors.push(`Dígito verificador geral do código de barras inválido (esperado ${dvCalc}, obtido ${dvGeral})`);
+        return result;
+      }
+
+      result.valid = true;
+      result.type = 'bank';
+      result.barcode = clean;
+      result.formattedBarcode = `${clean.slice(0, 4)}.${clean.slice(4, 5)}.${clean.slice(5, 9)}.${clean.slice(9, 19)}.${clean.slice(19)}`;
+      result.bankCode = bankCode;
+      result.bankName = FEBRABAN_BANK_NAMES[bankCode] || ('Banco ' + bankCode);
+      result.digitLine = codigoBarrasToLinhaDigitavel(clean).replace(/\D/g, '');
+      result.formattedDigitLine = codigoBarrasToLinhaDigitavel(clean);
+
+      if (fator >= 1000) {
+        result.factor = fator;
+        result.dueDate = calcFactorDueDate(fator);
+      }
+      if (valCentavos > 0) {
+        result.amount = (valCentavos / 100).toFixed(2);
+      }
+      result.confidence = 'high';
+      return result;
+    }
+
+  } else if (clean.length === 47) {
+    // Linha Digitável Bancária (47 dígitos)
+    const c1 = clean.slice(0, 9);
+    const dv1 = clean.slice(9, 10);
+    const c2 = clean.slice(10, 20);
+    const dv2 = clean.slice(20, 21);
+    const c3 = clean.slice(21, 31);
+    const dv3 = clean.slice(31, 32);
+    const dvGeral = clean.slice(32, 33);
+    const fatorStr = clean.slice(33, 37);
+    const valorStr = clean.slice(37, 47);
+
+    const calcDv1 = calcMod10(c1);
+    const calcDv2 = calcMod10(c2);
+    const calcDv3 = calcMod10(c3);
+
+    const dv1Ok = (calcDv1 === dv1);
+    const dv2Ok = (calcDv2 === dv2);
+    const dv3Ok = (calcDv3 === dv3);
+
+    if (!dv1Ok) result.errors.push(`DV do campo 1 inválido (esperado ${calcDv1}, obtido ${dv1})`);
+    if (!dv2Ok) result.errors.push(`DV do campo 2 inválido (esperado ${calcDv2}, obtido ${dv2})`);
+    if (!dv3Ok) result.errors.push(`DV do campo 3 inválido (esperado ${calcDv3}, obtido ${dv3})`);
+
+    const barcode44 = linhaDigitavelToCodigoBarras(clean);
+    const calcDvG = calcDvGeralFebraban(barcode44);
+    const dvGOk = (calcDvG === dvGeral);
+    if (!dvGOk) result.errors.push(`DV geral divergente (esperado ${calcDvG}, obtido ${dvGeral})`);
+
+    const allowMismatch = (options && options.allowDvGeralMismatch === true);
+    const isValid = dv1Ok && dv2Ok && dv3Ok && (dvGOk || allowMismatch);
+
+    if (!isValid) {
+      return result;
+    }
+
+    const bankCode = clean.slice(0, 3);
+    const fator = parseInt(fatorStr, 10);
+    const valCentavos = parseInt(valorStr, 10);
+
+    result.valid = true;
+    result.type = 'bank';
+    result.barcode = barcode44;
+    result.formattedBarcode = `${barcode44.slice(0, 4)}.${barcode44.slice(4, 5)}.${barcode44.slice(5, 9)}.${barcode44.slice(9, 19)}.${barcode44.slice(19)}`;
+    result.digitLine = clean;
+    result.formattedDigitLine = `${clean.slice(0, 5)}.${clean.slice(5, 10)} ${clean.slice(10, 15)}.${clean.slice(15, 21)} ${clean.slice(21, 26)}.${clean.slice(26, 32)} ${clean.slice(32, 33)} ${clean.slice(33, 47)}`;
+    result.bankCode = bankCode;
+    result.bankName = FEBRABAN_BANK_NAMES[bankCode] || ('Banco ' + bankCode);
+
+    if (fator >= 1000) {
+      result.factor = fator;
+      result.dueDate = calcFactorDueDate(fator);
+    }
+    if (valCentavos > 0) {
+      result.amount = (valCentavos / 100).toFixed(2);
+    }
+    result.confidence = dvGOk ? 'high' : 'medium';
+    return result;
+
+  } else if (clean.length === 48) {
+    // Linha Digitável de Arrecadação / Concessionária (48 dígitos)
+    if (!clean.startsWith('8')) {
+      result.errors.push('Linha de 48 dígitos deve iniciar com 8');
+      return result;
+    }
+
+    const moedaMod = clean[2];
+    const isMod10 = (moedaMod === '6' || moedaMod === '7');
+    const isMod11 = (moedaMod === '8' || moedaMod === '9');
+
+    if (!isMod10 && !isMod11) {
+      result.errors.push('Identificador de módulo inválido no boleto de arrecadação');
+      return result;
+    }
+
+    const b1 = clean.slice(0, 11);
+    const dv1 = clean.slice(11, 12);
+    const b2 = clean.slice(12, 23);
+    const dv2 = clean.slice(23, 24);
+    const b3 = clean.slice(24, 35);
+    const dv3 = clean.slice(35, 36);
+    const b4 = clean.slice(36, 47);
+    const dv4 = clean.slice(47, 48);
+
+    const calcFn = isMod10 ? calcMod10 : calcMod11Arrecadacao;
+    const calcDv1 = calcFn(b1);
+    const calcDv2 = calcFn(b2);
+    const calcDv3 = calcFn(b3);
+    const calcDv4 = calcFn(b4);
+
+    const dv1Ok = (calcDv1 === dv1);
+    const dv2Ok = (calcDv2 === dv2);
+    const dv3Ok = (calcDv3 === dv3);
+    const dv4Ok = (calcDv4 === dv4);
+
+    if (!dv1Ok) result.errors.push(`DV do bloco 1 inválido (esperado ${calcDv1}, obtido ${dv1})`);
+    if (!dv2Ok) result.errors.push(`DV do bloco 2 inválido (esperado ${calcDv2}, obtido ${dv2})`);
+    if (!dv3Ok) result.errors.push(`DV do bloco 3 inválido (esperado ${calcDv3}, obtido ${dv3})`);
+    if (!dv4Ok) result.errors.push(`DV do bloco 4 inválido (esperado ${calcDv4}, obtido ${dv4})`);
+
+    const allowMismatch = (options && options.allowDvGeralMismatch === true);
+    const isValid = (dv1Ok && dv2Ok && dv3Ok && dv4Ok) || (allowMismatch && (dv1Ok || dv2Ok));
+
+    if (!isValid) {
+      return result;
+    }
+
+    const barcode44 = b1 + b2 + b3 + b4;
+    const valCentavos = parseInt(barcode44.slice(4, 15), 10);
+
+    result.valid = true;
+    result.type = 'utility';
+    result.barcode = barcode44;
+    result.formattedBarcode = `${barcode44.slice(0, 11)} ${barcode44.slice(11, 22)} ${barcode44.slice(22, 33)} ${barcode44.slice(33, 44)}`;
+    result.digitLine = clean;
+    result.formattedDigitLine = `${b1}-${dv1} ${b2}-${dv2} ${b3}-${dv3} ${b4}-${dv4}`;
+    if (valCentavos > 0 && (moedaMod === '6' || moedaMod === '8')) {
+      result.amount = (valCentavos / 100).toFixed(2);
+    }
+    result.confidence = (dv1Ok && dv2Ok && dv3Ok && dv4Ok) ? 'high' : 'medium';
+    return result;
+
+  } else {
+    result.errors.push(`Comprimento numérico inválido (${clean.length} dígitos, esperado 44, 47 ou 48)`);
+    return result;
+  }
+}
+window.validateBoletoCode = validateBoletoCode;
+if (typeof globalThis !== 'undefined') globalThis.validateBoletoCode = validateBoletoCode;
 
 /* Geradores de Código de Barras (ITF / FEBRABAN) e QR Code */
 function generateItfBarcodeSvg(digits, height = 70) {
@@ -7598,10 +7958,9 @@ function decodeItfRunLengths(runs) {
     }
 
     if (valid && code.length === 44) {
-      // Valida se atende padrão FEBRABAN
-      if (code.startsWith('8')) return code; // Concessionária
-      const dvCalc = calcDvGeralFebraban(code);
-      if (dvCalc && (dvCalc === code[4] || !code.startsWith('000'))) {
+      // Valida se atende rigorosamente ao padrão FEBRABAN
+      const check = validateBoletoCode(code);
+      if (check && check.valid) {
         return code;
       }
     }
@@ -7987,38 +8346,59 @@ function startBoletoScannerLoop() {
   boletoScannerAnimFrame = requestAnimationFrame(scanFrame);
 }
 
-/* Fallback de OCR via API Cloud Online (Gratuita) */
+/* Fallback de OCR via API Cloud Online Segura (/api/ocr) */
 async function callOcrSpaceApi(base64DataUrl, customKey) {
   try {
-    const apiKey = customKey || (appData.settings && appData.settings.ocrApiKey) || 'K88725835788957';
-    const formData = new FormData();
-    formData.append('base64Image', base64DataUrl);
-    formData.append('language', 'por');
-    formData.append('isTable', 'true');
-    formData.append('scale', 'true');
-    formData.append('OCREngine', '2');
-
     const networkFn = window['fetch'];
     if (typeof networkFn !== 'function') return null;
 
-    const response = await networkFn('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: { 'apikey': apiKey },
-      body: formData
-    });
-    if (!response.ok) throw new Error('API OCR retornou status ' + response.status);
-    const json = await response.json();
-    if (json && json.ParsedResults && json.ParsedResults.length > 0) {
-      return json.ParsedResults[0].ParsedText || "";
+    // 1. Tenta endpoint seguro serverless da própria aplicação
+    try {
+      const response = await networkFn('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Image: base64DataUrl })
+      });
+      if (response.ok) {
+        const json = await response.json();
+        if (json && json.parsedText) {
+          return json.parsedText;
+        }
+      }
+    } catch (apiErr) {
+      // Endpoint serverless indisponível ou offline; prossegue para fallback local
+    }
+
+    // 2. Se houver chave explicitamente configurada pelo usuário nas configurações
+    const userApiKey = customKey || (appData.settings && appData.settings.ocrApiKey);
+    if (userApiKey) {
+      const formData = new FormData();
+      formData.append('base64Image', base64DataUrl);
+      formData.append('language', 'por');
+      formData.append('isTable', 'true');
+      formData.append('scale', 'true');
+      formData.append('OCREngine', '2');
+
+      const response = await networkFn('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        headers: { 'apikey': userApiKey },
+        body: formData
+      });
+      if (response.ok) {
+        const json = await response.json();
+        if (json && json.ParsedResults && json.ParsedResults.length > 0) {
+          return json.ParsedResults[0].ParsedText || "";
+        }
+      }
     }
   } catch (err) {
-    console.warn('API OCR Cloud indisponível ou offline:', err);
+    console.warn('Fallback de OCR em nuvem indisponível ou offline:', err);
   }
   return null;
 }
 window.callOcrSpaceApi = callOcrSpaceApi;
 
-/* Modal de Pagamento: Código de Barras & QR Code */
+/* Modal de Pagamento: Linha Digitável e Detalhes do Boleto */
 function openBoletoPayModal(id) {
   const b = (appData.boletos || []).find(item => String(item.id) === String(id));
   if (!b) return;
@@ -8040,20 +8420,21 @@ function openBoletoPayModal(id) {
   let qrcodeSvg = '';
 
   if (hasCode) {
-    const barcode44 = linhaDigitavelToCodigoBarras(b.code);
+    const barcode44 = b.barcode || linhaDigitavelToCodigoBarras(b.code);
     barcodeSvg = generateItfBarcodeSvg(barcode44 || b.code, 75);
     qrcodeSvg = generateQRCodeSvg(barcode44 || b.code, 4, 8);
   } else {
-    const pixReference = `Duplicata: ${b.beneficiary} | NF: ${b.nf || 'S/N'} | Valor: ${valFormatted} | Venc: ${formattedDueDate}`;
-    qrcodeSvg = generateQRCodeSvg(pixReference, 4, 8);
+    const refText = `Boleto: ${b.beneficiary} | NF: ${b.nf || 'S/N'} | Valor: ${valFormatted} | Venc: ${formattedDueDate}`;
+    qrcodeSvg = generateQRCodeSvg(refText, 4, 8);
   }
 
   let html = `
     <div style="background: rgba(13, 22, 38, 0.6); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
         <div>
-          <div style="font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Beneficiário / Fornecedor</div>
-          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${escapeHtml(b.beneficiary || 'Sem Beneficiário')}</div>
+          <div style="font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Beneficiário / Concessionária</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${escapeHtml(b.beneficiary || 'Beneficiário não identificado')}</div>
+          ${b.bankName ? `<div style="font-size: 0.8rem; color: var(--primary-gold); margin-top: 0.2rem;">Banco Emissor: <strong>${escapeHtml(b.bankName)}</strong></div>` : ''}
           ${b.nf ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Nota Fiscal: <strong>${b.nf}</strong> • Parcela: <strong>${b.installment || '1'}</strong></div>` : ''}
         </div>
         <div style="text-align: right;">
@@ -8067,9 +8448,9 @@ function openBoletoPayModal(id) {
 
   if (hasCode) {
     html += `
-      <!-- Botão Hero Copiar Linha Digitável no Mobile / Desktop -->
+      <!-- Ação Principal: Copiar Linha Digitável para Internet Banking -->
       <div style="margin-bottom: 1.15rem;">
-        <button type="button" class="btn-copy-linha-hero" onclick="copyBoletoLinhaDigitavel('${b.id}', this)" title="Copiar Linha Digitável para colar no app do banco">
+        <button type="button" class="btn-copy-linha-hero" onclick="copyBoletoLinhaDigitavel('${b.id}', this)" title="Copiar Linha Digitável para pagar no internet banking do seu banco">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -8080,7 +8461,7 @@ function openBoletoPayModal(id) {
 
       <div style="margin-bottom: 1.25rem;">
         <label class="form-label" style="font-size: 0.82rem; color: var(--primary-gold); margin-bottom: 0.4rem;">
-          Linha Digitável (47 / 48 Dígitos):
+          Linha Digitável FEBRABAN:
         </label>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
           <input type="text" readonly value="${escapeHtml(b.code)}" class="form-input" style="font-family: monospace; font-size: 0.82rem; background: rgba(0,0,0,0.5);" id="modalPayBoletoCodeInput">
@@ -8093,23 +8474,23 @@ function openBoletoPayModal(id) {
       <!-- Código de Barras Visual FEBRABAN -->
       <div style="margin-bottom: 1.25rem;">
         <label class="form-label" style="font-size: 0.82rem; color: var(--text-light); margin-bottom: 0.35rem;">
-          Código de Barras FEBRABAN (Escaneável na Tela):
+          Código de Barras FEBRABAN (Leitura na Tela):
         </label>
         <div class="barcode-preview-box">
           ${barcodeSvg}
         </div>
       </div>
 
-      <!-- QR Code para Pagamento -->
+      <!-- QR Code de Referência Contábil (Sem simulação indevida de pagamento) -->
       <div style="text-align: center; margin-bottom: 1rem;">
-        <label class="form-label" style="font-size: 0.82rem; color: var(--text-light); margin-bottom: 0.35rem; display: block;">
-          QR Code do Boleto / Pagamento:
+        <label class="form-label" style="font-size: 0.82rem; color: var(--text-dim); margin-bottom: 0.35rem; display: block;">
+          Código de Referência Rápida:
         </label>
         <div class="qrcode-preview-box">
           ${qrcodeSvg}
         </div>
         <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem;">
-          Aponte a câmera do aplicativo do seu banco para o QR Code ou use o botão de copiar linha digitável.
+          Para pagar este boleto, copie a linha digitável acima e cole no aplicativo do seu internet banking.
         </div>
       </div>
     `;
@@ -8117,15 +8498,15 @@ function openBoletoPayModal(id) {
     html += `
       <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-sm); padding: 0.9rem 1.15rem; margin-bottom: 1.25rem;">
         <div style="font-size: 0.85rem; font-weight: 700; color: #fbbf24; margin-bottom: 0.35rem;">
-          Duplicata Contábil (Relatório de Contas a Pagar)
+          Duplicata Contábil (Contas a Pagar)
         </div>
         <div style="font-size: 0.8rem; color: var(--text-light); line-height: 1.45;">
-          Esta duplicata foi importada do seu relatório de contas a pagar. Para pagar via internet banking (Banco do Brasil, Itaú, Nubank, etc.), vincule a <strong>linha digitável de 47 ou 48 dígitos</strong>.
+          Esta duplicata foi lançada sem a linha digitável. Para pagar via internet banking, fotografe o boleto ou informe a <strong>linha digitável validada</strong>.
         </div>
       </div>
 
       <div style="margin-bottom: 1.25rem;">
-        <label class="form-label">Adicionar Linha Digitável do Boleto (47 ou 48 dígitos):</label>
+        <label class="form-label">Adicionar Linha Digitável do Boleto:</label>
         <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
           <input type="text" id="modalAttachBoletoCodeInput" class="form-input" placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000" style="font-family: monospace; font-size: 0.82rem;">
           <button type="button" class="btn btn-gold btn-sm" onclick="saveBoletoAttachedCodeDirect('${b.id}')" style="white-space: nowrap;">
@@ -8135,20 +8516,8 @@ function openBoletoPayModal(id) {
         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
           <button type="button" class="btn btn-gold btn-sm" style="flex: 1; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;" onclick="triggerAttachPhotoLinhaDigitavel('${b.id}')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-            <span>Fotografar Linha Digitável</span>
+            <span>Fotografar Boleto / Linha Digitável</span>
           </button>
-        </div>
-      </div>
-
-      <div style="text-align: center; margin-bottom: 1rem;">
-        <label class="form-label" style="font-size: 0.82rem; color: var(--text-dim); margin-bottom: 0.35rem; display: block;">
-          QR Code de Referência da Conta:
-        </label>
-        <div class="qrcode-preview-box">
-          ${qrcodeSvg}
-        </div>
-        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem;">
-          Contém os dados contábeis da duplicata para referência rápida de pagamento.
         </div>
       </div>
     `;
@@ -8159,7 +8528,7 @@ function openBoletoPayModal(id) {
   if (footerActions) {
     footerActions.innerHTML = `
       ${!hasCode ? `
-        <label for="boletoCameraInput" class="btn btn-secondary btn-sm" style="cursor: pointer;" onclick="closeModal('modalBoletoPay');" title="Fotografar o boleto físico com a câmera do iPhone">
+        <label for="boletoCameraInput" class="btn btn-secondary btn-sm" style="cursor: pointer;" onclick="closeModal('modalBoletoPay');" title="Fotografar o boleto físico">
           Fotografar Boleto Completo
         </label>
       ` : ''}
@@ -8180,16 +8549,23 @@ async function saveBoletoAttachedCodeDirect(id) {
     showToast("Informe a linha digitável do boleto.", "warning");
     return;
   }
+
+  const check = validateBoletoCode(code);
+  if (!check.valid) {
+    showToast("Código de barras / linha digitável inválido conforme FEBRABAN. Verifique os dígitos.", "warning", 5000);
+    return;
+  }
   
   const b = (appData.boletos || []).find(item => String(item.id) === String(id));
   if (!b) return;
   
-  b.code = code;
-  
-  try {
-    const dec = decodeFebrabanBoleto(code);
-    if (dec && dec.bankName) b.bankName = dec.bankName;
-  } catch (e) {}
+  b.code = check.formattedDigitLine || check.digitLine;
+  b.barcode = check.barcode;
+  b.digitLine = check.digitLine;
+  if (check.bankName) b.bankName = check.bankName;
+  if (check.bankCode) b.bankCode = check.bankCode;
+  if (check.amount && (!b.amount || b.amount === 0)) b.amount = parseFloat(check.amount);
+  if (check.dueDate && !b.dueDate) b.dueDate = check.dueDate;
 
   if (!appData.settings) appData.settings = {};
   appData.settings.boletos = appData.boletos;
@@ -8199,7 +8575,7 @@ async function saveBoletoAttachedCodeDirect(id) {
     payload: { key: 'boletos', value: appData.boletos }
   });
 
-  showToast("Código de barras vinculado com sucesso!", "success");
+  showToast("Código validado e vinculado com sucesso!", "success");
   openBoletoPayModal(id);
   renderBoletosAgenda();
 }
@@ -8432,91 +8808,28 @@ async function handleLinhaDigitavelPhotoInput(e) {
 
   try {
     if (banner) banner.style.display = "block";
-    if (statusText) statusText.textContent = "Otimizando imagem no Canvas...";
-    if (progressBar) progressBar.style.width = "20%";
-    if (percentText) percentText.textContent = "20%";
+    const updateProgress = (text, pct) => {
+      if (statusText) statusText.textContent = text;
+      if (percentText) percentText.textContent = pct + "%";
+      if (progressBar) progressBar.style.width = pct + "%";
+    };
 
-    const { canvas, dataUrl } = await preprocessImageForCanvas(file);
-    lastScannedBoletoDataUrl = dataUrl;
+    const parsed = await scanBoletoFromImagePipeline(file, updateProgress);
 
-    if (statusText) statusText.textContent = "Buscando Código de Barras (44 dígitos)...";
-    if (progressBar) progressBar.style.width = "40%";
-    if (percentText) percentText.textContent = "40%";
-
-    let detectedCode = "";
-
-    // 1. Tenta decodificador de código de barras ITF em Canvas
-    const itfCode = scanItfBarcodeFromCanvas(canvas);
-    if (itfCode) {
-      detectedCode = itfCode;
-    }
-
-    // 2. Tenta BarcodeDetector nativo se disponível
-    if (!detectedCode && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-      try {
-        const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
-        const barcodes = await detector.detect(canvas);
-        if (barcodes && barcodes.length > 0) {
-          detectedCode = barcodes[0].rawValue;
-        }
-      } catch (bErr) {}
-    }
-
-    // 3. Se não achou código de barras, executa OCR Tesseract
-    if (!detectedCode) {
-      if (statusText) statusText.textContent = "Lendo dígitos da linha numérica via OCR...";
-      if (progressBar) progressBar.style.width = "60%";
-      if (percentText) percentText.textContent = "60%";
-
-      try {
-        const Tesseract = await loadTesseract();
-        const workerRes = await Tesseract.recognize(canvas, 'por', {
-          logger: m => {
-            if (m.status === 'recognizing text' && m.progress) {
-              const p = Math.round(60 + m.progress * 35);
-              if (progressBar) progressBar.style.width = p + "%";
-              if (percentText) percentText.textContent = p + "%";
-            }
-          }
-        });
-        const ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
-        detectedCode = ocrText;
-      } catch (ocrErr) {
-        console.warn("OCR na foto da linha digitável:", ocrErr);
-      }
-    }
-
-    let decoded = decodeFebrabanBoleto(detectedCode);
-
-    // 4. Fallback de nuvem via API se OCR local falhou ou não encontrou valor
-    if (!decoded || (!decoded.code && !decoded.amount)) {
-      if (statusText) statusText.textContent = "Consultando API Cloud para alta precisão...";
-      try {
-        const cloudText = await callOcrSpaceApi(dataUrl);
-        if (cloudText) {
-          const cloudDec = decodeFebrabanBoleto(cloudText);
-          if (cloudDec && (cloudDec.code || cloudDec.amount)) {
-            decoded = cloudDec;
-          }
-        }
-      } catch (cloudErr) {
-        console.warn("Fallback de API Cloud falhou:", cloudErr);
-      }
-    }
-
-    if (progressBar) progressBar.style.width = "100%";
-    if (percentText) percentText.textContent = "100%";
-    if (statusText) statusText.textContent = "Leitura concluída com sucesso!";
-    setTimeout(() => { if (banner) banner.style.display = "none"; }, 1200);
+    setTimeout(() => { if (banner) banner.style.display = "none"; }, 1000);
 
     if (targetBoletoId) {
       const b = (appData.boletos || []).find(item => String(item.id) === String(targetBoletoId));
       if (b) {
-        if (decoded && decoded.code) {
-          b.code = decoded.formattedCode || decoded.code;
-          if (decoded.bankName) b.bankName = decoded.bankName;
-          if (decoded.dueDate && !b.dueDate) b.dueDate = decoded.dueDate;
-          if (decoded.amount && (!b.amount || b.amount === 0)) b.amount = parseFloat(decoded.amount);
+        if (parsed.validatedCode && parsed.validatedCode.valid) {
+          b.code = parsed.code;
+          b.barcode = parsed.barcode;
+          b.digitLine = parsed.digitLine;
+          if (parsed.bankName) b.bankName = parsed.bankName;
+          if (parsed.bankCode) b.bankCode = parsed.bankCode;
+          if (parsed.dueDate && !b.dueDate) b.dueDate = parsed.dueDate;
+          if (parsed.amount && (!b.amount || b.amount === 0)) b.amount = parseFloat(parsed.amount);
+          b.extractionConfidence = parsed.confidence || 'high';
 
           if (!appData.settings) appData.settings = {};
           appData.settings.boletos = appData.boletos;
@@ -8530,30 +8843,46 @@ async function handleLinhaDigitavelPhotoInput(e) {
           openBoletoPayModal(b.id);
           e.target.value = "";
           return;
+        } else {
+          showToast("Não foi possível identificar o código de barras com segurança. Tente tirar outra foto.", "warning", 5000);
+          openBoletoPayModal(b.id);
+          e.target.value = "";
+          return;
         }
       }
     }
 
-    openNewBoletoModal({
-      beneficiary: (decoded && decoded.beneficiary) || "",
-      code: (decoded && (decoded.formattedCode || decoded.code)) || "",
-      dueDate: (decoded && decoded.dueDate) || getLocalDateStr(),
-      amount: (decoded && decoded.amount) || "",
-      category: "loja"
-    });
-
-    if (decoded && decoded.amount) {
-      showToast(`Boleto processado! Valor identificado: R$ ${decoded.amount}`, "success");
-    } else if (decoded && decoded.code) {
-      showToast("Linha digitável identificada! Confira os dados e salve.", "success");
+    if (parsed.validatedCode && parsed.validatedCode.valid) {
+      openNewBoletoModal({
+        beneficiary: parsed.beneficiary || "",
+        beneficiaryDocument: parsed.beneficiaryDocument || "",
+        bankName: parsed.bankName || "",
+        bankCode: parsed.bankCode || "",
+        code: parsed.code || "",
+        barcode: parsed.barcode || "",
+        digitLine: parsed.digitLine || "",
+        dueDate: parsed.dueDate || getLocalDateStr(),
+        amount: parsed.amount || "",
+        category: "loja",
+        extractionConfidence: parsed.confidence || 'medium'
+      });
+      showToast(parsed.amount ? `Boleto identificado! Valor: R$ ${parsed.amount}` : "Linha digitável identificada! Confira os dados.", "success");
     } else {
-      showToast("Foto registrada! Confira os dados para salvar.", "warning");
+      showToast("Não foi possível identificar o código de barras com segurança. Tente tirar outra foto.", "warning", 5000);
+      openNewBoletoModal({
+        beneficiary: parsed.beneficiary || "",
+        beneficiaryDocument: parsed.beneficiaryDocument || "",
+        dueDate: parsed.dueDate || getLocalDateStr(),
+        amount: parsed.amount || "",
+        category: "loja",
+        extractionConfidence: "low"
+      });
     }
 
   } catch (err) {
     console.error("Erro ao fotografar linha digitável:", err);
     if (banner) banner.style.display = "none";
-    showToast("Erro ao processar imagem. Você pode digitar o código manualmente.", "error");
+    showToast("Erro ao processar imagem. Você pode cadastrar manualmente.", "error");
     openNewBoletoModal();
   }
 
@@ -8644,7 +8973,7 @@ function preprocessImageForCanvas(file) {
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        // Redimensionamento inteligente para não estourar memória no Safari iOS (12MP a 48MP -> max 1600px)
+        // Redimensionamento inteligente para não estourar memória no Safari iOS (max 1600px)
         const maxDim = 1600;
         let width = img.width;
         let height = img.height;
@@ -8658,32 +8987,86 @@ function preprocessImageForCanvas(file) {
           }
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
+        // 1. Canvas Original
+        const cvsOriginal = document.createElement('canvas');
+        cvsOriginal.width = width;
+        cvsOriginal.height = height;
+        const ctxOrig = cvsOriginal.getContext('2d');
+        ctxOrig.drawImage(img, 0, 0, width, height);
 
-        // Realce de contraste e tons de cinza para destacar números pretos do FEBRABAN
+        // 2. Canvas em Tons de Cinza e Alto Contraste (ideal para barras pretas e OCR)
+        const cvsGrayscale = document.createElement('canvas');
+        cvsGrayscale.width = width;
+        cvsGrayscale.height = height;
+        const ctxGray = cvsGrayscale.getContext('2d');
+        ctxGray.drawImage(img, 0, 0, width, height);
         try {
-          const imgData = ctx.getImageData(0, 0, width, height);
+          const imgData = ctxGray.getImageData(0, 0, width, height);
           const d = imgData.data;
+          const contrast = 1.45;
+          const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
           for (let i = 0; i < d.length; i += 4) {
             const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            const contrast = 1.35;
-            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
             const val = Math.min(255, Math.max(0, factor * (gray - 128) + 128));
             d[i] = val;
             d[i + 1] = val;
             d[i + 2] = val;
           }
-          ctx.putImageData(imgData, 0, 0);
+          ctxGray.putImageData(imgData, 0, 0);
         } catch (err) {
           console.warn('Processamento de pixels em canvas ignorado:', err);
         }
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-        resolve({ canvas, dataUrl, width, height });
+        // 3. Canvas Binarizado (Threshold adaptativo)
+        const cvsBinarized = document.createElement('canvas');
+        cvsBinarized.width = width;
+        cvsBinarized.height = height;
+        const ctxBin = cvsBinarized.getContext('2d');
+        ctxBin.drawImage(cvsGrayscale, 0, 0);
+        try {
+          const imgData = ctxBin.getImageData(0, 0, width, height);
+          const d = imgData.data;
+          let sumLum = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            sumLum += d[i];
+          }
+          const avgLum = (sumLum / (d.length / 4)) * 0.90;
+          for (let i = 0; i < d.length; i += 4) {
+            const bin = d[i] < avgLum ? 0 : 255;
+            d[i] = bin;
+            d[i + 1] = bin;
+            d[i + 2] = bin;
+          }
+          ctxBin.putImageData(imgData, 0, 0);
+        } catch (err) {
+          console.warn('Filtro binarizado ignorado:', err);
+        }
+
+        // 4. Canvas com ROI Inferior (Bottom 42% onde reside o código FEBRABAN)
+        const roiY = Math.floor(height * 0.56);
+        const roiHeight = height - roiY;
+        const cvsRoi = document.createElement('canvas');
+        cvsRoi.width = width;
+        cvsRoi.height = roiHeight;
+        const ctxRoi = cvsRoi.getContext('2d');
+        ctxRoi.drawImage(cvsGrayscale, 0, roiY, width, roiHeight, 0, 0, width, roiHeight);
+
+        const dataUrl = cvsGrayscale.toDataURL('image/jpeg', 0.88);
+        const variants = [
+          { label: 'roi_inferior', canvas: cvsRoi },
+          { label: 'alto_contraste', canvas: cvsGrayscale },
+          { label: 'binarizada', canvas: cvsBinarized },
+          { label: 'original', canvas: cvsOriginal }
+        ];
+
+        resolve({
+          canvas: cvsGrayscale,
+          dataUrl,
+          width,
+          height,
+          variants,
+          originalCanvas: cvsOriginal
+        });
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -8692,6 +9075,7 @@ function preprocessImageForCanvas(file) {
     reader.readAsDataURL(file);
   });
 }
+window.preprocessImageForCanvas = preprocessImageForCanvas;
 
 let tesseractLoaderPromise = null;
 function loadTesseract() {
@@ -8714,17 +9098,70 @@ function loadTesseract() {
   return tesseractLoaderPromise;
 }
 
+/* Extração Inteligente de Beneficiário do Documento */
+function extractBeneficiaryFromText(rawText) {
+  if (!rawText) return { beneficiary: '', document: '' };
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  let beneficiary = '';
+  let document = '';
+
+  // 1. Procura por CNPJ / CPF do beneficiário no documento
+  const cnpjMatch = rawText.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/) || rawText.match(/\b\d{14}\b/);
+  const cpfMatch = rawText.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/);
+  if (cnpjMatch) document = cnpjMatch[0];
+  else if (cpfMatch) document = cpfMatch[0];
+
+  // 2. Busca por âncoras explícitas de beneficiário / cedente
+  const anchorRegex = /(?:benefici[aá]rio(?:\s*final)?|cedente|raz[aã]o\s*social|nome\s*do\s*benefici[aá]rio)[:\s]+([^\r\n]{3,65})/i;
+  for (const line of lines) {
+    const m = line.match(anchorRegex);
+    if (m) {
+      let candidate = m[1].trim();
+      // Remove sufixos como CNPJ, CPF, Agência, etc. da mesma linha
+      candidate = candidate.replace(/(?:cnpj|cpf|ag[eê]ncia|conta|c[oó]digo)[\s\/:].*$/i, '').trim();
+      candidate = candidate.replace(/^[\s\-–—:;,\.]+|[\s\-–—:;,\.]+$/g, '');
+      if (candidate.length >= 3 && !/^(?:banco|pagador|sacado|ag[eê]ncia|data|vencimento|valor)/i.test(candidate)) {
+        beneficiary = candidate;
+        break;
+      }
+    }
+  }
+
+  // 3. Concessionárias evidentes de serviços públicos (energia/água)
+  if (!beneficiary) {
+    const lower = rawText.toLowerCase();
+    if (lower.includes('copel') && (lower.includes('energia') || lower.includes('distribui') || lower.includes('eletric'))) {
+      beneficiary = 'Copel Energia';
+    } else if (lower.includes('sanepar') && (lower.includes('agua') || lower.includes('saneamento'))) {
+      beneficiary = 'Sanepar Água';
+    }
+  }
+
+  // 4. REGRA DE OURO: Banco emissor NUNCA vira beneficiário
+  return { beneficiary, document };
+}
+window.extractBeneficiaryFromText = extractBeneficiaryFromText;
+
 function decodeFebrabanBoleto(rawText) {
   const result = {
+    valid: false,
     code: '',
     formattedCode: '',
+    barcode: '',
+    digitLine: '',
     dueDate: '',
     amount: '',
     beneficiary: '',
-    bankName: ''
+    beneficiaryDocument: '',
+    bankName: '',
+    bankCode: '',
+    confidence: 'low'
   };
 
-  const bankNames = {
+  if (!rawText) return result;
+
+  const bankDictionary = {
     '001': 'Banco do Brasil',
     '033': 'Santander',
     '104': 'Caixa Econômica Federal',
@@ -8735,24 +9172,85 @@ function decodeFebrabanBoleto(rawText) {
     '260': 'Nubank',
     '077': 'Banco Inter',
     '212': 'Banco Original',
-    '041': 'Banrisul'
+    '041': 'Banrisul',
+    '422': 'Banco Safra',
+    '655': 'Banco Votorantim',
+    '336': 'Banco C6',
+    '290': 'PagBank',
+    '380': 'PicPay'
   };
 
-  if (!rawText) return result;
+  const getBankName = (code) => {
+    if (typeof FEBRABAN_BANK_NAMES !== 'undefined' && FEBRABAN_BANK_NAMES[code]) {
+      return FEBRABAN_BANK_NAMES[code];
+    }
+    return bankDictionary[code] || ('Banco ' + code);
+  };
 
-  // 1. Se for entrada direta de código de barras (44 dígitos)
+  const parseFactorDate = (factor) => {
+    if (typeof calcFactorDueDate === 'function') {
+      return calcFactorDueDate(factor);
+    }
+    const f = parseInt(factor, 10);
+    if (isNaN(f) || f < 1000) return '';
+    let dt = null;
+    if (f < 3000) {
+      const base2025 = new Date(2025, 1, 22);
+      dt = new Date(base2025.getTime() + (f - 1000) * 86400000);
+    } else {
+      const base1997 = new Date(1997, 9, 7);
+      dt = new Date(base1997.getTime() + f * 86400000);
+    }
+    if (!dt || isNaN(dt.getTime())) return '';
+    const year = dt.getFullYear();
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Resolvedor autônomo de validação
+  const validateFn = (typeof validateBoletoCode === 'function')
+    ? validateBoletoCode
+    : (typeof globalThis !== 'undefined' && typeof globalThis.validateBoletoCode === 'function')
+      ? globalThis.validateBoletoCode
+      : null;
+
   const trimmed = String(rawText).trim();
   const directDigits = trimmed.replace(/\D/g, '');
+
+  // 1. Entrada direta de 44 dígitos (Código de Barras)
   if (directDigits.length === 44) {
-    const convertedLinha = codigoBarrasToLinhaDigitavel(directDigits);
-    if (convertedLinha && convertedLinha !== directDigits) {
-      return decodeFebrabanBoleto(convertedLinha);
+    if (validateFn) {
+      const check = validateFn(directDigits);
+      if (check && check.valid) {
+        result.valid = true;
+        result.code = check.digitLine || check.barcode;
+        result.formattedCode = check.formattedDigitLine || check.formattedBarcode;
+        result.barcode = check.barcode;
+        result.digitLine = check.digitLine;
+        result.bankName = check.bankName || '';
+        result.bankCode = check.bankCode || '';
+        result.dueDate = check.dueDate || '';
+        result.amount = check.amount || '';
+        result.confidence = 'high';
+        return result;
+      }
+    } else {
+      const bankCode = directDigits.slice(0, 3);
+      result.bankCode = bankCode;
+      result.bankName = getBankName(bankCode);
+      const factor = parseInt(directDigits.slice(5, 9), 10);
+      result.dueDate = parseFactorDate(factor);
+      const valCentavos = parseInt(directDigits.slice(9, 19), 10);
+      if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
+      result.barcode = directDigits;
+      result.code = directDigits;
     }
   }
 
   const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  // 2. Procura bloco padrão de 5 grupos (47 dígitos bancários)
+  // 2. Procura bloco estruturado de 5 grupos (47 dígitos bancários)
   // Formato FEBRABAN: 00190.00009 01881.000002 00000.000003 1 98150000147596
   const block5Regex = /(\d{5})[.\s-]*(\d{5})\s+(\d{5})[.\s-]*(\d{6})\s+(\d{5})[.\s-]*(\d{6})\s+(\d)\s+(\d{14})/;
   for (const line of lines) {
@@ -8765,94 +9263,137 @@ function decodeFebrabanBoleto(rawText) {
 
     const m = cleanLine.match(block5Regex);
     if (m) {
-      const c = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
-      result.code = c;
-      result.formattedCode = m[1] + '.' + m[2] + ' ' + m[3] + '.' + m[4] + ' ' + m[5] + '.' + m[6] + ' ' + m[7] + ' ' + m[8];
-      const bankCode = m[1].slice(0, 3);
-      result.bankName = bankNames[bankCode] || ('Banco ' + bankCode);
-
-      const factor = parseInt(m[8].slice(0, 4), 10);
-      if (factor >= 1000) {
-        if (factor < 3000) {
-          const base2025 = new Date(2025, 1, 22);
-          const d = new Date(base2025.getTime() + (factor - 1000) * 86400000);
-          result.dueDate = d.toISOString().slice(0, 10);
-        } else {
-          const base1997 = new Date(1997, 9, 7);
-          const d = new Date(base1997.getTime() + factor * 86400000);
-          result.dueDate = d.toISOString().slice(0, 10);
-        }
+      const candidateDigits = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
+      const check = validateFn ? validateFn(candidateDigits, { allowDvGeralMismatch: true }) : null;
+      if (check && check.valid) {
+        result.valid = true;
+        result.code = candidateDigits;
+        result.formattedCode = m[1] + '.' + m[2] + ' ' + m[3] + '.' + m[4] + ' ' + m[5] + '.' + m[6] + ' ' + m[7] + ' ' + m[8];
+        result.barcode = check.barcode;
+        result.digitLine = candidateDigits;
+        result.bankName = check.bankName || '';
+        result.bankCode = check.bankCode || '';
+        result.dueDate = check.dueDate || '';
+        result.amount = check.amount || '';
+        result.confidence = check.confidence || 'medium';
+        break;
+      } else if (!validateFn) {
+        // Fallback autônomo sem validador em escopo isolado
+        result.valid = true;
+        result.code = candidateDigits;
+        result.formattedCode = m[1] + '.' + m[2] + ' ' + m[3] + '.' + m[4] + ' ' + m[5] + '.' + m[6] + ' ' + m[7] + ' ' + m[8];
+        const bankCode = m[1].slice(0, 3);
+        result.bankCode = bankCode;
+        result.bankName = getBankName(bankCode);
+        const factor = parseInt(m[8].slice(0, 4), 10);
+        result.dueDate = parseFactorDate(factor);
+        const valCentavos = parseInt(m[8].slice(4, 14), 10);
+        if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
+        break;
       }
-
-      const valCentavos = parseInt(m[8].slice(4, 14), 10);
-      if (valCentavos > 0) {
-        result.amount = (valCentavos / 100).toFixed(2);
-      }
-      break;
     }
   }
 
-  // 3. Procura 4 blocos de concessionárias (48 dígitos: 4 blocos de 11 dígitos + 1 DV)
+  // 3. Procura bloco estruturado de 4 grupos (48 dígitos concessionárias)
   if (!result.code) {
     const block4Regex = /(\d{11})[.\s-]*(\d)\s+(\d{11})[.\s-]*(\d)\s+(\d{11})[.\s-]*(\d)\s+(\d{11})[.\s-]*(\d)/;
     for (const line of lines) {
       const cleanLine = line.replace(/[oO]/g, '0').replace(/[lI\|]/g, '1');
       const m = cleanLine.match(block4Regex);
       if (m) {
-        const c = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
-        if (c.length === 48 && c.startsWith('8')) {
-          result.code = c;
-          result.formattedCode = m[1] + '-' + m[2] + ' ' + m[3] + '-' + m[4] + ' ' + m[5] + '-' + m[6] + ' ' + m[7] + '-' + m[8];
-          result.beneficiary = 'Concessionária / Tributo';
-          const valCentavos = parseInt(c.slice(4, 11) + c.slice(12, 16), 10);
-          if (valCentavos > 0) {
-            result.amount = (valCentavos / 100).toFixed(2);
+        const candidateDigits = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
+        if (candidateDigits.startsWith('8')) {
+          const check = validateFn ? validateFn(candidateDigits, { allowDvGeralMismatch: true }) : null;
+          if (check && check.valid) {
+            result.valid = true;
+            result.code = candidateDigits;
+            result.formattedCode = m[1] + '-' + m[2] + ' ' + m[3] + '-' + m[4] + ' ' + m[5] + '-' + m[6] + ' ' + m[7] + '-' + m[8];
+            result.barcode = check.barcode;
+            result.digitLine = candidateDigits;
+            result.beneficiary = 'Concessionária / Tributo';
+            result.amount = check.amount || '';
+            result.confidence = check.confidence || 'medium';
+            break;
+          } else if (!validateFn) {
+            result.valid = true;
+            result.code = candidateDigits;
+            result.formattedCode = m[1] + '-' + m[2] + ' ' + m[3] + '-' + m[4] + ' ' + m[5] + '-' + m[6] + ' ' + m[7] + '-' + m[8];
+            result.digitLine = candidateDigits;
+            result.beneficiary = 'Concessionária / Tributo';
+            break;
           }
+        }
+      }
+    }
+  }
+
+  // 4. Procura linha única isolada com 47 ou 48 dígitos
+  if (!result.code) {
+    for (const line of lines) {
+      const d = line.replace(/[oO]/g, '0').replace(/[lI\|]/g, '1').replace(/\D/g, '');
+      if (d.length === 47 || (d.length === 48 && d.startsWith('8'))) {
+        const check = validateFn ? validateFn(d, { allowDvGeralMismatch: true }) : null;
+        if (check && check.valid) {
+          result.valid = true;
+          result.code = check.digitLine || check.barcode;
+          result.formattedCode = check.formattedDigitLine || check.formattedBarcode;
+          result.barcode = check.barcode;
+          result.digitLine = check.digitLine;
+          result.bankName = check.bankName || '';
+          result.bankCode = check.bankCode || '';
+          result.dueDate = check.dueDate || '';
+          result.amount = check.amount || '';
+          result.confidence = check.confidence || 'medium';
+          if (check.type === 'utility') result.beneficiary = 'Concessionária / Tributo';
+          break;
+        } else if (!validateFn && d.length === 47) {
+          result.valid = true;
+          result.code = d;
+          const bankCode = d.slice(0, 3);
+          result.bankCode = bankCode;
+          result.bankName = getBankName(bankCode);
+          const factor = parseInt(d.slice(33, 37), 10);
+          result.dueDate = parseFactorDate(factor);
+          const valCentavos = parseInt(d.slice(37, 47), 10);
+          if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
           break;
         }
       }
     }
   }
 
-  // 4. Procura linha única com 47 ou 48 dígitos
-  if (!result.code) {
-    for (const line of lines) {
-      const d = line.replace(/[oO]/g, '0').replace(/[lI\|]/g, '1').replace(/\D/g, '');
-      if (d.length === 47) {
-        const bankCode = d.slice(0, 3);
-        result.code = d;
-        result.formattedCode = d.slice(0, 5) + '.' + d.slice(5, 10) + ' ' + d.slice(10, 15) + '.' + d.slice(15, 21) + ' ' + d.slice(21, 26) + '.' + d.slice(26, 32) + ' ' + d.slice(32, 33) + ' ' + d.slice(33, 47);
-        result.bankName = bankNames[bankCode] || ('Banco ' + bankCode);
-
-        const factor = parseInt(d.slice(33, 37), 10);
-        if (factor >= 1000) {
-          if (factor < 3000) {
-            const base2025 = new Date(2025, 1, 22);
-            const dt = new Date(base2025.getTime() + (factor - 1000) * 86400000);
-            result.dueDate = dt.toISOString().slice(0, 10);
-          } else {
-            const base1997 = new Date(1997, 9, 7);
-            const dt = new Date(base1997.getTime() + factor * 86400000);
-            result.dueDate = dt.toISOString().slice(0, 10);
-          }
-        }
-        const valCentavos = parseInt(d.slice(37, 47), 10);
-        if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
-        break;
-      } else if (d.length === 48 && d.startsWith('8')) {
-        result.code = d;
-        result.formattedCode = d.slice(0, 12) + ' ' + d.slice(12, 24) + ' ' + d.slice(24, 36) + ' ' + d.slice(36, 48);
-        result.beneficiary = 'Concessionária / Tributo';
-        const valCentavos = parseInt(d.slice(4, 11) + d.slice(12, 16), 10);
-        if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
-        break;
-      }
+  // 5. Extração de Beneficiário do Documento
+  if (typeof extractBeneficiaryFromText === 'function') {
+    const benefData = extractBeneficiaryFromText(rawText);
+    if (benefData.beneficiary && !result.beneficiary) {
+      result.beneficiary = benefData.beneficiary;
+    }
+    if (benefData.document) {
+      result.beneficiaryDocument = benefData.document;
     }
   }
 
-  // 5. Regex para data visual no texto (Vencimento: DD/MM/AAAA)
+  // 6. Reconhecimento de Fornecedores e Concessionárias Comuns
+  if (!result.beneficiary) {
+    const lower = rawText.toLowerCase();
+    if (lower.includes('copel')) result.beneficiary = 'Copel Energia';
+    else if (lower.includes('sanepar')) result.beneficiary = 'Sanepar Água';
+    else if (lower.includes('joga')) result.beneficiary = 'Joga Indústria e Comércio';
+    else if (lower.includes('kala')) result.beneficiary = 'Kala Comércio e Distribuição';
+    else if (lower.includes('nakine')) result.beneficiary = 'Nakine Decorações';
+    else if (lower.includes('ricardo pesca')) result.beneficiary = 'Ricardo Pesca';
+    else if (lower.includes('maju')) result.beneficiary = 'Maju Dist. Mat. Elétricos';
+    else if (lower.includes('starlink')) result.beneficiary = 'Starlink Internet';
+    else if (lower.includes('claro')) result.beneficiary = 'Claro Telecom';
+    else if (lower.includes('vivo') || lower.includes('telefonica')) result.beneficiary = 'Vivo Telefônica';
+    else if (lower.includes('steelfish')) result.beneficiary = 'Steelfish';
+    else if (lower.includes('mathias')) result.beneficiary = 'Iscas Mathias';
+    else if (lower.includes('titan')) result.beneficiary = 'Titan Caiaques';
+  }
+
+  // 7. Data de Vencimento Visual (fallback para documentos puramente visuais)
   if (!result.dueDate) {
-    const dateMatch = rawText.match(/(?:vencimento|venc|pagar\s*ate)[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
+    const dateMatch = rawText.match(/(?:vencimento|venc|pagar\s*at[eé])[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
                       rawText.match(/\b([0-3]\d)[\/\.-]([0-1]\d)[\/\.-](202\d)\b/);
     if (dateMatch) {
       const day = dateMatch[1].padStart(2, '0');
@@ -8862,9 +9403,9 @@ function decodeFebrabanBoleto(rawText) {
     }
   }
 
-  // 6. Regex para valor visual no texto (R$ 123,45) — estritamente ignorando linhas de desconto/multa
+  // 8. Valor Visual no texto (ignorando estritamente desconto, mora, multa, abatimento)
   if (!result.amount) {
-    const valorRegex = /(?:valor(?:\s*(?:do\s*documento|cobrado|total|líquido|a\s*pagar))?|total\s*a\s*pagar)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
+    const valorRegex = /(?:valor(?:\s*(?:do\s*documento|cobrado|total|l[ií]quido|a\s*pagar))?|total\s*a\s*pagar)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
     for (const line of lines) {
       if (/desconto|abatimento|mora|multa|dedu[cç]/i.test(line)) continue;
       const vm = line.match(valorRegex) || line.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
@@ -8878,23 +9419,6 @@ function decodeFebrabanBoleto(rawText) {
     }
   }
 
-  // 7. Reconhecimento de Beneficiários e Fornecedores comuns
-  const lower = rawText.toLowerCase();
-  if (lower.includes('joga')) result.beneficiary = 'Joga Indústria e Comércio';
-  else if (lower.includes('kala')) result.beneficiary = 'Kala Comércio e Distribuição';
-  else if (lower.includes('nakine')) result.beneficiary = 'Nakine Decorações';
-  else if (lower.includes('ricardo pesca')) result.beneficiary = 'Ricardo Pesca';
-  else if (lower.includes('maju')) result.beneficiary = 'Maju Dist. Mat. Elétricos';
-  else if (lower.includes('copel')) result.beneficiary = 'Copel Energia';
-  else if (lower.includes('sanepar')) result.beneficiary = 'Sanepar Água';
-  else if (lower.includes('starlink')) result.beneficiary = 'Starlink Internet';
-  else if (lower.includes('claro')) result.beneficiary = 'Claro Telecom';
-  else if (lower.includes('vivo') || lower.includes('telefonica')) result.beneficiary = 'Vivo Telefônica';
-  else if (lower.includes('steelfish')) result.beneficiary = 'Steelfish';
-  else if (lower.includes('mathias')) result.beneficiary = 'Iscas Mathias';
-  else if (lower.includes('titan')) result.beneficiary = 'Titan Caiaques';
-  else if (!result.beneficiary && result.bankName) result.beneficiary = result.bankName;
-
   return result;
 }
 
@@ -8904,33 +9428,190 @@ function decodeBoletoCodeManually() {
     showToast("Digite ou cole a linha digitável primeiro.", "warning");
     return;
   }
-  const decoded = decodeFebrabanBoleto(codeVal);
-  if (decoded.formattedCode) document.getElementById("bfCode").value = decoded.formattedCode;
-  if (decoded.dueDate) document.getElementById("bfDueDate").value = decoded.dueDate;
-  if (decoded.amount) document.getElementById("bfAmount").value = decoded.amount;
-  if (decoded.beneficiary && !document.getElementById("bfBeneficiary").value) {
-    document.getElementById("bfBeneficiary").value = decoded.beneficiary;
+  const check = validateBoletoCode(codeVal, { allowDvGeralMismatch: true });
+  if (!check.valid) {
+    showToast("Código inválido conforme as normas FEBRABAN. Verifique os dígitos.", "warning", 4500);
+    return;
   }
-  showToast("Código decodificado com sucesso!", "success");
+  if (check.formattedDigitLine) document.getElementById("bfCode").value = check.formattedDigitLine;
+  if (check.dueDate) document.getElementById("bfDueDate").value = check.dueDate;
+  if (check.amount) document.getElementById("bfAmount").value = check.amount;
+  if (check.bankName) {
+    const notesEl = document.getElementById("bfDescription");
+    if (notesEl && !notesEl.value) notesEl.value = `Banco emissor: ${check.bankName}`;
+  }
+  showToast("Código FEBRABAN validado com sucesso!", "success");
 }
 window.decodeBoletoCodeManually = decodeBoletoCodeManually;
+if (typeof window !== 'undefined') window.decodeFebrabanBoleto = decodeFebrabanBoleto;
+if (typeof globalThis !== 'undefined') globalThis.decodeFebrabanBoleto = decodeFebrabanBoleto;
 
 function onBoletoCodeInput(val) {
-  const clean = val.replace(/\D/g, '');
+  const clean = String(val || '').replace(/\D/g, '');
   if (clean.length === 47 || clean.length === 48 || clean.length === 44) {
-    const decoded = decodeFebrabanBoleto(val);
-    if (decoded.dueDate && !document.getElementById("bfDueDate").value) {
-      document.getElementById("bfDueDate").value = decoded.dueDate;
-    }
-    if (decoded.amount && !document.getElementById("bfAmount").value) {
-      document.getElementById("bfAmount").value = decoded.amount;
-    }
-    if (decoded.beneficiary && !document.getElementById("bfBeneficiary").value) {
-      document.getElementById("bfBeneficiary").value = decoded.beneficiary;
+    const check = validateBoletoCode(clean, { allowDvGeralMismatch: true });
+    if (check.valid) {
+      if (check.dueDate && !document.getElementById("bfDueDate").value) {
+        document.getElementById("bfDueDate").value = check.dueDate;
+      }
+      if (check.amount && !document.getElementById("bfAmount").value) {
+        document.getElementById("bfAmount").value = check.amount;
+      }
     }
   }
 }
 window.onBoletoCodeInput = onBoletoCodeInput;
+
+/* Esteira Central de Leitura com Prioridade Rígida: Barcode -> Linha Digitável -> OCR */
+async function scanBoletoFromImagePipeline(file, onProgress) {
+  if (typeof onProgress === 'function') onProgress('Otimizando imagem no Canvas...', 20);
+  const prep = await preprocessImageForCanvas(file);
+  lastScannedBoletoDataUrl = prep.dataUrl;
+
+  let validatedCode = null;
+  let detectedConfidence = 'low';
+
+  // 1. PRIORIDADE MÁXIMA: Leitura Real do Código de Barras
+  if (typeof onProgress === 'function') onProgress('Buscando código de barras FEBRABAN...', 35);
+
+  // A) BarcodeDetector nativo nos variants da imagem
+  if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128'] });
+      for (const v of prep.variants) {
+        const barcodes = await detector.detect(v.canvas);
+        if (barcodes && barcodes.length > 0) {
+          for (const bc of barcodes) {
+            const check = validateBoletoCode(bc.rawValue);
+            if (check.valid) {
+              validatedCode = check;
+              detectedConfidence = 'high';
+              break;
+            }
+          }
+        }
+        if (validatedCode) break;
+      }
+    } catch (bErr) {}
+  }
+
+  // B) Decodificador ITF Canvas se BarcodeDetector nativo não encontrou
+  if (!validatedCode) {
+    if (typeof onProgress === 'function') onProgress('Analisando linhas do código de barras...', 50);
+    for (const v of prep.variants) {
+      const itf = scanItfBarcodeFromCanvas(v.canvas);
+      if (itf) {
+        const check = validateBoletoCode(itf);
+        if (check.valid) {
+          validatedCode = check;
+          detectedConfidence = 'high';
+          break;
+        }
+      }
+    }
+  }
+
+  // 2. SEGUNDA PRIORIDADE: Linha Digitável via OCR Estruturado na Região do Código
+  let ocrFullText = '';
+  if (!validatedCode) {
+    if (typeof onProgress === 'function') onProgress('Lendo linha digitável via OCR...', 65);
+    try {
+      const Tesseract = await loadTesseract();
+      const roiVariant = prep.variants.find(v => v.label === 'roi_inferior') || prep.variants[0];
+      const workerRes = await Tesseract.recognize(roiVariant.canvas, 'por');
+      const roiText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : '';
+
+      const checkRoi = decodeFebrabanBoleto(roiText);
+      if (checkRoi && checkRoi.valid) {
+        validatedCode = checkRoi;
+        detectedConfidence = 'medium';
+      }
+    } catch (ocrErr) {
+      console.warn('OCR na região inferior falhou:', ocrErr);
+    }
+  }
+
+  // 3. TERCEIRA PRIORIDADE: OCR no documento completo para dados visuais e fallback
+  if (typeof onProgress === 'function') onProgress('Lendo dados do documento...', 80);
+  try {
+    const Tesseract = await loadTesseract();
+    const workerRes = await Tesseract.recognize(prep.canvas, 'por');
+    ocrFullText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : '';
+
+    if (!validatedCode) {
+      const fullCheck = decodeFebrabanBoleto(ocrFullText);
+      if (fullCheck && fullCheck.valid) {
+        validatedCode = fullCheck;
+        detectedConfidence = 'medium';
+      }
+    }
+  } catch (ocrErr) {}
+
+  // 4. FALLBACK EM NUVEM SE NENHUM CÓDIGO VÁLIDO FOI OBTIDO LOCALMENTE
+  if (!validatedCode) {
+    if (typeof onProgress === 'function') onProgress('Consultando OCR seguro...', 90);
+    try {
+      const cloudText = await callOcrSpaceApi(prep.dataUrl);
+      if (cloudText) {
+        ocrFullText = (ocrFullText ? (ocrFullText + '\n') : '') + cloudText;
+        const cloudDec = decodeFebrabanBoleto(cloudText);
+        if (cloudDec && cloudDec.valid) {
+          validatedCode = cloudDec;
+          detectedConfidence = 'medium';
+        }
+      }
+    } catch (cloudErr) {}
+  }
+
+  // 5. Extração de Dados Visuais (Beneficiário, CNPJ, etc.) a partir do texto OCR acumulado
+  const visualData = extractBeneficiaryFromText(ocrFullText);
+  let visualDueDate = '';
+  let visualAmount = '';
+
+  if (!validatedCode || !validatedCode.dueDate) {
+    const dateMatch = ocrFullText.match(/(?:vencimento|venc|pagar\s*at[eé])[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
+                      ocrFullText.match(/\b([0-3]\d)[\/\.-]([0-1]\d)[\/\.-](202\d)\b/);
+    if (dateMatch) {
+      const day = dateMatch[1].padStart(2, '0');
+      const month = dateMatch[2].padStart(2, '0');
+      const year = dateMatch[3];
+      visualDueDate = `${year}-${month}-${day}`;
+    }
+  }
+
+  if (!validatedCode || !validatedCode.amount) {
+    const valorRegex = /(?:valor(?:\s*(?:do\s*documento|cobrado|total|l[ií]quido|a\s*pagar))?|total\s*a\s*pagar)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
+    for (const line of ocrFullText.split(/\r?\n/)) {
+      if (/desconto|abatimento|mora|multa|dedu[cç]/i.test(line)) continue;
+      const vm = line.match(valorRegex) || line.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
+      if (vm) {
+        const parsed = parseFloat(vm[1].replace(/\./g, '').replace(',', '.'));
+        if (parsed > 0) {
+          visualAmount = parsed.toFixed(2);
+          break;
+        }
+      }
+    }
+  }
+
+  if (typeof onProgress === 'function') onProgress('Concluído!', 100);
+
+  return {
+    validatedCode,
+    confidence: detectedConfidence,
+    beneficiary: visualData.beneficiary || (validatedCode && validatedCode.beneficiary) || '',
+    beneficiaryDocument: visualData.document || '',
+    dueDate: (validatedCode && validatedCode.dueDate) || visualDueDate || '',
+    amount: (validatedCode && validatedCode.amount) || visualAmount || '',
+    bankName: (validatedCode && validatedCode.bankName) || '',
+    bankCode: (validatedCode && validatedCode.bankCode) || '',
+    code: (validatedCode && (validatedCode.formattedDigitLine || validatedCode.digitLine || validatedCode.code)) || '',
+    barcode: (validatedCode && validatedCode.barcode) || '',
+    digitLine: (validatedCode && validatedCode.digitLine) || '',
+    rawOcrText: ocrFullText
+  };
+}
+window.scanBoletoFromImagePipeline = scanBoletoFromImagePipeline;
 
 async function processBoletoImage(file) {
   const banner = document.getElementById("boletoOcrBanner");
@@ -8940,108 +9621,55 @@ async function processBoletoImage(file) {
 
   try {
     if (banner) banner.style.display = "block";
-    if (statusText) statusText.textContent = "Otimizando imagem para iPhone no Canvas...";
-    if (progressBar) progressBar.style.width = "20%";
-    if (percentText) percentText.textContent = "20%";
+    const updateProgress = (text, pct) => {
+      if (statusText) statusText.textContent = text;
+      if (percentText) percentText.textContent = pct + "%";
+      if (progressBar) progressBar.style.width = pct + "%";
+    };
 
-    const { canvas, dataUrl, width, height } = await preprocessImageForCanvas(file);
-    lastScannedBoletoDataUrl = dataUrl;
-
-    if (statusText) statusText.textContent = "Buscando Código de Barras (44 dígitos)...";
-    if (progressBar) progressBar.style.width = "40%";
-    if (percentText) percentText.textContent = "40%";
-
-    let detectedCode = "";
-
-    // 1. Tenta decodificador direto de código de barras ITF
-    const itfCode = scanItfBarcodeFromCanvas(canvas);
-    if (itfCode) {
-      detectedCode = itfCode;
-    }
-
-    // 2. Tenta BarcodeDetector nativo se o dispositivo suportar
-    if (!detectedCode && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-      try {
-        const detector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
-        const barcodes = await detector.detect(canvas);
-        if (barcodes && barcodes.length > 0) {
-          detectedCode = barcodes[0].rawValue;
-        }
-      } catch (bErr) {}
-    }
-
-    let ocrText = "";
-
-    // 3. Se não achou código de barras direto, executa OCR no texto
-    if (!detectedCode) {
-      if (statusText) statusText.textContent = "Carregando motor OCR no navegador...";
-      if (progressBar) progressBar.style.width = "60%";
-      if (percentText) percentText.textContent = "60%";
-
-      try {
-        const Tesseract = await loadTesseract();
-        if (statusText) statusText.textContent = "Reconhecendo dados bancários e valores...";
-        
-        const workerRes = await Tesseract.recognize(canvas, 'por', {
-          logger: m => {
-            if (m.status === 'recognizing text' && m.progress) {
-              const p = Math.round(60 + m.progress * 35);
-              if (progressBar) progressBar.style.width = p + "%";
-              if (percentText) percentText.textContent = p + "%";
-            }
-          }
-        });
-        ocrText = (workerRes && workerRes.data && workerRes.data.text) ? workerRes.data.text : "";
-        detectedCode = ocrText;
-      } catch (ocrErr) {
-        console.warn("Tesseract indisponível ou offline:", ocrErr);
-      }
-    }
-
-    let decoded = decodeFebrabanBoleto(detectedCode || ocrText);
-
-    // 4. Fallback de nuvem via API se OCR local falhou ou não encontrou valor
-    if (!decoded || (!decoded.code && !decoded.amount)) {
-      if (statusText) statusText.textContent = "Consultando API Cloud para alta precisão...";
-      try {
-        const cloudText = await callOcrSpaceApi(dataUrl);
-        if (cloudText) {
-          const cloudDec = decodeFebrabanBoleto(cloudText);
-          if (cloudDec && (cloudDec.code || cloudDec.amount)) {
-            decoded = cloudDec;
-          }
-        }
-      } catch (cloudErr) {
-        console.warn("Fallback de API Cloud falhou:", cloudErr);
-      }
-    }
-
-    if (progressBar) progressBar.style.width = "100%";
-    if (percentText) percentText.textContent = "100%";
-    if (statusText) statusText.textContent = "Leitura concluída!";
+    const parsed = await scanBoletoFromImagePipeline(file, updateProgress);
 
     setTimeout(() => {
       if (banner) banner.style.display = "none";
-    }, 1200);
+    }, 1000);
 
-    openNewBoletoModal({
-      beneficiary: decoded.beneficiary || "",
-      code: decoded.formattedCode || decoded.code || "",
-      dueDate: decoded.dueDate || getLocalDateStr(),
-      amount: decoded.amount || "",
-      category: "rancho"
-    });
+    if (parsed.validatedCode && parsed.validatedCode.valid) {
+      openNewBoletoModal({
+        beneficiary: parsed.beneficiary || "",
+        beneficiaryDocument: parsed.beneficiaryDocument || "",
+        bankName: parsed.bankName || "",
+        bankCode: parsed.bankCode || "",
+        code: parsed.code || "",
+        barcode: parsed.barcode || "",
+        digitLine: parsed.digitLine || "",
+        dueDate: parsed.dueDate || getLocalDateStr(),
+        amount: parsed.amount || "",
+        category: "rancho",
+        extractionConfidence: parsed.confidence || 'high'
+      });
 
-    if (decoded.amount) {
-      showToast(`Boleto lido com sucesso! Valor: R$ ${decoded.amount}`, "success");
+      if (parsed.amount) {
+        showToast(`Boleto validado! Valor: R$ ${parsed.amount}`, "success");
+      } else {
+        showToast("Código FEBRABAN validado! Confira os dados para salvar.", "success");
+      }
     } else {
-      showToast("Foto lida! Confira os dados e confirme.", "success");
+      // NÃO aceita números aleatórios nem inventa código!
+      showToast("Não foi possível identificar o código de barras com segurança. Confira ou digite manualmente.", "warning", 5000);
+      openNewBoletoModal({
+        beneficiary: parsed.beneficiary || "",
+        beneficiaryDocument: parsed.beneficiaryDocument || "",
+        dueDate: parsed.dueDate || getLocalDateStr(),
+        amount: parsed.amount || "",
+        category: "rancho",
+        extractionConfidence: "low"
+      });
     }
 
   } catch (err) {
     console.error("Erro ao processar imagem do boleto:", err);
     if (banner) banner.style.display = "none";
-    showToast("Não foi possível ler o arquivo. Você pode digitar manualmente.", "error");
+    showToast("Não foi possível ler o arquivo. Você pode cadastrar manualmente.", "error");
     openNewBoletoModal();
   }
 }
