@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.9.3">
+  <link rel="stylesheet" href="styles.css?v=2.9.4">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -1041,6 +1041,12 @@
             </svg>
             <span>Galeria</span>
           </label>
+          <button type="button" class="btn btn-secondary" id="btnSyncBoletosCloud" onclick="forceSyncBoletosFromCloud()" title="Sincronizar boletos instantaneamente com a nuvem (Supabase)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; color: #60a5fa; border-color: rgba(96, 165, 250, 0.4);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span id="btnSyncBoletosText">Sincronizar Nuvem</span>
+          </button>
           <button type="button" class="btn btn-secondary" onclick="openNewBoletoModal()" title="Digitar boleto manualmente">
             + Novo Manual
           </button>
@@ -1274,7 +1280,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.3 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.4 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -2931,14 +2937,14 @@
   <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
-  <script src="normalize_raffle.js?v=2.9.3"></script>
-  <script src="db_dexie.js?v=2.9.3"></script>
-  <script src="auth_manager.js?v=2.9.3"></script>
-  <script src="sync_engine.js?v=2.9.3"></script>
-  <script src="qrcode.js?v=2.9.3"></script>
-  <script src="pdf.min.js?v=2.9.3"></script>
-  <script src="instagram_cronograma_104.js?v=2.9.3"></script>
-  <script src="app.js?v=2.9.3"></script>
+  <script src="normalize_raffle.js?v=2.9.4"></script>
+  <script src="db_dexie.js?v=2.9.4"></script>
+  <script src="auth_manager.js?v=2.9.4"></script>
+  <script src="sync_engine.js?v=2.9.4"></script>
+  <script src="qrcode.js?v=2.9.4"></script>
+  <script src="pdf.min.js?v=2.9.4"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.4"></script>
+  <script src="app.js?v=2.9.4"></script>
 </body>
 
 </html>

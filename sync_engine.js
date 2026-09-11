@@ -148,7 +148,8 @@ class SyncEngine {
 
     // Se for atualização pontual de cota da rifa
     if (table === 'raffle_numbers' && newRec) {
-      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
       
       // Protege contra sobrescrita de alterações locais pendentes na Outbox
       if (window.localDB) {
@@ -190,6 +191,36 @@ class SyncEngine {
       }
     }
 
+    // Se for atualização da tabela de configurações (ex: boletos de contas a pagar)
+    if (table === 'settings' && newRec && newRec.key === 'boletos') {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      try {
+        let parsed = newRec.value;
+        if (typeof parsed === 'string') {
+          try { parsed = JSON.parse(parsed); } catch (e) {}
+        }
+        if (Array.isArray(parsed)) {
+          if (!window.appData.settings) window.appData.settings = {};
+          window.appData.settings.boletos = parsed;
+          window.appData.boletos = parsed;
+          if (window.localDB) {
+            window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+          }
+          try {
+            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData));
+          } catch (e) {}
+          if (typeof window.renderBoletosView === 'function') {
+            window.renderBoletosView();
+          }
+          console.log('[Realtime] Boletos atualizados instantaneamente da nuvem:', parsed.length);
+          return;
+        }
+      } catch (err) {
+        console.warn('[Realtime] Erro ao aplicar boletos do Realtime:', err);
+      }
+    }
+
     // Para demais tabelas ou alterações estruturais, agenda recarga remota suave
     this.scheduleDebouncedRemoteRefresh();
   }
@@ -197,7 +228,8 @@ class SyncEngine {
   scheduleDebouncedRemoteRefresh() {
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     this._refreshTimer = setTimeout(async () => {
-      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID');
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
       if (!orgId || !this.isOnline || this.isSyncing) return;
       const remoteData = await this.fetchRemoteData(orgId);
       if (remoteData && typeof window.mergeRemoteData === 'function') {

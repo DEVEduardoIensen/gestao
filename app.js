@@ -301,7 +301,7 @@ async function initAppState() {
   if (window.localDB) {
     try {
       const localData = await window.localDB.loadFullAppData(orgId);
-      if (localData && (localData.raffles || localData.valesAndPrizes || localData.fishingBookings || localData.ranchoBookings)) {
+      if (localData && (localData.raffles || localData.valesAndPrizes || localData.fishingBookings || localData.ranchoBookings || localData.settings)) {
         appData = sanitizeAppData(localData);
         loadedFromLocal = true;
         if (appData.raffles && appData.raffles.length > 0) {
@@ -500,6 +500,9 @@ window.mergeRemoteData = async function(remoteData) {
 
     // RENDERIZAÇÃO IMEDIATA: Atualiza a tela instantaneamente sem esperar I/O de disco
     renderAll();
+    if (activeTab === 'tab-boletos' && typeof renderBoletosView === 'function') {
+      renderBoletosView();
+    }
     updateGlobalStats();
 
     // Persistência assíncrona não-bloqueante
@@ -1341,6 +1344,9 @@ function renderTab(tabId) {
       break;
     case "tab-boletos":
       renderBoletosView();
+      if (typeof navigator !== 'undefined' && navigator.onLine && window.syncEngine && !window.syncEngine.isSyncing) {
+        window.syncEngine.scheduleDebouncedRemoteRefresh();
+      }
       break;
     case "tab-eduardo":
       renderEduardoView();
@@ -6475,6 +6481,48 @@ function renderBoletosView() {
 }
 window.renderBoletosView = renderBoletosView;
 
+async function forceSyncBoletosFromCloud() {
+  const btn = document.getElementById('btnSyncBoletosCloud');
+  const btnText = document.getElementById('btnSyncBoletosText');
+  if (btn) btn.style.opacity = '0.6';
+  if (btnText) btnText.textContent = 'Sincronizando...';
+
+  const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+  const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+
+  try {
+    if (window.syncEngine && window.supabaseClient) {
+      const remoteData = await window.syncEngine.fetchRemoteData(orgId);
+      if (remoteData && remoteData.settings && Array.isArray(remoteData.settings.boletos)) {
+        if (!appData.settings) appData.settings = {};
+        appData.settings.boletos = remoteData.settings.boletos;
+        appData.boletos = remoteData.settings.boletos;
+
+        if (window.localDB) {
+          await window.localDB.saveFullAppData(appData, orgId);
+        }
+        try {
+          localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+        } catch (e) {}
+
+        renderBoletosView();
+        showToast(`Sincronizado com sucesso! ${appData.boletos.length} boletos carregados do Supabase.`, 'success');
+      } else {
+        showToast('Nenhum boleto encontrado no Supabase para esta organização.', 'info');
+      }
+    } else {
+      showToast('Offline: Verifique sua conexão com a internet.', 'warning');
+    }
+  } catch (err) {
+    console.error('[SyncBoletos] Erro ao sincronizar boletos:', err);
+    showToast('Erro ao sincronizar com a nuvem: ' + err.message, 'error');
+  } finally {
+    if (btn) btn.style.opacity = '1';
+    if (btnText) btnText.textContent = 'Sincronizar Nuvem';
+  }
+}
+window.forceSyncBoletosFromCloud = forceSyncBoletosFromCloud;
+
 function updateBoletosStats() {
   const boletos = appData.boletos || [];
   const monthNames = [
@@ -9051,7 +9099,25 @@ function preprocessImageForCanvas(file) {
         const ctxRoi = cvsRoi.getContext('2d');
         ctxRoi.drawImage(cvsGrayscale, 0, roiY, width, roiHeight, 0, 0, width, roiHeight);
 
-        const dataUrl = cvsGrayscale.toDataURL('image/jpeg', 0.88);
+        // 5. Miniatura ultra-leve para preview no modal (máx 640px, JPEG 0.65, ~25KB em vez de 500KB)
+        const thumbMax = 640;
+        let thumbW = width;
+        let thumbH = height;
+        if (thumbW > thumbMax || thumbH > thumbMax) {
+          if (thumbW > thumbH) {
+            thumbH = Math.round((thumbH * thumbMax) / thumbW);
+            thumbW = thumbMax;
+          } else {
+            thumbW = Math.round((thumbW * thumbMax) / thumbH);
+            thumbH = thumbMax;
+          }
+        }
+        const cvsThumb = document.createElement('canvas');
+        cvsThumb.width = thumbW;
+        cvsThumb.height = thumbH;
+        const ctxThumb = cvsThumb.getContext('2d');
+        ctxThumb.drawImage(cvsOriginal, 0, 0, thumbW, thumbH);
+        const dataUrl = cvsThumb.toDataURL('image/jpeg', 0.65);
         const variants = [
           { label: 'roi_inferior', canvas: cvsRoi },
           { label: 'alto_contraste', canvas: cvsGrayscale },
