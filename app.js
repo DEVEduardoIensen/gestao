@@ -7838,8 +7838,8 @@ function validateBoletoCode(code, options = {}) {
     if (!dv3Ok) result.errors.push(`DV do bloco 3 inválido (esperado ${calcDv3}, obtido ${dv3})`);
     if (!dv4Ok) result.errors.push(`DV do bloco 4 inválido (esperado ${calcDv4}, obtido ${dv4})`);
 
-    const allowMismatch = (options && options.allowDvGeralMismatch === true);
-    const isValid = (dv1Ok && dv2Ok && dv3Ok && dv4Ok) || (allowMismatch && (dv1Ok || dv2Ok));
+    // Concessionárias possuem 4 blocos com DV próprio; todos os 4 blocos DEVEM ser válidos para rejeitar números aleatórios
+    const isValid = (dv1Ok && dv2Ok && dv3Ok && dv4Ok);
 
     if (!isValid) {
       return result;
@@ -9301,16 +9301,6 @@ function decodeFebrabanBoleto(rawText) {
         result.confidence = 'high';
         return result;
       }
-    } else {
-      const bankCode = directDigits.slice(0, 3);
-      result.bankCode = bankCode;
-      result.bankName = getBankName(bankCode);
-      const factor = parseInt(directDigits.slice(5, 9), 10);
-      result.dueDate = parseFactorDate(factor);
-      const valCentavos = parseInt(directDigits.slice(9, 19), 10);
-      if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
-      result.barcode = directDigits;
-      result.code = directDigits;
     }
   }
 
@@ -9344,18 +9334,37 @@ function decodeFebrabanBoleto(rawText) {
         result.confidence = check.confidence || 'medium';
         break;
       } else if (!validateFn) {
-        // Fallback autônomo sem validador em escopo isolado
-        result.valid = true;
-        result.code = candidateDigits;
-        result.formattedCode = m[1] + '.' + m[2] + ' ' + m[3] + '.' + m[4] + ' ' + m[5] + '.' + m[6] + ' ' + m[7] + ' ' + m[8];
-        const bankCode = m[1].slice(0, 3);
-        result.bankCode = bankCode;
-        result.bankName = getBankName(bankCode);
-        const factor = parseInt(m[8].slice(0, 4), 10);
-        result.dueDate = parseFactorDate(factor);
-        const valCentavos = parseInt(m[8].slice(4, 14), 10);
-        if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
-        break;
+        // Validação autônoma matemática de Modulo 10 para os 3 blocos (garante rejeição estrita de dígitos aleatórios)
+        const calcM10 = (s) => {
+          let sm = 0, w = 2;
+          for (let i = s.length - 1; i >= 0; i--) {
+            let mul = parseInt(s[i], 10) * w;
+            if (mul > 9) mul = Math.floor(mul / 10) + (mul % 10);
+            sm += mul;
+            w = (w === 2) ? 1 : 2;
+          }
+          const r = sm % 10;
+          return (r === 0) ? 0 : (10 - r);
+        };
+        const dv1 = calcM10(m[1] + m[2].slice(0, 4));
+        const dv2 = calcM10(m[3] + m[4].slice(0, 5));
+        const dv3 = calcM10(m[5] + m[6].slice(0, 5));
+        if (dv1 === parseInt(m[2].slice(4, 5), 10) &&
+            dv2 === parseInt(m[4].slice(5, 6), 10) &&
+            dv3 === parseInt(m[6].slice(5, 6), 10)) {
+          result.valid = true;
+          result.code = candidateDigits;
+          result.formattedCode = m[1] + '.' + m[2] + ' ' + m[3] + '.' + m[4] + ' ' + m[5] + '.' + m[6] + ' ' + m[7] + ' ' + m[8];
+          const bankCode = m[1].slice(0, 3);
+          result.bankCode = bankCode;
+          result.bankName = getBankName(bankCode);
+          const factor = parseInt(m[8].slice(0, 4), 10);
+          result.dueDate = parseFactorDate(factor);
+          const valCentavos = parseInt(m[8].slice(4, 14), 10);
+          if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
+          result.confidence = 'medium';
+          break;
+        }
       }
     }
   }
@@ -9369,7 +9378,7 @@ function decodeFebrabanBoleto(rawText) {
       if (m) {
         const candidateDigits = m[1] + m[2] + m[3] + m[4] + m[5] + m[6] + m[7] + m[8];
         if (candidateDigits.startsWith('8')) {
-          const check = validateFn ? validateFn(candidateDigits, { allowDvGeralMismatch: true }) : null;
+          const check = validateFn ? validateFn(candidateDigits) : null;
           if (check && check.valid) {
             result.valid = true;
             result.code = candidateDigits;
@@ -9380,25 +9389,18 @@ function decodeFebrabanBoleto(rawText) {
             result.amount = check.amount || '';
             result.confidence = check.confidence || 'medium';
             break;
-          } else if (!validateFn) {
-            result.valid = true;
-            result.code = candidateDigits;
-            result.formattedCode = m[1] + '-' + m[2] + ' ' + m[3] + '-' + m[4] + ' ' + m[5] + '-' + m[6] + ' ' + m[7] + '-' + m[8];
-            result.digitLine = candidateDigits;
-            result.beneficiary = 'Concessionária / Tributo';
-            break;
           }
         }
       }
     }
   }
 
-  // 4. Procura linha única isolada com 47 ou 48 dígitos
+  // 4. Procura linha única isolada com 47 ou 48 dígitos (com validação FEBRABAN obrigatória)
   if (!result.code) {
     for (const line of lines) {
       const d = line.replace(/[oO]/g, '0').replace(/[lI\|]/g, '1').replace(/\D/g, '');
       if (d.length === 47 || (d.length === 48 && d.startsWith('8'))) {
-        const check = validateFn ? validateFn(d, { allowDvGeralMismatch: true }) : null;
+        const check = validateFn ? validateFn(d, { allowDvGeralMismatch: d.length === 47 }) : null;
         if (check && check.valid) {
           result.valid = true;
           result.code = check.digitLine || check.barcode;
@@ -9411,17 +9413,6 @@ function decodeFebrabanBoleto(rawText) {
           result.amount = check.amount || '';
           result.confidence = check.confidence || 'medium';
           if (check.type === 'utility') result.beneficiary = 'Concessionária / Tributo';
-          break;
-        } else if (!validateFn && d.length === 47) {
-          result.valid = true;
-          result.code = d;
-          const bankCode = d.slice(0, 3);
-          result.bankCode = bankCode;
-          result.bankName = getBankName(bankCode);
-          const factor = parseInt(d.slice(33, 37), 10);
-          result.dueDate = parseFactorDate(factor);
-          const valCentavos = parseInt(d.slice(37, 47), 10);
-          if (valCentavos > 0) result.amount = (valCentavos / 100).toFixed(2);
           break;
         }
       }
@@ -9457,10 +9448,9 @@ function decodeFebrabanBoleto(rawText) {
     else if (lower.includes('titan')) result.beneficiary = 'Titan Caiaques';
   }
 
-  // 7. Data de Vencimento Visual (fallback para documentos puramente visuais)
+  // 7. Data de Vencimento Visual (somente se vinculada a palavra-chave explícita de vencimento)
   if (!result.dueDate) {
-    const dateMatch = rawText.match(/(?:vencimento|venc|pagar\s*at[eé])[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
-                      rawText.match(/\b([0-3]\d)[\/\.-]([0-1]\d)[\/\.-](202\d)\b/);
+    const dateMatch = rawText.match(/(?:vencimento|venc|pagar\s*at[eé])[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i);
     if (dateMatch) {
       const day = dateMatch[1].padStart(2, '0');
       const month = dateMatch[2].padStart(2, '0');
@@ -9469,12 +9459,12 @@ function decodeFebrabanBoleto(rawText) {
     }
   }
 
-  // 8. Valor Visual no texto (ignorando estritamente desconto, mora, multa, abatimento)
+  // 8. Valor Visual no texto (somente com âncora explícita de total/cobrado; nunca qualquer R$ aleatório)
   if (!result.amount) {
-    const valorRegex = /(?:valor(?:\s*(?:do\s*documento|cobrado|total|l[ií]quido|a\s*pagar))?|total\s*a\s*pagar)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
+    const valorRegex = /(?:\bvalor(?:\s*(?:do\s*documento|cobrado|total(?:\s*(?:da\s*nota|do\s*boleto))?|l[ií]quido|a\s*pagar))?|\btotal(?:\s*a\s*pagar)?)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
     for (const line of lines) {
-      if (/desconto|abatimento|mora|multa|dedu[cç]/i.test(line)) continue;
-      const vm = line.match(valorRegex) || line.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
+      if (/desconto|abatimento|mora|multa|dedu[cç]|taxa|tarifa|unit[aá]rio|subtotal|icms|imposto|iss|pis|cofins|base\s*de\s*c[aá]lculo/i.test(line)) continue;
+      const vm = line.match(valorRegex);
       if (vm) {
         const parsed = parseFloat(vm[1].replace(/\./g, '').replace(',', '.'));
         if (parsed > 0) {
@@ -9635,8 +9625,7 @@ async function scanBoletoFromImagePipeline(file, onProgress) {
   let visualAmount = '';
 
   if (!validatedCode || !validatedCode.dueDate) {
-    const dateMatch = ocrFullText.match(/(?:vencimento|venc|pagar\s*at[eé])[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i) ||
-                      ocrFullText.match(/\b([0-3]\d)[\/\.-]([0-1]\d)[\/\.-](202\d)\b/);
+    const dateMatch = ocrFullText.match(/(?:vencimento|venc|pagar\s*at[eé])[:\s]*([0-3]?\d)[\/\.-]([0-1]?\d)[\/\.-](202\d)/i);
     if (dateMatch) {
       const day = dateMatch[1].padStart(2, '0');
       const month = dateMatch[2].padStart(2, '0');
@@ -9646,10 +9635,10 @@ async function scanBoletoFromImagePipeline(file, onProgress) {
   }
 
   if (!validatedCode || !validatedCode.amount) {
-    const valorRegex = /(?:valor(?:\s*(?:do\s*documento|cobrado|total|l[ií]quido|a\s*pagar))?|total\s*a\s*pagar)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
+    const valorRegex = /(?:\bvalor(?:\s*(?:do\s*documento|cobrado|total(?:\s*(?:da\s*nota|do\s*boleto))?|l[ií]quido|a\s*pagar))?|\btotal(?:\s*a\s*pagar)?)[:\s]+(?:R\$\s*)?([\d\.]+(?:,\d{2}))/i;
     for (const line of ocrFullText.split(/\r?\n/)) {
-      if (/desconto|abatimento|mora|multa|dedu[cç]/i.test(line)) continue;
-      const vm = line.match(valorRegex) || line.match(/R\$\s*([\d\.]+(?:,\d{2}))/i);
+      if (/desconto|abatimento|mora|multa|dedu[cç]|taxa|tarifa|unit[aá]rio|subtotal|icms|imposto|iss|pis|cofins|base\s*de\s*c[aá]lculo/i.test(line)) continue;
+      const vm = line.match(valorRegex);
       if (vm) {
         const parsed = parseFloat(vm[1].replace(/\./g, '').replace(',', '.'));
         if (parsed > 0) {
@@ -9726,7 +9715,7 @@ async function processBoletoImage(file) {
         beneficiary: parsed.beneficiary || "",
         beneficiaryDocument: parsed.beneficiaryDocument || "",
         dueDate: parsed.dueDate || getLocalDateStr(),
-        amount: parsed.amount || "",
+        amount: "", // Deixa vazio para o usuário digitar, sem risco de valor aleatório
         category: "rancho",
         extractionConfidence: "low"
       });

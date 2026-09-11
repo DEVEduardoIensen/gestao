@@ -79,6 +79,16 @@ class LocalDatabase {
       request.onsuccess = (event) => {
         this.db = event.target.result;
         this.isReady = true;
+
+        // Garante persistência durável no Safari iOS e PWA contra auto-eviction de 7 dias
+        if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+          navigator.storage.persist().then((persisted) => {
+            if (persisted) {
+              console.log('[LocalDB] Armazenamento persistente ativado com sucesso (proteção iOS/Safari/PWA).');
+            }
+          }).catch(() => {});
+        }
+
         resolve(this.db);
       };
 
@@ -106,6 +116,35 @@ class LocalDatabase {
     });
   }
 
+  // Consulta ultra rápida via índice B-Tree 'idx_org' nativo do IndexedDB
+  async getAllByOrg(storeName, orgId) {
+    if (!orgId) return [];
+    await this.ready();
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = this.db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        if (store.indexNames && store.indexNames.contains('idx_org')) {
+          const index = store.index('idx_org');
+          const req = index.getAll(orgId);
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => reject(req.error);
+        } else {
+          // Fallback gracioso caso índice não exista
+          const req = store.getAll();
+          req.onsuccess = () => {
+            const all = req.result || [];
+            const key = (storeName === 'sync_queue') ? 'orgId' : 'organization_id';
+            resolve(all.filter(item => item && item[key] === orgId));
+          };
+          req.onerror = () => reject(req.error);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
   async get(storeName, key) {
     await this.ready();
     return new Promise((resolve, reject) => {
@@ -129,6 +168,7 @@ class LocalDatabase {
   }
 
   async putBatch(storeName, items) {
+    if (!items || items.length === 0) return true;
     await this.ready();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, 'readwrite');
@@ -147,6 +187,20 @@ class LocalDatabase {
       const req = store.delete(key);
       req.onsuccess = () => resolve(true);
       req.onerror = () => reject(req.error);
+    });
+  }
+
+  async deleteBatch(storeName, keys) {
+    if (!keys || keys.length === 0) return true;
+    await this.ready();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      for (const k of keys) {
+        store.delete(k);
+      }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
     });
   }
 
@@ -237,6 +291,28 @@ class LocalDatabase {
       console.warn('[LocalDB] Aviso ao resolver credenciais para operação:', e);
     }
 
+    // Deduplicação inteligente de operações pendentes para o mesmo registro
+    if (op.tableName && op.recordId && op.type) {
+      try {
+        const pendingList = await this.getPendingOperations(orgId);
+        const existingOp = pendingList.find(p => 
+          p.status === 'pending' && 
+          p.tableName === op.tableName && 
+          String(p.recordId) === String(op.recordId)
+        );
+        if (existingOp && existingOp.type === op.type) {
+          existingOp.payload = (typeof existingOp.payload === 'object' && typeof op.payload === 'object')
+            ? Object.assign({}, existingOp.payload, op.payload)
+            : op.payload;
+          existingOp.timestamp = Date.now();
+          if (authToken) existingOp.authToken = authToken;
+          if (refreshToken) existingOp.refreshToken = refreshToken;
+          await this.put('sync_queue', existingOp);
+          return existingOp;
+        }
+      } catch (e) {}
+    }
+
     const operation = {
       id: op.id || ('op-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6)),
       orgId: orgId,
@@ -287,10 +363,10 @@ class LocalDatabase {
     return operation;
   }
 
-  // Busca operações pendentes da fila Outbox
+  // Busca operações pendentes da fila Outbox com B-Tree query direta
   async getPendingOperations(orgId = null) {
-    const all = await this.getAll('sync_queue');
     const targetOrg = orgId || (typeof window !== 'undefined' && window.authManager ? window.authManager.getOrganizationId() : null);
+    const all = targetOrg ? await this.getAllByOrg('sync_queue', targetOrg) : await this.getAll('sync_queue');
     const now = Date.now();
     return all
       .filter(op => {
@@ -351,7 +427,7 @@ class LocalDatabase {
     }
   }
 
-  // Carrega todos os dados do banco IndexedDB filtrando ESTRITAMENTE pela organização e expurgando deletados
+  // Carrega todos os dados do banco IndexedDB filtrando ESTRITAMENTE pela organização e expurgando deletados via B-Tree index
   async loadFullAppData(orgId) {
     if (!orgId) {
       return {
@@ -365,12 +441,12 @@ class LocalDatabase {
     }
 
     const [settingsList, raffles, valesAndPrizes, fishingBookings, ranchoBookings, eduardoWorkDays, pendingOps] = await Promise.all([
-      this.getAll('settings'),
-      this.getAll('raffles'),
-      this.getAll('vales_prizes'),
-      this.getAll('fishing_bookings'),
-      this.getAll('rancho_bookings'),
-      this.getAll('eduardo_work_days'),
+      this.getAllByOrg('settings', orgId),
+      this.getAllByOrg('raffles', orgId),
+      this.getAllByOrg('vales_prizes', orgId),
+      this.getAllByOrg('fishing_bookings', orgId),
+      this.getAllByOrg('rancho_bookings', orgId),
+      this.getAllByOrg('eduardo_work_days', orgId),
       this.getPendingOperations(orgId).catch(() => [])
     ]);
 
@@ -418,19 +494,23 @@ class LocalDatabase {
     };
   }
 
-  // Salva todo o snapshot do appData no IndexedDB vinculado ao organization_id com RECONCILIAÇÃO REAL (deleta registros excluídos)
+  // Salva todo o snapshot do appData no IndexedDB vinculado ao organization_id com RECONCILIAÇÃO REAL e BATCH TRANSACTIONS ultra rápidas
   async saveFullAppData(appData, orgId) {
     if (!appData || !orgId) return;
 
     // 1. Settings
     if (appData.settings && typeof appData.settings === 'object') {
       try {
-        const existingSettings = (await this.getAll('settings')).filter(s => s.organization_id === orgId);
+        const existingSettings = await this.getAllByOrg('settings', orgId);
         const targetKeys = new Set(Object.keys(appData.settings));
+        const keysToDelete = [];
         for (const s of existingSettings) {
           if (!String(s.key || '').startsWith('_') && !targetKeys.has(s.key)) {
-            await this.delete('settings', [orgId, s.key]);
+            keysToDelete.push([orgId, s.key]);
           }
+        }
+        if (keysToDelete.length > 0) {
+          await this.deleteBatch('settings', keysToDelete);
         }
         const settingEntries = Object.entries(appData.settings).map(([k, v]) => ({
           key: k,
@@ -448,13 +528,12 @@ class LocalDatabase {
     // 2. Raffles
     if (Array.isArray(appData.raffles)) {
       try {
-        const existingRaffles = (await this.getAll('raffles')).filter(r => r.organization_id === orgId);
+        const existingRaffles = await this.getAllByOrg('raffles', orgId);
         const currentIds = new Set(appData.raffles.map(r => String(r.id)));
-        for (const r of existingRaffles) {
-          if (!currentIds.has(String(r.id))) {
-            console.log(`[LocalDB] Reconciliação: deletando rifa excluída do IndexedDB: ${r.id} (${r.title || ''})`);
-            await this.delete('raffles', r.id);
-          }
+        const idsToDelete = existingRaffles.filter(r => !currentIds.has(String(r.id))).map(r => r.id);
+        if (idsToDelete.length > 0) {
+          console.log(`[LocalDB] Reconciliação em lote: deletando ${idsToDelete.length} rifas excluídas do IndexedDB.`);
+          await this.deleteBatch('raffles', idsToDelete);
         }
         if (appData.raffles.length > 0) {
           const normalizedRaffles = appData.raffles.map(r => {
@@ -472,13 +551,12 @@ class LocalDatabase {
     const valesList = appData.valesAndPrizes || appData.valesPrizes;
     if (Array.isArray(valesList)) {
       try {
-        const existingVales = (await this.getAll('vales_prizes')).filter(v => v.organization_id === orgId);
+        const existingVales = await this.getAllByOrg('vales_prizes', orgId);
         const currentIds = new Set(valesList.map(v => String(v.id)));
-        for (const v of existingVales) {
-          if (!currentIds.has(String(v.id))) {
-            console.log(`[LocalDB] Reconciliação: deletando vale excluído do IndexedDB: ${v.id}`);
-            await this.delete('vales_prizes', v.id);
-          }
+        const idsToDelete = existingVales.filter(v => !currentIds.has(String(v.id))).map(v => v.id);
+        if (idsToDelete.length > 0) {
+          console.log(`[LocalDB] Reconciliação em lote: deletando ${idsToDelete.length} vales excluídos do IndexedDB.`);
+          await this.deleteBatch('vales_prizes', idsToDelete);
         }
         if (valesList.length > 0) {
           await this.putBatch('vales_prizes', valesList.map(v => ({ ...v, organization_id: orgId })));
@@ -491,13 +569,12 @@ class LocalDatabase {
     // 4. Fishing Bookings
     if (Array.isArray(appData.fishingBookings)) {
       try {
-        const existingFishing = (await this.getAll('fishing_bookings')).filter(f => f.organization_id === orgId);
+        const existingFishing = await this.getAllByOrg('fishing_bookings', orgId);
         const currentIds = new Set(appData.fishingBookings.map(f => String(f.id)));
-        for (const f of existingFishing) {
-          if (!currentIds.has(String(f.id))) {
-            console.log(`[LocalDB] Reconciliação: deletando pesca excluída do IndexedDB: ${f.id}`);
-            await this.delete('fishing_bookings', f.id);
-          }
+        const idsToDelete = existingFishing.filter(f => !currentIds.has(String(f.id))).map(f => f.id);
+        if (idsToDelete.length > 0) {
+          console.log(`[LocalDB] Reconciliação em lote: deletando ${idsToDelete.length} reservas de pesca do IndexedDB.`);
+          await this.deleteBatch('fishing_bookings', idsToDelete);
         }
         if (appData.fishingBookings.length > 0) {
           await this.putBatch('fishing_bookings', appData.fishingBookings.map(f => ({ ...f, organization_id: orgId })));
@@ -510,13 +587,12 @@ class LocalDatabase {
     // 5. Rancho Bookings
     if (Array.isArray(appData.ranchoBookings)) {
       try {
-        const existingRancho = (await this.getAll('rancho_bookings')).filter(r => r.organization_id === orgId);
+        const existingRancho = await this.getAllByOrg('rancho_bookings', orgId);
         const currentIds = new Set(appData.ranchoBookings.map(r => String(r.id)));
-        for (const r of existingRancho) {
-          if (!currentIds.has(String(r.id))) {
-            console.log(`[LocalDB] Reconciliação: deletando locação rancho excluída do IndexedDB: ${r.id}`);
-            await this.delete('rancho_bookings', r.id);
-          }
+        const idsToDelete = existingRancho.filter(r => !currentIds.has(String(r.id))).map(r => r.id);
+        if (idsToDelete.length > 0) {
+          console.log(`[LocalDB] Reconciliação em lote: deletando ${idsToDelete.length} locações do rancho do IndexedDB.`);
+          await this.deleteBatch('rancho_bookings', idsToDelete);
         }
         if (appData.ranchoBookings.length > 0) {
           await this.putBatch('rancho_bookings', appData.ranchoBookings.map(r => ({ ...r, organization_id: orgId })));
@@ -529,13 +605,12 @@ class LocalDatabase {
     // 6. Eduardo Work Days (keyPath: ['organization_id', 'date'])
     if (Array.isArray(appData.eduardoWorkDays)) {
       try {
-        const existingEduardo = (await this.getAll('eduardo_work_days')).filter(d => d.organization_id === orgId);
+        const existingEduardo = await this.getAllByOrg('eduardo_work_days', orgId);
         const currentDates = new Set(appData.eduardoWorkDays.map(d => String(d.date)));
-        for (const d of existingEduardo) {
-          if (!currentDates.has(String(d.date))) {
-            console.log(`[LocalDB] Reconciliação: deletando ponto do Eduardo excluído do IndexedDB: ${d.date}`);
-            await this.delete('eduardo_work_days', [orgId, d.date]);
-          }
+        const keysToDelete = existingEduardo.filter(d => !currentDates.has(String(d.date))).map(d => [orgId, d.date]);
+        if (keysToDelete.length > 0) {
+          console.log(`[LocalDB] Reconciliação em lote: deletando ${keysToDelete.length} pontos do Eduardo do IndexedDB.`);
+          await this.deleteBatch('eduardo_work_days', keysToDelete);
         }
         if (appData.eduardoWorkDays.length > 0) {
           await this.putBatch('eduardo_work_days', appData.eduardoWorkDays.map(d => ({ ...d, organization_id: orgId })));
@@ -562,6 +637,7 @@ class LocalDatabase {
 const localDB = (typeof window !== 'undefined' && window.localDB) ? window.localDB : new LocalDatabase();
 if (typeof window !== 'undefined') {
   window.localDB = localDB;
+  window.LocalDatabase = LocalDatabase;
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { LocalDatabase, localDB };

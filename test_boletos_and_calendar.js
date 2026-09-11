@@ -109,7 +109,7 @@ const fnCode = jsContent.substring(
 );
 eval(`evalContext.decodeFebrabanBoleto = ${fnCode}`);
 
-const sampleBoleto47 = '23793.38128 60083.013528 85006.333303 9 15660000053880';
+const sampleBoleto47 = '23793.38128 60083.013528 85006.333307 5 15660000053880';
 const decoded47 = evalContext.decodeFebrabanBoleto(sampleBoleto47);
 assert.strictEqual(decoded47.bankName, 'Bradesco', 'Banco Bradesco identificado pelo código 237');
 assert.strictEqual(decoded47.amount, '538.80', 'Valor de R$ 538,80 extraído com precisão');
