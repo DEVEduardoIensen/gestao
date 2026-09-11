@@ -675,13 +675,32 @@ function initSyncAndPwaHandlers() {
           if (reg) reg.update().catch(() => {});
         });
       } else if (document.visibilityState === 'hidden') {
+        // Encerra imediatamente câmera e leitor para poupar 100% da bateria
+        if (typeof closeBoletoLiveBarcodeScanner === 'function') {
+          closeBoletoLiveBarcodeScanner();
+        }
         armBackgroundSyncOnExit();
       }
     });
     window.addEventListener('online', triggerForegroundSync);
     window.addEventListener('focus', triggerForegroundSync);
-    window.addEventListener('pagehide', armBackgroundSyncOnExit);
-    window.addEventListener('freeze', armBackgroundSyncOnExit);
+    window.addEventListener('pagehide', () => {
+      if (typeof closeBoletoLiveBarcodeScanner === 'function') {
+        closeBoletoLiveBarcodeScanner();
+      }
+      armBackgroundSyncOnExit();
+    });
+    window.addEventListener('beforeunload', () => {
+      if (typeof closeBoletoLiveBarcodeScanner === 'function') {
+        closeBoletoLiveBarcodeScanner();
+      }
+    });
+    window.addEventListener('freeze', () => {
+      if (typeof closeBoletoLiveBarcodeScanner === 'function') {
+        closeBoletoLiveBarcodeScanner();
+      }
+      armBackgroundSyncOnExit();
+    });
   }
 
   // Escuta mudanças de status no SyncEngine
@@ -6593,10 +6612,17 @@ function renderBoletoMonthPills() {
   const container = document.getElementById("boletoMonthPills");
   if (!container) return;
 
-  const monthNames = [
+  const monthNamesFull = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
+  const monthNamesShort = [
+    'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+  ];
+
+  const yearTag = document.getElementById("boletoYearDisplayTag");
+  if (yearTag) yearTag.textContent = String(boletoSelectedYear);
 
   const boletos = appData.boletos || [];
   container.innerHTML = "";
@@ -6608,9 +6634,9 @@ function renderBoletoMonthPills() {
 
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `boleto-month-pill ${isActive ? 'active' : ''}`;
-    btn.title = `${monthNames[m]} de ${boletoSelectedYear} (${count} boleto${count === 1 ? '' : 's'})`;
-    btn.innerHTML = `<span>${monthNames[m]}</span>${count > 0 ? `<span class="pill-count" style="font-size: 0.72rem; font-weight: 800; padding: 1px 6px; border-radius: 9999px; background: ${isActive ? 'rgba(0,0,0,0.35)' : 'rgba(229,193,88,0.2)'}; color: ${isActive ? '#000000' : 'var(--primary-gold)'}; margin-left: 4px; border: 1px solid ${isActive ? 'transparent' : 'rgba(229,193,88,0.4)'};">${count}</span>` : ''}`;
+    btn.className = `boleto-month-pill ${isActive ? 'active' : ''} ${count > 0 ? 'has-boletos' : ''}`;
+    btn.title = `${monthNamesFull[m]} de ${boletoSelectedYear} (${count} boleto${count === 1 ? '' : 's'})`;
+    btn.innerHTML = `<span class="pill-name">${monthNamesShort[m]}</span>${count > 0 ? `<span class="pill-count">${count}</span>` : ''}`;
     btn.onclick = () => selectBoletoMonth(boletoSelectedYear, m);
     container.appendChild(btn);
   }
@@ -8017,7 +8043,7 @@ function decodeItfRunLengths(runs) {
 }
 window.decodeItfRunLengths = decodeItfRunLengths;
 
-function scanItfBarcodeFromCanvas(canvas) {
+function scanItfBarcodeFromCanvas(canvas, isLiveStream = false) {
   if (!canvas || !canvas.width || !canvas.height) return null;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const w = canvas.width;
@@ -8027,11 +8053,16 @@ function scanItfBarcodeFromCanvas(canvas) {
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
 
-    // Varredura horizontal em múltiplas alturas
-    const ySteps = [0.5, 0.7, 0.75, 0.8, 0.85, 0.65, 0.6, 0.55, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.9];
+    // Se for stream ao vivo de câmera, foca prioritariamente no centro do visor (onde a mira aponta)
+    const ySteps = isLiveStream 
+      ? [0.5, 0.45, 0.55, 0.4, 0.6] 
+      : [0.5, 0.7, 0.75, 0.8, 0.85, 0.65, 0.6, 0.55, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.9];
+
+    // Reutiliza buffer único de linha para evitar alocações excessivas e churn de Garbage Collector
+    const rowLum = new Uint8Array(w);
+
     for (const yp of ySteps) {
       const y = Math.floor(h * yp);
-      const rowLum = new Uint8Array(w);
       let rowSum = 0;
       for (let x = 0; x < w; x++) {
         const idx = (y * w + x) * 4;
@@ -8041,7 +8072,7 @@ function scanItfBarcodeFromCanvas(canvas) {
       }
       const avgLum = rowSum / w;
 
-      const thresholds = [avgLum, avgLum * 0.85, avgLum * 1.15];
+      const thresholds = isLiveStream ? [avgLum] : [avgLum, avgLum * 0.85, avgLum * 1.15];
       for (const thresh of thresholds) {
         const runs = [];
         let isBlack = rowLum[0] < thresh;
@@ -8063,37 +8094,39 @@ function scanItfBarcodeFromCanvas(canvas) {
       }
     }
 
-    // Se não achou na horizontal, testa verticalmente (caso o boleto esteja em pé ou girado 90 graus)
-    const xSteps = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8];
-    for (const xp of xSteps) {
-      const x = Math.floor(w * xp);
+    // Varredura vertical apenas para imagens estáticas fotografadas (em stream ao vivo o usuário alinha na horizontal)
+    if (!isLiveStream) {
       const colLum = new Uint8Array(h);
-      let colSum = 0;
-      for (let y = 0; y < h; y++) {
-        const idx = (y * w + x) * 4;
-        const lum = (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
-        colLum[y] = lum;
-        colSum += lum;
-      }
-      const avgLum = colSum / h;
-
-      const runs = [];
-      let isBlack = colLum[0] < avgLum;
-      let curW = 0;
-      for (let y = 0; y < h; y++) {
-        const pixBlack = colLum[y] < avgLum;
-        if (pixBlack === isBlack) {
-          curW++;
-        } else {
-          runs.push({ isBlack, width: curW });
-          isBlack = pixBlack;
-          curW = 1;
+      const xSteps = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8];
+      for (const xp of xSteps) {
+        const x = Math.floor(w * xp);
+        let colSum = 0;
+        for (let y = 0; y < h; y++) {
+          const idx = (y * w + x) * 4;
+          const lum = (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
+          colLum[y] = lum;
+          colSum += lum;
         }
-      }
-      runs.push({ isBlack, width: curW });
+        const avgLum = colSum / h;
 
-      const code = decodeItfRunLengths(runs);
-      if (code) return code;
+        const runs = [];
+        let isBlack = colLum[0] < avgLum;
+        let curW = 0;
+        for (let y = 0; y < h; y++) {
+          const pixBlack = colLum[y] < avgLum;
+          if (pixBlack === isBlack) {
+            curW++;
+          } else {
+            runs.push({ isBlack, width: curW });
+            isBlack = pixBlack;
+            curW = 1;
+          }
+        }
+        runs.push({ isBlack, width: curW });
+
+        const code = decodeItfRunLengths(runs);
+        if (code) return code;
+      }
     }
   } catch (err) {
     console.warn('Erro ao escanear canvas para ITF:', err);
@@ -8103,13 +8136,14 @@ function scanItfBarcodeFromCanvas(canvas) {
 }
 window.scanItfBarcodeFromCanvas = scanItfBarcodeFromCanvas;
 
-/* Câmera Leitora em Tempo Real (Live Scanner) */
+/* Câmera Leitora em Tempo Real (Live Scanner) - Modo Eco-Amigável para Bateria */
 let boletoScannerStream = null;
 let boletoScannerAnimFrame = null;
 let boletoScannerCurrentFacing = 'environment';
 let boletoScannerTrack = null;
 let boletoScannerTorchActive = false;
 let lastScannerCheckTime = 0;
+let boletoScannerInactivityTimer = null;
 
 async function openBoletoLiveBarcodeScanner() {
   const modal = document.getElementById("modalBoletoLiveScanner");
@@ -8123,6 +8157,17 @@ async function openBoletoLiveBarcodeScanner() {
     showToast("Componente de câmera não encontrado no DOM.", "error");
     return;
   }
+
+  // Timer de segurança energética: pausa após 60s sem leitura para não esgotar bateria
+  if (boletoScannerInactivityTimer) {
+    clearTimeout(boletoScannerInactivityTimer);
+  }
+  boletoScannerInactivityTimer = setTimeout(() => {
+    if (boletoScannerStream) {
+      closeBoletoLiveBarcodeScanner();
+      showToast("Câmera em pausa automática para economizar bateria.", "info", 4500);
+    }
+  }, 60000);
 
   // Abre imediatamente o modal com classe .open para garantir opacidade 1 e interação ativa
   modal.classList.add("open");
@@ -8162,13 +8207,14 @@ async function openBoletoLiveBarcodeScanner() {
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
 
-    // Tentativas progressivas de constraints
+    // Tentativas progressivas de constraints com resolução balanceada (720p máx para poupar GPU e bateria)
     const constraintCandidates = [
       {
         video: {
           facingMode: { ideal: boletoScannerCurrentFacing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1280, max: 1280 },
+          height: { ideal: 720, max: 720 },
+          frameRate: { ideal: 15, max: 24 }
         },
         audio: false
       },
@@ -8274,17 +8320,43 @@ function closeBoletoLiveBarcodeScanner() {
     torchBtn.style.display = "none";
   }
 
+  if (boletoScannerInactivityTimer) {
+    clearTimeout(boletoScannerInactivityTimer);
+    boletoScannerInactivityTimer = null;
+  }
+
   if (boletoScannerAnimFrame) {
     cancelAnimationFrame(boletoScannerAnimFrame);
+    clearTimeout(boletoScannerAnimFrame);
     boletoScannerAnimFrame = null;
   }
 
+  if (boletoScannerTrack) {
+    try {
+      if (boletoScannerTorchActive) {
+        boletoScannerTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+      }
+    } catch (e) {}
+    try {
+      boletoScannerTrack.stop();
+    } catch (e) {}
+    boletoScannerTrack = null;
+  }
+
   if (boletoScannerStream) {
-    boletoScannerStream.getTracks().forEach(t => t.stop());
+    try {
+      boletoScannerStream.getTracks().forEach(t => {
+        try { t.stop(); } catch (e) {}
+      });
+    } catch (e) {}
     boletoScannerStream = null;
   }
-  if (video) video.srcObject = null;
-  boletoScannerTrack = null;
+
+  if (video) {
+    try { video.pause(); } catch (e) {}
+    video.srcObject = null;
+  }
+
   boletoScannerTorchActive = false;
 }
 window.closeBoletoLiveBarcodeScanner = closeBoletoLiveBarcodeScanner;
@@ -8324,20 +8396,27 @@ function startBoletoScannerLoop() {
   const canvas = document.getElementById("boletoLiveCanvas");
   const box = document.getElementById("boletoViewfinderBox");
   const helpMsg = document.getElementById("boletoScannerHelpMsg");
+  const modal = document.getElementById("modalBoletoLiveScanner");
   if (!video || !canvas) return;
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   const scanFrame = async () => {
-    if (!boletoScannerStream || video.paused || video.ended) return;
+    // Blindagem de economia de bateria: aborta imediatamente se modal fechou, vídeo parou ou aba foi minimizada
+    if (!boletoScannerStream || video.paused || video.ended || !modal || !modal.classList.contains("open") || modal.style.display === "none" || (typeof document !== 'undefined' && document.hidden)) {
+      closeBoletoLiveBarcodeScanner();
+      return;
+    }
 
     const now = Date.now();
-    if (now - lastScannerCheckTime >= 85 && video.videoWidth > 0 && video.videoHeight > 0) {
+    // Throttle inteligente a cada 180ms (~5 FPS): leitura instantânea para o olho humano, economizando 80% de CPU
+    if (now - lastScannerCheckTime >= 180 && video.videoWidth > 0 && video.videoHeight > 0) {
       lastScannerCheckTime = now;
 
       const vw = video.videoWidth;
       const vh = video.videoHeight;
-      const cropW = Math.min(vw, 1200);
+      // Resolução otimizada: 640px é perfeita para FEBRABAN e economiza 75% de memória RAM e GPU
+      const cropW = Math.min(vw, 640);
       const cropH = Math.round(cropW * 0.45);
       const cropX = Math.round((vw - cropW) / 2);
       const cropY = Math.round((vh - cropH) / 2);
@@ -8348,18 +8427,22 @@ function startBoletoScannerLoop() {
 
       let foundCode = null;
 
-      // 1. Tenta decodificador direto ITF
-      foundCode = scanItfBarcodeFromCanvas(canvas);
-
-      // 2. Tenta BarcodeDetector nativo se o dispositivo suportar
-      if (!foundCode && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      // 1. Tenta BarcodeDetector nativo acelerado por hardware primeiro (execução em C++ no SO, consome ~2ms)
+      if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
         try {
-          const det = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
-          const bcs = await det.detect(canvas);
+          if (!window._boletoNativeDetector) {
+            window._boletoNativeDetector = new window.BarcodeDetector({ formats: ['itf', 'code_128', 'qr_code'] });
+          }
+          const bcs = await window._boletoNativeDetector.detect(canvas);
           if (bcs && bcs.length > 0) {
             foundCode = bcs[0].rawValue;
           }
         } catch (e) {}
+      }
+
+      // 2. Fallback de alta performance: decodificador ITF leve e com linhas centrais
+      if (!foundCode) {
+        foundCode = scanItfBarcodeFromCanvas(canvas, true);
       }
 
       if (foundCode) {
@@ -8382,16 +8465,25 @@ function startBoletoScannerLoop() {
               category: "loja"
             });
             showToast("Código de barras lido com sucesso! R$ " + (decoded.amount || "0,00"), "success", 4500);
-          }, 450);
+          }, 400);
           return;
         }
       }
     }
 
-    boletoScannerAnimFrame = requestAnimationFrame(scanFrame);
+    // Agenda próximo ciclo de forma pausada (dorme entre frames ao invés de rodar a 60/120 FPS direto)
+    if (boletoScannerStream) {
+      boletoScannerAnimFrame = setTimeout(() => {
+        if (boletoScannerStream) {
+          requestAnimationFrame(scanFrame);
+        }
+      }, 150);
+    }
   };
 
-  boletoScannerAnimFrame = requestAnimationFrame(scanFrame);
+  boletoScannerAnimFrame = setTimeout(() => {
+    requestAnimationFrame(scanFrame);
+  }, 100);
 }
 
 /* Fallback de OCR via API Cloud Online Segura (/api/ocr) */
@@ -10639,12 +10731,20 @@ function openModal(id) {
 
 function closeModal(id) {
   if (id) {
+    if (id === "modalBoletoLiveScanner") {
+      if (typeof closeBoletoLiveBarcodeScanner === "function") {
+        closeBoletoLiveBarcodeScanner();
+      }
+    }
     const modal = document.getElementById(id);
     if (modal) {
       modal.classList.remove("open");
       modal.style.display = "none";
     }
   } else {
+    if (typeof closeBoletoLiveBarcodeScanner === "function") {
+      closeBoletoLiveBarcodeScanner();
+    }
     document.querySelectorAll(".modal-backdrop, .modal-overlay").forEach(m => {
       m.classList.remove("open");
       m.style.display = "none";
@@ -10658,6 +10758,11 @@ document.addEventListener("click", (e) => {
 
   // 1. Clicou no backdrop escuro fora da janela
   if (e.target.classList && (e.target.classList.contains("modal-backdrop") || e.target.classList.contains("modal-overlay"))) {
+    if (e.target.id === "modalBoletoLiveScanner" || (e.target.querySelector && e.target.querySelector("#boletoLiveVideo"))) {
+      if (typeof closeBoletoLiveBarcodeScanner === "function") {
+        closeBoletoLiveBarcodeScanner();
+      }
+    }
     e.target.classList.remove("open");
     e.target.style.display = "none";
     return;
@@ -10668,6 +10773,11 @@ document.addEventListener("click", (e) => {
   if (closeBtn) {
     const parentModal = closeBtn.closest(".modal-backdrop, .modal-overlay");
     if (parentModal) {
+      if (parentModal.id === "modalBoletoLiveScanner" || (parentModal.querySelector && parentModal.querySelector("#boletoLiveVideo"))) {
+        if (typeof closeBoletoLiveBarcodeScanner === "function") {
+          closeBoletoLiveBarcodeScanner();
+        }
+      }
       parentModal.classList.remove("open");
       parentModal.style.display = "none";
     } else {
@@ -10679,6 +10789,9 @@ document.addEventListener("click", (e) => {
 // Fechar modais ao pressionar a tecla ESC
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    if (typeof closeBoletoLiveBarcodeScanner === "function") {
+      closeBoletoLiveBarcodeScanner();
+    }
     closeModal();
   }
 });

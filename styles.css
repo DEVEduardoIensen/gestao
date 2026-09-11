@@ -3930,33 +3930,255 @@ html.show-auth-gate .offline-bar {
   border-radius: 9999px;
 }
 
-/* Month Pills */
-.boleto-month-pill {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-light);
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.3rem 0.7rem;
-  border-radius: 9999px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+/* ==========================================================================
+   BOLETO MONTH SELECTOR CARD (MODERN FINANCIAL GLASSMORPHISM)
+   ========================================================================== */
+.boleto-month-selector-card {
+  background: linear-gradient(145deg, rgba(13, 22, 38, 0.88) 0%, rgba(6, 10, 19, 0.95) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(229, 193, 88, 0.22);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  transition: border-color var(--transition-fast);
+}
+
+.boleto-month-selector-card:hover {
+  border-color: rgba(229, 193, 88, 0.35);
+}
+
+.boleto-month-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.boleto-nav-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.boleto-nav-arrow-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-light);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.boleto-nav-arrow-btn:hover {
+  background: rgba(229, 193, 88, 0.15);
+  border-color: var(--primary-gold);
+  color: var(--primary-gold);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 193, 88, 0.2);
+}
+
+.boleto-nav-arrow-btn:active {
+  transform: translateY(0);
+}
+
+.boleto-active-month-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: rgba(6, 10, 19, 0.65);
+  border: 1px solid rgba(229, 193, 88, 0.3);
+  padding: 0.45rem 1.15rem;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.boleto-active-month-badge .calendar-icon {
+  color: var(--primary-gold);
+  flex-shrink: 0;
+}
+
+.boleto-active-month-text {
+  font-family: var(--font-heading);
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.boleto-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.boleto-btn-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(229, 193, 88, 0.08);
+  border: 1px solid rgba(229, 193, 88, 0.3);
+  color: var(--primary-gold);
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.boleto-btn-today:hover {
+  background: rgba(229, 193, 88, 0.18);
+  border-color: var(--primary-gold);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 193, 88, 0.25);
+}
+
+.boleto-today-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary-gold);
+  box-shadow: 0 0 8px var(--primary-gold);
+}
+
+/* Months Bar */
+.boleto-months-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.boleto-months-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.boleto-months-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.boleto-year-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 12-Month Pills Grid */
+.boleto-month-pills-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0.45rem;
+  width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .boleto-month-pills-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .boleto-month-pills-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Individual Month Pill */
+.boleto-month-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.25rem;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 48px;
+  transition: all var(--transition-fast);
+  user-select: none;
+  position: relative;
 }
 
 .boleto-month-pill:hover {
-  background: rgba(229, 193, 88, 0.12);
-  color: var(--text-light);
-  border-color: var(--border-gold);
+  background: rgba(229, 193, 88, 0.08);
+  border-color: rgba(229, 193, 88, 0.35);
+  color: var(--primary-gold-light);
+  transform: translateY(-2px);
+}
+
+.boleto-month-pill.has-boletos {
+  border-color: rgba(229, 193, 88, 0.25);
+  background: rgba(229, 193, 88, 0.04);
 }
 
 .boleto-month-pill.active {
-  background: var(--primary-gold);
-  color: #000;
+  background: linear-gradient(135deg, #e5c158 0%, #cfab44 100%);
+  border-color: #f5dfa0;
+  color: #060a13 !important;
   font-weight: 800;
-  border-color: var(--primary-gold);
+  box-shadow: 0 4px 16px rgba(229, 193, 88, 0.38);
+  transform: translateY(-2px);
+}
+
+.boleto-month-pill.active .pill-name {
+  color: #060a13;
+  font-weight: 800;
+}
+
+.boleto-month-pill .pill-name {
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.boleto-month-pill .pill-count {
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(229, 193, 88, 0.16);
+  color: var(--primary-gold);
+  border: 1px solid rgba(229, 193, 88, 0.4);
+}
+
+.boleto-month-pill.active .pill-count {
+  background: rgba(6, 10, 19, 0.3);
+  color: #060a13;
+  border-color: rgba(6, 10, 19, 0.15);
 }
 
 /* Responsividade Mobile para Boletos e Botão Copiar Linha Digitável */
@@ -4063,12 +4285,14 @@ html.show-auth-gate .offline-bar {
   height: 3px;
   background: linear-gradient(90deg, transparent, #ef4444 20%, #f59e0b 50%, #ef4444 80%, transparent);
   box-shadow: 0 0 10px #ef4444, 0 0 20px #f59e0b;
+  will-change: transform;
+  transform: translate3d(0, 8px, 0);
   animation: scanLaserAnim 1.8s ease-in-out infinite alternate;
 }
 
 @keyframes scanLaserAnim {
-  0% { top: 6%; }
-  100% { top: 92%; }
+  0% { transform: translate3d(0, 8px, 0); }
+  100% { transform: translate3d(0, 135px, 0); }
 }
 
 .scanner-corner {

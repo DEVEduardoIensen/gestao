@@ -97,8 +97,12 @@ class SyncEngine {
       window.localDB.recoverAbandonedOperations().catch(() => {});
     }
 
-    // Processamento periódico gentil (heartbeat a cada 60s em vez de loop agressivo de 5s)
+    // Processamento periódico gentil (heartbeat a cada 60s em primeiro plano; repouso total em background para poupar bateria)
     this.syncInterval = setInterval(() => {
+      // Se a aba estiver em segundo plano ou tela desligada, não desperdiça bateria nem acorda a CPU
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isOnline) {
         this.isOnline = true;
         this.initRealtimeSubscription();

@@ -176,12 +176,27 @@ if (!gotTheLock) {
       mainWindow = null;
     });
 
-    // Disparador periódico de sincronização em segundo plano (a cada 20 segundos)
+    // Disparador de sincronização inteligente e econômico (a cada 3 minutos quando visível, ou imediatamente ao focar/restaurar)
     setInterval(() => {
+      if (mainWindow && mainWindow.webContents && !mainWindow.isDestroyed()) {
+        const isVisible = mainWindow.isVisible() && !mainWindow.isMinimized();
+        if (isVisible) {
+          mainWindow.webContents.send('trigger-background-sync');
+        }
+      }
+    }, 180000);
+
+    mainWindow.on('show', () => {
       if (mainWindow && mainWindow.webContents && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('trigger-background-sync');
       }
-    }, 20000);
+    });
+
+    mainWindow.on('focus', () => {
+      if (mainWindow && mainWindow.webContents && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('trigger-background-sync');
+      }
+    });
   }
 
   // Recebe atualizações de status da sincronização do renderer

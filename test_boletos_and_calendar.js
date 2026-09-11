@@ -25,9 +25,9 @@ assert(agendaPos !== -1, 'tabBtnAgenda existe');
 assert(instaPos !== -1, 'tabBtnInstagram existe');
 assert(ranchoPos !== -1, 'tabBtnRancho existe');
 assert(boletosPos !== -1, 'tabBtnBoletos existe');
-assert(agendaPos < instaPos && instaPos < ranchoPos && ranchoPos < boletosPos,
-  'Ordem estrita respeitada: Agenda -> Instagram -> Rancho -> Boletos');
-console.log('  ✓ [PASS] Ordem dos botões no index.html: Agenda -> Instagram -> Rancho -> Boletos');
+assert(agendaPos < boletosPos && boletosPos < ranchoPos,
+  'Ordem estrita respeitada: Agenda -> Boletos -> Rancho');
+console.log('  ✓ [PASS] Ordem dos botões no index.html: Agenda -> Boletos -> Rancho');
 
 // 2. Verificação da Aba Boletos e Ausência de Botão PWA (conforme solicitação do usuário)
 console.log('\n2. Verificando Estrutura da Aba Boletos:');

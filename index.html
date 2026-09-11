@@ -144,14 +144,14 @@
         <button class="nav-tab-btn" data-tab="tab-agenda" id="tabBtnAgenda">
           Agenda de Pesca
         </button>
-        <button class="nav-tab-btn" data-tab="tab-instagram" id="tabBtnInstagram">
-          Instagram
+        <button class="nav-tab-btn" data-tab="tab-boletos" id="tabBtnBoletos">
+          Boletos
         </button>
         <button class="nav-tab-btn" data-tab="tab-rancho" id="tabBtnRancho">
           Rancho
         </button>
-        <button class="nav-tab-btn" data-tab="tab-boletos" id="tabBtnBoletos">
-          Boletos
+        <button class="nav-tab-btn" data-tab="tab-instagram" id="tabBtnInstagram">
+          Instagram
         </button>
         <button class="nav-tab-btn" data-tab="tab-eduardo" id="tabBtnEduardo">
           Ponto do Eduardo
@@ -782,70 +782,6 @@
         </div>
       </div>
 
-      <!-- Datas Sazonais Integradas -->
-      <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 0.65rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-        <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-light);">
-          Datas Sazonais Integradas (16 Semanas):
-        </div>
-        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Primavera: 22/09</span>
-          <span class="badge" style="background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Dia das Criancas: 12/10</span>
-          <span class="badge" style="background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Black Friday: 23 a 30/11</span>
-          <span class="badge" style="background: rgba(52, 211, 153, 0.12); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); font-size: 0.72rem; padding: 0.2rem 0.55rem;">Natal &amp; Verao: Dezembro</span>
-        </div>
-      </div>
-
-      <!-- Filtros e Consulta de Lembretes -->
-      <div class="grid-controls-bar" style="margin-bottom: 1rem; gap: 0.75rem; flex-direction: column; align-items: stretch;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
-          <div class="legend-items" style="flex-wrap: wrap;">
-            <button type="button" class="btn btn-secondary btn-sm active" id="filterInstaAll" onclick="setInstagramFilter('all')">Todos</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaSteelfish" onclick="setInstagramFilter('steelfish')">Steelfish (2/sem)</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaFishingCo" onclick="setInstagramFilter('fishing_company')">Fishing Co. (2/sem)</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaTrFishing" onclick="setInstagramFilter('tr_fishing')">TR Fishing (1/sem)</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaMathias" onclick="setInstagramFilter('iscas_mathias')">Iscas Mathias (1/sem)</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaTitan" onclick="setInstagramFilter('titan_caiaques')">Titan (2/mes)</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaSponsors" onclick="setInstagramFilter('sponsors')">Patrocinadores</button>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-            <div style="display: flex; background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 2px;">
-              <button type="button" class="btn btn-secondary btn-sm" id="btnViewInstagramCards" onclick="setInstagramViewMode('cards')" style="border: none; padding: 0.3rem 0.65rem; font-size: 0.75rem;">Cards</button>
-              <button type="button" class="btn btn-secondary btn-sm active" id="btnViewInstagramTable" onclick="setInstagramViewMode('table')" style="border: none; padding: 0.3rem 0.65rem; font-size: 0.75rem;">Tabela / Lista</button>
-            </div>
-            <input type="text" id="inputSearchInstagram" class="search-input" placeholder="Buscar por tema ou marca..." oninput="renderInstagramPostsList()" style="max-width: 220px;">
-          </div>
-        </div>
-
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-top: 1px solid var(--border-light); padding-top: 0.65rem;">
-          <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-            <span style="font-size: 0.75rem; color: var(--text-dim); font-weight: 700;">Mes:</span>
-            <button type="button" class="btn btn-secondary btn-sm active" id="filterMonthAll" onclick="setInstagramMonthFilter('all')">Todos</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthSep" onclick="setInstagramMonthFilter('2026-09')">Setembro</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthOct" onclick="setInstagramMonthFilter('2026-10')">Outubro</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthNov" onclick="setInstagramMonthFilter('2026-11')">Novembro</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterMonthDec" onclick="setInstagramMonthFilter('2026-12')">Dezembro</button>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-            <span style="font-size: 0.75rem; color: var(--text-dim); font-weight: 700;">Status:</span>
-            <button type="button" class="btn btn-secondary btn-sm active" id="filterStatusAll" onclick="setInstagramStatusFilter('all')">Todos</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaDraft" onclick="setInstagramStatusFilter('draft')">Planejados</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaProducing" onclick="setInstagramStatusFilter('producing')">Gravando</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaReady" onclick="setInstagramStatusFilter('ready')">Prontos</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="filterInstaPublished" onclick="setInstagramStatusFilter('published')">Postados</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Instagram Posts Grid Container (Cards View) -->
-      <div class="cards-grid-2" id="instagramPostsContainer" style="display: none;">
-        <!-- Rendered by JS -->
-      </div>
-
-      <!-- Instagram Posts Table Container (Table View) -->
-      <div id="instagramTableView" style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 0.5rem;">
-        <!-- Rendered by JS -->
-      </div>
-
     </section>
 
     <!-- ====================================================================
@@ -1043,14 +979,6 @@
               Lê PDFs de empresas, relatórios de contas, fotos da linha digitável e códigos de barras com QR Code automático
             </div>
           </div>
-          <div style="margin-left: auto; display: flex; gap: 0.5rem;">
-            <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; padding: 0.25rem 0.6rem;">
-              Linha de 47/48 dígitos
-            </span>
-            <span class="badge" style="background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); font-size: 0.72rem; padding: 0.25rem 0.6rem;">
-              Auto-Vencimento &amp; Valor
-            </span>
-          </div>
         </div>
 
         <!-- Banner de Progresso do OCR -->
@@ -1093,24 +1021,56 @@
         </div>
       </div>
 
-      <!-- Seletor de Meses Idêntico à Agenda de Pesca (Design Profissional e Navegação Completa) -->
-      <div class="calendar-card" style="margin-bottom: 1.5rem; padding: 1.25rem 1.5rem;">
-        <div class="month-picker-bar" style="margin-bottom: 0;">
-          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-            <button type="button" class="btn btn-secondary btn-sm" id="btnBoletoCalPrevMonth" onclick="changeBoletoMonth(-1)" title="Mês Anterior">◀ Mês Anterior</button>
-            <h3 class="month-label" id="boletoCurrentMonthLabel" style="margin: 0; min-width: 190px;">Setembro de 2026</h3>
-            <button type="button" class="btn btn-secondary btn-sm" id="btnBoletoCalNextMonth" onclick="changeBoletoMonth(1)" title="Próximo Mês">Próximo Mês ▶</button>
+      <!-- Seletor e Navegador de Meses de Boletos (Design Moderno & Glassmorphism PRO) -->
+      <div class="boleto-month-selector-card">
+        <!-- Linha Superior: Controles de Navegação e Botão Hoje -->
+        <div class="boleto-month-selector-header">
+          <div class="boleto-nav-cluster">
+            <button type="button" class="boleto-nav-arrow-btn" id="btnBoletoCalPrevMonth" onclick="changeBoletoMonth(-1)" title="Mês Anterior" aria-label="Mês Anterior">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+
+            <div class="boleto-active-month-badge">
+              <svg class="calendar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <h3 class="boleto-active-month-text" id="boletoCurrentMonthLabel">Setembro de 2026</h3>
+            </div>
+
+            <button type="button" class="boleto-nav-arrow-btn" id="btnBoletoCalNextMonth" onclick="changeBoletoMonth(1)" title="Próximo Mês" aria-label="Próximo Mês">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
           </div>
-          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <button type="button" class="btn btn-secondary btn-sm" id="btnBoletoCalToday" onclick="goToBoletoToday()" title="Ir para o mês atual">Ir para Hoje</button>
+
+          <div class="boleto-nav-actions">
+            <button type="button" class="boleto-btn-today" id="btnBoletoCalToday" onclick="goToBoletoToday()" title="Ir para o mês atual">
+              <span class="boleto-today-pulse"></span>
+              <span>Ir para Hoje</span>
+            </button>
           </div>
         </div>
 
-        <!-- Barra com todos os 12 Meses do Ano Selecionado -->
-        <div style="margin-top: 1.15rem; padding-top: 0.85rem; border-top: 1px solid var(--border-light); display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Meses de Vencimento:</span>
-          <div id="boletoMonthPills" style="display: flex; gap: 0.35rem; flex-wrap: wrap; flex: 1;">
-            <!-- Rendered by JS: Todos os 12 meses (Janeiro a Dezembro) com contadores -->
+        <!-- Linha Inferior: 12 Meses de Vencimento com Grid Alinhado e Badges -->
+        <div class="boleto-months-bar">
+          <div class="boleto-months-title-row">
+            <div class="boleto-months-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--primary-gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>Meses de Vencimento</span>
+            </div>
+            <span class="boleto-year-pill" id="boletoYearDisplayTag">2026</span>
+          </div>
+          <div id="boletoMonthPills" class="boleto-month-pills-grid">
+            <!-- Rendered by JS: 12 meses elegantes -->
           </div>
         </div>
       </div>
