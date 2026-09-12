@@ -3,6 +3,17 @@
  * Clean, High-Performance Management for Raffles, Store Credit (Vales), Prize Winner Sorter, Prize Exchanges, Fishing Agenda (Eldorado Lake) & Employee Days
  */
 
+const CURRENT_APP_VERSION = '2.9.9';
+window.CURRENT_APP_VERSION = CURRENT_APP_VERSION;
+
+function syncAppVersionDisplay() {
+  const badge = document.getElementById('appVersionBadge');
+  if (badge) {
+    badge.textContent = `v${CURRENT_APP_VERSION} PRO`;
+  }
+}
+window.syncAppVersionDisplay = syncAppVersionDisplay;
+
 // Universal Local Date Formatting Helper (Prevents UTC timezone shifts in Brazil / UTC-3)
 function getLocalDateStr(d = new Date()) {
   if (!d) d = new Date();
@@ -121,19 +132,27 @@ function sanitizeAppData(data) {
   if (!Array.isArray(data.ranchoBookings)) {
     data.ranchoBookings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.ranchoBookings)) ? INITIAL_SAMPLE_DATA.ranchoBookings : [];
   }
-  if (typeof window !== 'undefined' && Array.isArray(window.OFFICIAL_INSTAGRAM_104_POSTS) && window.OFFICIAL_INSTAGRAM_104_POSTS.length > 0) {
-    const hasLongTitles = Array.isArray(data.instagramPosts) && data.instagramPosts.some(p => p.title && (p.title.length > 25 || p.title.includes(':') || p.title.includes('[')));
-    const isSampleOnly = Array.isArray(data.instagramPosts) && data.instagramPosts.length <= 5 && data.instagramPosts.some(p => String(p.id).startsWith('insta-sample'));
-    if (!Array.isArray(data.instagramPosts) || data.instagramPosts.length === 0 || hasLongTitles || isSampleOnly) {
-      data.instagramPosts = JSON.parse(JSON.stringify(window.OFFICIAL_INSTAGRAM_104_POSTS));
-      if (!data.settings) data.settings = {};
-      data.settings.instagramPosts = data.instagramPosts;
-    }
-  } else if (!Array.isArray(data.instagramPosts)) {
+  // Instagram Posts: prioriza dados persistidos (seja em data.instagramPosts ou em data.settings.instagramPosts)
+  if (!Array.isArray(data.instagramPosts)) {
     data.instagramPosts = (data.settings && Array.isArray(data.settings.instagramPosts))
       ? data.settings.instagramPosts
-      : [];
+      : null;
   }
+
+  // Verifica se contém apenas o mock antigo demo (insta-sample-X) para migração única
+  const isSampleOnly = Array.isArray(data.instagramPosts) && data.instagramPosts.length > 0 && data.instagramPosts.length <= 5 && data.instagramPosts.every(p => p && String(p.id).startsWith('insta-sample'));
+
+  // Se for nulo (primeira instalação) ou se for apenas o mock antigo, carrega os 104 posts oficiais
+  if (data.instagramPosts === null || isSampleOnly) {
+    if (typeof window !== 'undefined' && Array.isArray(window.OFFICIAL_INSTAGRAM_104_POSTS) && window.OFFICIAL_INSTAGRAM_104_POSTS.length > 0) {
+      data.instagramPosts = JSON.parse(JSON.stringify(window.OFFICIAL_INSTAGRAM_104_POSTS));
+    } else {
+      data.instagramPosts = [];
+    }
+  }
+
+  if (!data.settings) data.settings = {};
+  data.settings.instagramPosts = data.instagramPosts;
   if (!Array.isArray(data.boletos)) {
     data.boletos = (data.settings && Array.isArray(data.settings.boletos))
       ? data.settings.boletos
@@ -149,6 +168,7 @@ function sanitizeAppData(data) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  syncAppVersionDisplay();
   await initAppState();
   setupEventListeners();
   renderAll();
@@ -431,12 +451,22 @@ window.mergeRemoteData = async function(remoteData) {
             else if (op.type === 'UPDATE_SETTINGS') {
               if (!sanitized.settings) sanitized.settings = {};
               sanitized.settings[op.payload.key] = op.payload.value;
+              if (op.payload.key === 'instagramPosts') {
+                sanitized.instagramPosts = op.payload.value;
+              } else if (op.payload.key === 'boletos') {
+                sanitized.boletos = op.payload.value;
+              }
             }
           });
         }
       } catch (err) {
         console.warn('[SmartMerge] Nota sobre verificação de fila pendente:', err);
       }
+    }
+
+    // Sincroniza arrays top-level a partir de settings caso existam
+    if (sanitized.settings && Array.isArray(sanitized.settings.instagramPosts)) {
+      sanitized.instagramPosts = sanitized.settings.instagramPosts;
     }
 
     // Define rifa ativa (prioriza a ação mais alta se não escolhida manualmente ou se a atual não existir mais)
@@ -459,6 +489,9 @@ window.mergeRemoteData = async function(remoteData) {
     renderAll();
     if (activeTab === 'tab-boletos' && typeof renderBoletosView === 'function') {
       renderBoletosView();
+    }
+    if (activeTab === 'tab-instagram' && typeof renderInstagramView === 'function') {
+      renderInstagramView();
     }
     updateGlobalStats();
 
@@ -732,7 +765,7 @@ window.forceCheckAppUpdate = async function() {
       // Limpa caches antigos obsoletos
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const activeCache = 'eldorado-pwa-v2.9.3';
+        const activeCache = 'eldorado-pwa-v' + CURRENT_APP_VERSION;
         await Promise.all(
           cacheNames.map(name => {
             if (name !== activeCache) {
@@ -742,7 +775,8 @@ window.forceCheckAppUpdate = async function() {
         );
       }
 
-      showToast('O aplicativo já está na versão mais recente (v2.9.3 PRO)!', 'success');
+      syncAppVersionDisplay();
+      showToast(`O aplicativo já está na versão mais recente (v${CURRENT_APP_VERSION} PRO)!`, 'success');
     } else {
       window.location.reload();
     }
@@ -5646,16 +5680,8 @@ function renderInstagramCalendar() {
         sponsorName = 'Fishing Company';
       }
 
-      // Nome limpo: somente o nome do patrocinador ou o nome digitado no post
-      let displayName = (p.title || '').trim();
-      if (sponsorName) {
-        if (!displayName || displayName.length > 25 || displayName.toLowerCase().includes('primavera') || displayName.includes(':') || displayName.includes('[')) {
-          displayName = sponsorName;
-        }
-      }
-      if (!displayName) {
-        displayName = sponsorName || p.brand || 'Post';
-      }
+      // Nome limpo: prioriza título digitado pelo usuário ou o patrocinador
+      let displayName = (p.title || p.brand || sponsorName || 'Post').trim();
 
       innerHtml += `
         <div class="${chipClass} ${isPub ? 'chip-published' : ''}" 
@@ -6008,11 +6034,7 @@ function openEditInstagramPostModal(postId) {
 
   const titleEl = document.getElementById("instaPostTitle");
   if (titleEl) {
-    let cleanTitle = (post.title || post.brand || "").trim();
-    if (cleanTitle.length > 25 || cleanTitle.includes(':') || cleanTitle.includes('[')) {
-      cleanTitle = post.brand || cleanTitle.split(':')[0].replace(/\[|\]/g, '').trim();
-    }
-    titleEl.value = cleanTitle;
+    titleEl.value = (post.title || post.brand || "").trim();
     setTimeout(() => titleEl.focus(), 60);
   }
 
@@ -6025,7 +6047,7 @@ window.openEditInstagramPostModal = openEditInstagramPostModal;
 
 async function handleSaveInstagramPostSubmit(e) {
   e.preventDefault();
-  const idInput = document.getElementById("instaPostId").value;
+  const idInput = (document.getElementById("instaPostId") ? document.getElementById("instaPostId").value : '').trim();
   const isEditing = !!idInput;
   const postId = isEditing ? idInput : ('insta-' + Date.now());
 
@@ -6074,6 +6096,15 @@ async function handleSaveInstagramPostSubmit(e) {
   if (!appData.settings) appData.settings = {};
   appData.settings.instagramPosts = appData.instagramPosts;
 
+  // Garante que o calendário navegue para o mês do post para o usuário vê-lo instantaneamente
+  if (dateVal) {
+    const parts = dateVal.split('-');
+    if (parts.length === 3) {
+      instagramCalSelectedYear = parseInt(parts[0], 10);
+      instagramCalSelectedMonth = parseInt(parts[1], 10) - 1;
+    }
+  }
+
   await saveState({
     type: 'UPDATE_SETTINGS',
     payload: {
@@ -6082,6 +6113,7 @@ async function handleSaveInstagramPostSubmit(e) {
     }
   });
 
+  activeInstagramPostId = null;
   closeModal("modalInstagramPost");
   showToast(isEditing ? "Post atualizado!" : "Post salvo com sucesso!", "success");
   renderInstagramView();
@@ -6103,6 +6135,7 @@ async function deleteInstagramPost(postId) {
     }
   });
 
+  activeInstagramPostId = null;
   closeModal("modalInstagramPost");
   showToast("Post excluído com sucesso.", "info");
   renderInstagramView();
@@ -6110,8 +6143,9 @@ async function deleteInstagramPost(postId) {
 window.deleteInstagramPost = deleteInstagramPost;
 
 function deleteActiveInstagramPost() {
-  if (activeInstagramPostId) {
-    deleteInstagramPost(activeInstagramPostId);
+  const targetId = activeInstagramPostId || (document.getElementById("instaPostId") ? document.getElementById("instaPostId").value : null);
+  if (targetId) {
+    deleteInstagramPost(targetId);
   }
 }
 window.deleteActiveInstagramPost = deleteActiveInstagramPost;

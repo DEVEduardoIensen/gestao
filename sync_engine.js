@@ -225,6 +225,36 @@ class SyncEngine {
       }
     }
 
+    // Se for atualização da tabela de configurações para o Instagram
+    if (table === 'settings' && newRec && newRec.key === 'instagramPosts') {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      try {
+        let parsed = newRec.value;
+        if (typeof parsed === 'string') {
+          try { parsed = JSON.parse(parsed); } catch (e) {}
+        }
+        if (Array.isArray(parsed)) {
+          if (!window.appData.settings) window.appData.settings = {};
+          window.appData.settings.instagramPosts = parsed;
+          window.appData.instagramPosts = parsed;
+          if (window.localDB) {
+            window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+          }
+          try {
+            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData));
+          } catch (e) {}
+          if (typeof window.renderInstagramView === 'function') {
+            window.renderInstagramView();
+          }
+          console.log('[Realtime] Instagram posts atualizados instantaneamente da nuvem:', parsed.length);
+          return;
+        }
+      } catch (err) {
+        console.warn('[Realtime] Erro ao aplicar instagramPosts do Realtime:', err);
+      }
+    }
+
     // Para demais tabelas ou alterações estruturais, agenda recarga remota suave
     this.scheduleDebouncedRemoteRefresh();
   }
