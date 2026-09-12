@@ -4351,3 +4351,156 @@ html.show-auth-gate .offline-bar {
   text-align: center;
   gap: 1rem;
 }
+
+/* ==========================================================================
+   MODAL DE ADICIONAR/EDITAR POST DO INSTAGRAM PRO
+   ========================================================================== */
+.insta-sponsor-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .insta-sponsor-selector-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sponsor-pill-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-light);
+  width: 100%;
+}
+
+.sponsor-pill-btn:hover {
+  background: rgba(229, 193, 88, 0.08);
+  border-color: rgba(229, 193, 88, 0.4);
+  transform: translateY(-1px);
+}
+
+.sponsor-pill-btn.active {
+  background: rgba(229, 193, 88, 0.16);
+  border-color: var(--primary-gold);
+  box-shadow: 0 0 12px rgba(229, 193, 88, 0.25);
+}
+
+.sponsor-pill-btn .pill-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.sponsor-pill-btn .pill-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sponsor-pill-btn .pill-info strong {
+  font-size: 0.82rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sponsor-pill-btn .pill-info small {
+  font-size: 0.68rem;
+  color: var(--primary-gold);
+  font-weight: 700;
+}
+
+.sponsor-pill-btn[data-theme="fishing_company"].active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+.sponsor-pill-btn[data-theme="fishing_company"] .pill-info small {
+  color: #38bdf8;
+}
+
+.sponsor-pill-btn[data-theme="tr_fishing"].active {
+  border-color: #a78bfa;
+  background: rgba(167, 139, 250, 0.16);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.25);
+}
+.sponsor-pill-btn[data-theme="tr_fishing"] .pill-info small {
+  color: #c4b5fd;
+}
+
+.sponsor-pill-btn[data-theme="iscas_mathias"].active {
+  border-color: #f472b6;
+  background: rgba(244, 114, 182, 0.16);
+  box-shadow: 0 0 12px rgba(244, 114, 182, 0.25);
+}
+.sponsor-pill-btn[data-theme="iscas_mathias"] .pill-info small {
+  color: #f472b6;
+}
+
+.sponsor-pill-btn[data-theme="titan_caiaques"].active {
+  border-color: #fb923c;
+  background: rgba(251, 146, 60, 0.16);
+  box-shadow: 0 0 12px rgba(251, 146, 60, 0.25);
+}
+.sponsor-pill-btn[data-theme="titan_caiaques"] .pill-info small {
+  color: #fb923c;
+}
+
+.insta-toggle-group {
+  display: flex;
+  background: rgba(6, 10, 19, 0.7);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+}
+
+.toggle-pill-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.45rem 0.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.toggle-pill-btn:hover {
+  color: var(--text-light);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.toggle-pill-btn.active {
+  background: rgba(229, 193, 88, 0.2);
+  color: var(--primary-gold);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-pill-btn.status-draft.active {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+.toggle-pill-btn.status-ready.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.toggle-pill-btn.status-published.active {
+  background: rgba(52, 211, 153, 0.2);
+  color: #34d399;
+}

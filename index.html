@@ -674,65 +674,15 @@
       <div class="section-header">
         <div class="section-title">
           <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
-            <h2 style="margin: 0;">Calendário de Lembretes • Instagram</h2>
+            <h2 style="margin: 0;">Calendário de Conteúdo • Instagram</h2>
             <span class="badge" style="background: rgba(225, 48, 108, 0.15); border: 1px solid rgba(225, 48, 108, 0.4); color: #f472b6; font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 700;">@eldoradopesca</span>
           </div>
-          <p style="margin-top: 0.35rem;">Lembretes visuais de postagens, reels, stories e compromissos com patrocinadores</p>
+          <p style="margin-top: 0.35rem;">Planejamento dinâmico de postagens e compromissos com patrocinadores</p>
         </div>
-        <div class="section-actions" style="gap: 0.5rem; flex-wrap: wrap;">
-          <button class="btn btn-gold" onclick="openNewInstagramPostModal()">
-            + Novo Lembrete
+        <div class="section-actions">
+          <button class="btn btn-gold" onclick="openNewInstagramPostModal()" style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.65rem 1.15rem; font-weight: 700;">
+            <span>+</span> Novo Post
           </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="exportInstagramCalendarCSV()" title="Baixar planilha CSV do calendário de postagens">
-            Exportar CSV
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="loadOfficialInstagramSchedule()" title="Carregar os lembretes oficiais de Setembro a Dezembro">
-            Carregar 104 Lembretes
-          </button>
-        </div>
-      </div>
-
-      <!-- Specific Instagram Stats Summary Bar -->
-      <div class="stats-summary-grid" style="margin-bottom: 1.5rem;">
-        <div class="stat-box">
-          <div class="stat-box-label">Conteúdos no Mês</div>
-          <div class="stat-box-value gold" id="statInstaTotalMonth">0 posts</div>
-          <div class="stat-box-sub" id="statInstaMonthName">Agosto de 2026</div>
-        </div>
-
-        <div class="stat-box">
-          <div class="stat-box-label">Steelfish (Meta: 2/sem)</div>
-          <div class="stat-box-value gold" id="statInstaSteelfishCount">0 posts</div>
-          <div class="stat-box-sub" id="statInstaSteelfishStatus">Meta: 2 por semana</div>
-        </div>
-
-        <div class="stat-box">
-          <div class="stat-box-label">Outros Patrocinadores</div>
-          <div class="stat-box-value" id="statInstaOtherSponsorsCount" style="color: #38bdf8;">0 posts</div>
-          <div class="stat-box-sub">Tr Fishing, Iscas Mathias, Titan, Fishing Co.</div>
-        </div>
-
-        <div class="stat-box">
-          <div class="stat-box-label">Publicados no Instagram</div>
-          <div class="stat-box-value" id="statInstaPublishedCount" style="color: #34d399;">0 postados</div>
-          <div class="stat-box-sub">Concluídos no mês</div>
-        </div>
-      </div>
-
-      <!-- Aviso & Metas Semanais de Patrocinadores -->
-      <div style="background: rgba(229, 193, 88, 0.06); border: 1px solid rgba(229, 193, 88, 0.25); border-radius: var(--radius-sm); padding: 0.85rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
-        <div>
-          <div style="font-size: 0.88rem; font-weight: 700; color: var(--primary-gold);">Metas Contratuais de Patrocinadores</div>
-          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;" id="instaWeeklyGoalNotice">
-            Steelfish: Postagens fixas toda Segunda e Sexta (Meta: 2 por semana) • Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company
-          </div>
-        </div>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          <span class="badge" id="badgeSteelfishWeekStatus" style="background: rgba(229, 193, 88, 0.15); color: var(--primary-gold); border: 1px solid var(--border-gold); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Steelfish: Seg &amp; Sex (2/sem)</span>
-          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Tr Fishing</span>
-          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Iscas Mathias</span>
-          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Titan Caiaques</span>
-          <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.75rem; padding: 0.25rem 0.6rem;">Fishing Company</span>
         </div>
       </div>
 
@@ -741,7 +691,7 @@
         <div class="month-picker-bar">
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <button class="btn btn-secondary btn-sm" id="btnInstaPrevMonth" onclick="changeInstagramCalendarMonth(-1)">&lt; Mês Anterior</button>
-            <h3 class="month-label" id="instaCalMonthLabel">Agosto de 2026</h3>
+            <h3 class="month-label" id="instaCalMonthLabel">Setembro de 2026</h3>
             <button class="btn btn-secondary btn-sm" id="btnInstaNextMonth" onclick="changeInstagramCalendarMonth(1)">Próximo Mês &gt;</button>
           </div>
           <button class="btn btn-secondary btn-sm" id="btnInstaToday" onclick="goToInstagramToday()">Ir para Hoje</button>
@@ -752,33 +702,6 @@
           <div class="calendar-grid" id="instagramCalendarGrid">
             <!-- Rendered by JS -->
           </div>
-        </div>
-
-        <!-- Calendar Legend -->
-        <div class="cal-legend-bar">
-          <div class="legend-item">
-            <span class="legend-dot" style="background: #e1306c;"></span>
-            <span>Reels</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot" style="background: #38bdf8;"></span>
-            <span>Feed / Carrossel</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot" style="background: #f59e0b;"></span>
-            <span>Stories</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot" style="background: var(--primary-gold);"></span>
-            <span>Patrocinador</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot" style="background: #34d399;"></span>
-            <span>Publicado</span>
-          </div>
-        </div>
-        <div style="text-align: center; font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem;">
-          Clique em qualquer dia para ver ou agendar um lembrete de postagem.
         </div>
       </div>
 
@@ -2574,92 +2497,39 @@
     </div>
   </div>
 
-  <!-- Modal: Criar / Editar Post do Instagram -->
-  <div class="modal-overlay" id="modalInstagramPost" style="display: none;">
-    <div class="modal-container" style="max-width: 560px;">
+  <!-- Modal: Criar / Editar Post do Instagram (Simples: Data e Nome) -->
+  <div class="modal-backdrop" id="modalInstagramPost" style="display: none;">
+    <div class="modal-dialog" style="max-width: 440px;">
       <div class="modal-header">
-        <h3 class="modal-title" id="modalInstagramTitle">Planejar Post no Instagram</h3>
-        <button class="modal-close" onclick="closeModal('modalInstagramPost')">✕</button>
+        <h3 class="modal-title" id="modalInstagramTitle" style="margin: 0;">Novo Post</h3>
+        <button class="modal-close-btn" onclick="closeModal('modalInstagramPost')">✕</button>
       </div>
       <div class="modal-body">
         <form id="formInstagramPost" onsubmit="handleSaveInstagramPostSubmit(event)">
           <input type="hidden" id="instaPostId">
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-            <div class="form-group">
-              <label class="form-label">Data de Publicação *</label>
-              <input type="date" id="instaPostDate" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Horário Sugerido</label>
-              <input type="time" id="instaPostTime" class="form-input" value="18:30">
-            </div>
+          <!-- Campo 1: Data -->
+          <div class="form-group" style="margin-bottom: 1.1rem;">
+            <label class="form-label">Data *</label>
+            <input type="date" id="instaPostDate" class="form-input" required style="font-size: 0.95rem;">
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-            <div class="form-group">
-              <label class="form-label">Formato de Conteúdo *</label>
-              <select id="instaPostFormat" class="form-select" required>
-                <option value="reels">Reels / Vídeo Curto</option>
-                <option value="feed">Feed / Carrossel</option>
-                <option value="stories">Stories</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Patrocinador ou Tema *</label>
-              <select id="instaPostTheme" class="form-select" required>
-                <optgroup label="Patrocinadores Oficiais">
-                  <option value="steelfish">Steelfish (Meta: 2 por semana)</option>
-                  <option value="tr_fishing">Tr Fishing</option>
-                  <option value="iscas_mathias">Iscas Mathias</option>
-                  <option value="titan_caiaques">Titan Caiaques</option>
-                  <option value="fishing_company">Fishing Company</option>
-                </optgroup>
-                <optgroup label="Conteúdos Eldorado Lake">
-                  <option value="pesca">Pesca &amp; Troféus (Lake)</option>
-                  <option value="rifas">Rifas &amp; Vales Eldorado</option>
-                  <option value="rancho">Rancho &amp; Hospedagem</option>
-                  <option value="dicas">Dicas de Pesca &amp; Equipamentos</option>
-                  <option value="bastidores">Bastidores &amp; Depoimentos</option>
-                </optgroup>
-              </select>
-            </div>
+          <!-- Campo 2: Nome da postagem -->
+          <div class="form-group" style="margin-bottom: 1.25rem;">
+            <label class="form-label">Nome da postagem *</label>
+            <input type="text" id="instaPostTitle" class="form-input" placeholder="Ex: Steelfish, Fishing Company, TR Fishing..." required style="font-size: 0.95rem;" autofocus>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Título / Gancho Principal (Hook) *</label>
-            <input type="text" id="instaPostTitle" class="form-input" placeholder="Ex: Testando nova isca da Steelfish nos tucunarés azuis" required>
-          </div>
-
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-              <label class="form-label" style="margin-bottom: 0;">Legenda / Roteiro / Hashtags</label>
-              <button type="button" class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" onclick="copyModalCaptionToClipboard()">
-                Copiar Texto
-              </button>
-            </div>
-            <textarea id="instaPostCaption" class="form-input" rows="6" placeholder="Escreva aqui a legenda completa, menções aos patrocinadores (@steelfish.oficial), roteiro ou notas..."></textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Status do Conteúdo *</label>
-            <select id="instaPostStatus" class="form-select" required>
-              <option value="draft">Ideia / Rascunho</option>
-              <option value="producing">Em Produção / Gravando</option>
-              <option value="ready">Pronto / Agendado</option>
-              <option value="published">Publicado no Instagram</option>
-            </select>
-          </div>
-
-          <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
-            <button type="submit" class="btn btn-gold" style="flex: 1;" id="btnSubmitInstagramPost">
-              Salvar Conteúdo
-            </button>
-            <button type="button" class="btn btn-danger" id="btnDeleteInstagramPost" style="display: none;" onclick="deleteActiveInstagramPost()">
+          <!-- Ações -->
+          <div style="display: flex; gap: 0.75rem; justify-content: flex-end; align-items: center; margin-top: 1.25rem;">
+            <button type="button" class="btn btn-danger btn-sm" id="btnDeleteInstagramPost" style="display: none; margin-right: auto;" onclick="deleteActiveInstagramPost()">
               Excluir
             </button>
             <button type="button" class="btn btn-secondary" onclick="closeModal('modalInstagramPost')">
               Cancelar
+            </button>
+            <button type="submit" class="btn btn-gold" id="btnSubmitInstagramPost" style="padding: 0.55rem 1.25rem; font-weight: 700;">
+              Salvar
             </button>
           </div>
         </form>
@@ -2871,8 +2741,8 @@
   <script src="sync_engine.js?v=2.9.6"></script>
   <script src="qrcode.js?v=2.9.6"></script>
   <script src="pdf.min.js?v=2.9.6"></script>
-  <script src="instagram_cronograma_104.js?v=2.9.6"></script>
-  <script src="app.js?v=2.9.6"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.8"></script>
+  <script src="app.js?v=2.9.8"></script>
 </body>
 
 </html>

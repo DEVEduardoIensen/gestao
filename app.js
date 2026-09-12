@@ -121,61 +121,18 @@ function sanitizeAppData(data) {
   if (!Array.isArray(data.ranchoBookings)) {
     data.ranchoBookings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.ranchoBookings)) ? INITIAL_SAMPLE_DATA.ranchoBookings : [];
   }
-  if (!Array.isArray(data.instagramPosts)) {
+  if (typeof window !== 'undefined' && Array.isArray(window.OFFICIAL_INSTAGRAM_104_POSTS) && window.OFFICIAL_INSTAGRAM_104_POSTS.length > 0) {
+    const hasLongTitles = Array.isArray(data.instagramPosts) && data.instagramPosts.some(p => p.title && (p.title.length > 25 || p.title.includes(':') || p.title.includes('[')));
+    const isSampleOnly = Array.isArray(data.instagramPosts) && data.instagramPosts.length <= 5 && data.instagramPosts.some(p => String(p.id).startsWith('insta-sample'));
+    if (!Array.isArray(data.instagramPosts) || data.instagramPosts.length === 0 || hasLongTitles || isSampleOnly) {
+      data.instagramPosts = JSON.parse(JSON.stringify(window.OFFICIAL_INSTAGRAM_104_POSTS));
+      if (!data.settings) data.settings = {};
+      data.settings.instagramPosts = data.instagramPosts;
+    }
+  } else if (!Array.isArray(data.instagramPosts)) {
     data.instagramPosts = (data.settings && Array.isArray(data.settings.instagramPosts))
       ? data.settings.instagramPosts
-      : [
-          {
-            id: 'insta-sample-1',
-            date: getLocalDateStr(),
-            time: '18:30',
-            format: 'reels',
-            theme: 'steelfish',
-            title: 'Steelfish: Teste de Resistência das Carretilhas nos Tucunarés do Eldorado Lake',
-            caption: 'Equipamento colocado à prova no Eldorado Lake! As carretilhas e varas da Steelfish aguentando a explosão dos grandes tucunarés azuis na represa de Foz do Areia.\n\nDica técnica: linha multifilamento de alta qualidade e drag calibrado na medida certa.\n\nConfira os produtos oficiais na @steelfish.oficial.\n\n#eldoradopesca #steelfish #pescaesportiva #tucunareazul #fozdoareia',
-            status: 'ready'
-          },
-          {
-            id: 'insta-sample-2',
-            date: getLocalDateStr(new Date(Date.now() + 86400000 * 2)),
-            time: '19:00',
-            format: 'feed',
-            theme: 'steelfish',
-            title: 'Steelfish: Guia de Cores e Ação de Iscas para Água Limpa',
-            caption: 'Segunda postagem semanal Steelfish: Qual cor de isca de superfície usar em dias de sol forte e vento brando? Detalhamos o trabalho lento com paradas estratégicas nos bicos da represa.\n\nParceiro oficial: @steelfish.oficial\n\n#steelfish #iscasartificiais #pesqueesolte #eldoradopesca',
-            status: 'draft'
-          },
-          {
-            id: 'insta-sample-3',
-            date: getLocalDateStr(new Date(Date.now() + 86400000 * 4)),
-            time: '11:00',
-            format: 'feed',
-            theme: 'titan_caiaques',
-            title: 'Titan Caiaques: Acesso Exclusivo às Melhores Estruturas de Foz do Areia',
-            caption: 'Chegar onde os barcos maiores não entram: essa é a vantagem da estabilidade dos caiaques da Titan Caiaques no lago. Conforto para o pescador arremessar em pé o dia todo.\n\nParceiro oficial Eldorado Lake: @titancaiaques\n\n#titancaiaques #caiaquefishing #eldoradopesca',
-            status: 'ready'
-          },
-          {
-            id: 'insta-sample-4',
-            date: getLocalDateStr(new Date(Date.now() - 86400000 * 1)),
-            time: '17:30',
-            format: 'stories',
-            theme: 'iscas_mathias',
-            title: 'Iscas Mathias: Ataque Violento na Meia-Água ao Entardecer',
-            caption: 'Registro direto da água pelo guia Thiago Witeck. Tucunaré bruto capturado com isca Mathias na caída de barranco.\n\n#iscasmathias #eldoradolake #pescaesportiva',
-            status: 'published'
-          },
-          {
-            id: 'insta-sample-5',
-            date: getLocalDateStr(new Date(Date.now() + 86400000 * 5)),
-            time: '12:00',
-            format: 'feed',
-            theme: 'fishing_company',
-            title: 'Fishing Company: Camisas UV50+ e Conforto Térmico no Lake',
-            caption: 'Linha oficial de vestuário de alta performance para os dias ensolarados na represa de Foz do Areia. Proteção UV50+, secagem rápida e tecido antimicrobiano.\n\nParceiro oficial: @fishingcompanyoficial\n\n#fishingcompany #vestuariopesca #protecaouv #eldoradopesca',
-            status: 'ready'
-          }
-        ];
+      : [];
   }
   if (!Array.isArray(data.boletos)) {
     data.boletos = (data.settings && Array.isArray(data.settings.boletos))
@@ -5602,98 +5559,7 @@ function renderInstagramView() {
 window.renderInstagramView = renderInstagramView;
 
 function updateInstagramStats() {
-  const posts = appData.instagramPosts || [];
-  const monthNames = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-  ];
-  const monthName = monthNames[instagramCalSelectedMonth];
-  const monthYearLabel = `${monthName} de ${instagramCalSelectedYear}`;
-
-  const monthStr = String(instagramCalSelectedMonth + 1).padStart(2, "0");
-  const yearMonthPrefix = `${instagramCalSelectedYear}-${monthStr}`;
-
-  const monthPosts = posts.filter(p => p.date && p.date.startsWith(yearMonthPrefix));
-
-  const totalMonth = monthPosts.length;
-  const steelfishMonthPosts = monthPosts.filter(p => p.theme === "steelfish");
-  const otherSponsorMonthPosts = monthPosts.filter(p => ['tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme));
-  const publishedCount = monthPosts.filter(p => p.status === "published").length;
-
-  // Cálculo da semana atual para a meta da Steelfish (2 posts por semana)
-  const now = new Date();
-  const currentDay = now.getDay();
-  const distanceToMonday = (currentDay + 6) % 7;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - distanceToMonday);
-  monday.setHours(0, 0, 0, 0);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  const mondayStr = getLocalDateStr(monday);
-  const sundayStr = getLocalDateStr(sunday);
-
-  const steelfishWeekCount = posts.filter(p => {
-    return p.theme === 'steelfish' && p.date >= mondayStr && p.date <= sundayStr;
-  }).length;
-
-  const statMonthNameEl = document.getElementById("statInstaMonthName");
-  if (statMonthNameEl) statMonthNameEl.textContent = monthYearLabel;
-
-  const statTotalEl = document.getElementById("statInstaTotalMonth");
-  if (statTotalEl) statTotalEl.textContent = `${totalMonth} post${totalMonth === 1 ? '' : 's'}`;
-
-  const statSteelfishEl = document.getElementById("statInstaSteelfishCount");
-  if (statSteelfishEl) {
-    statSteelfishEl.textContent = `${steelfishWeekCount} de 2 na semana`;
-  }
-
-  const statSteelfishStatusEl = document.getElementById("statInstaSteelfishStatus");
-  if (statSteelfishStatusEl) {
-    if (steelfishWeekCount >= 2) {
-      statSteelfishStatusEl.textContent = `Meta da semana cumprida (Seg & Sex no calendário)`;
-      statSteelfishStatusEl.style.color = "#34d399";
-    } else {
-      const remaining = 2 - steelfishWeekCount;
-      statSteelfishStatusEl.textContent = `Segundas e Sextas fixas (falta preencher ${remaining} de 2)`;
-      statSteelfishStatusEl.style.color = "var(--primary-gold)";
-    }
-  }
-
-  const statOtherSponsorsEl = document.getElementById("statInstaOtherSponsorsCount");
-  if (statOtherSponsorsEl) {
-    statOtherSponsorsEl.textContent = `${otherSponsorMonthPosts.length} post${otherSponsorMonthPosts.length === 1 ? '' : 's'}`;
-  }
-
-  const statPubEl = document.getElementById("statInstaPublishedCount");
-  if (statPubEl) statPubEl.textContent = `${publishedCount} postado${publishedCount === 1 ? '' : 's'}`;
-
-  // Atualiza aviso de patrocinador no topo
-  const badgeSteelfishWeekEl = document.getElementById("badgeSteelfishWeekStatus");
-  if (badgeSteelfishWeekEl) {
-    badgeSteelfishWeekEl.textContent = `Steelfish: Seg & Sex (${steelfishWeekCount}/2)`;
-    if (steelfishWeekCount >= 2) {
-      badgeSteelfishWeekEl.style.background = "rgba(52, 211, 153, 0.15)";
-      badgeSteelfishWeekEl.style.color = "#34d399";
-      badgeSteelfishWeekEl.style.borderColor = "rgba(52, 211, 153, 0.4)";
-    } else {
-      badgeSteelfishWeekEl.style.background = "rgba(229, 193, 88, 0.15)";
-      badgeSteelfishWeekEl.style.color = "var(--primary-gold)";
-      badgeSteelfishWeekEl.style.borderColor = "var(--border-gold)";
-    }
-  }
-
-  const noticeEl = document.getElementById("instaWeeklyGoalNotice");
-  if (noticeEl) {
-    const mondayFmt = `${mondayStr.slice(8, 10)}/${mondayStr.slice(5, 7)}`;
-    const sundayFmt = `${sundayStr.slice(8, 10)}/${sundayStr.slice(5, 7)}`;
-    if (steelfishWeekCount >= 2) {
-      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Meta da Steelfish cumprida com ${steelfishWeekCount} postagens (Seg e Sex). Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
-    } else {
-      noticeEl.textContent = `Semana atual (${mondayFmt} a ${sundayFmt}): Steelfish é fixa toda Segunda e Sexta (${steelfishWeekCount} de 2 agendados). Parceiros Oficiais: Tr Fishing, Iscas Mathias, Titan Caiaques e Fishing Company.`;
-    }
-  }
+  // Cards de estatísticas e avisos contratuais removidos para manter o layout limpo e direto
 }
 window.updateInstagramStats = updateInstagramStats;
 
@@ -5739,10 +5605,6 @@ function renderInstagramCalendar() {
     const dayStr = `${instagramCalSelectedYear}-${String(instagramCalSelectedMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayPosts = posts.filter(p => p.date === dayStr);
 
-    const dayDate = new Date(instagramCalSelectedYear, instagramCalSelectedMonth, day);
-    const dayOfWeek = dayDate.getDay(); // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sab
-    const isSteelfishRecurringDay = (dayOfWeek === 1 || dayOfWeek === 5); // Segunda ou Sexta fixa
-
     const cell = document.createElement("div");
     const isToday = dayStr === todayStr;
     cell.className = `cal-day-cell current-month ${isToday ? "today" : ""}`;
@@ -5761,64 +5623,49 @@ function renderInstagramCalendar() {
       </div>
     `;
 
-    // 1. Renderiza postagens cadastradas no dia
+    // 1. Renderiza postagens no dia: somente o nome do patrocinador ou da postagem
     dayPosts.forEach(p => {
       const isPub = p.status === 'published';
       let chipClass = `insta-day-chip chip-${p.format || 'feed'}`;
-      let prefix = p.format === 'reels' ? '[Reels]' : (p.format === 'stories' ? '[Stories]' : '[Feed]');
 
+      let sponsorName = '';
       if (p.theme === 'steelfish') {
         chipClass = 'insta-day-chip chip-steelfish';
-        prefix = '[Steelfish]';
+        sponsorName = 'Steelfish';
       } else if (p.theme === 'titan_caiaques') {
         chipClass = 'insta-day-chip chip-sponsor';
-        prefix = '[Titan]';
+        sponsorName = 'Titan Caiaques';
       } else if (p.theme === 'tr_fishing') {
         chipClass = 'insta-day-chip chip-sponsor';
-        prefix = '[Tr Fishing]';
+        sponsorName = 'TR Fishing';
       } else if (p.theme === 'iscas_mathias') {
         chipClass = 'insta-day-chip chip-sponsor';
-        prefix = '[Iscas Mathias]';
+        sponsorName = 'Iscas Mathias';
       } else if (p.theme === 'fishing_company') {
         chipClass = 'insta-day-chip chip-sponsor';
-        prefix = '[Fishing Co.]';
+        sponsorName = 'Fishing Company';
       }
 
-      let displayTitle = (p.title || 'Sem título').trim();
-      const lowerTitle = displayTitle.toLowerCase();
-      if (lowerTitle.startsWith('steelfish:')) {
-        displayTitle = displayTitle.substring(10).trim();
-      } else if (lowerTitle.startsWith('titan caiaques:')) {
-        displayTitle = displayTitle.substring(15).trim();
-      } else if (lowerTitle.startsWith('tr fishing:')) {
-        displayTitle = displayTitle.substring(11).trim();
-      } else if (lowerTitle.startsWith('iscas mathias:')) {
-        displayTitle = displayTitle.substring(14).trim();
-      } else if (lowerTitle.startsWith('fishing company:')) {
-        displayTitle = displayTitle.substring(16).trim();
+      // Nome limpo: somente o nome do patrocinador ou o nome digitado no post
+      let displayName = (p.title || '').trim();
+      if (sponsorName) {
+        if (!displayName || displayName.length > 25 || displayName.toLowerCase().includes('primavera') || displayName.includes(':') || displayName.includes('[')) {
+          displayName = sponsorName;
+        }
+      }
+      if (!displayName) {
+        displayName = sponsorName || p.brand || 'Post';
       }
 
       innerHtml += `
         <div class="${chipClass} ${isPub ? 'chip-published' : ''}" 
-             title="${prefix} ${escapeHtml(p.title || '')} (${p.time || ''})"
-             onclick="openEditInstagramPostModal('${p.id}')">
-          <strong style="font-size:0.64rem;">${prefix}</strong> ${escapeHtml(displayTitle)}
+             title="${escapeHtml(displayName)}"
+             onclick="openEditInstagramPostModal('${p.id}')"
+             style="font-size:0.75rem; font-weight:700; padding:3px 6px; border-radius:4px; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          ${escapeHtml(displayName)}
         </div>
       `;
     });
-
-    // 2. Se for Segunda ou Sexta e ainda não tiver post cadastrado da Steelfish, exibe o slot fixo contratual
-    const hasSteelfishPost = dayPosts.some(p => p.theme === 'steelfish');
-    if (isSteelfishRecurringDay && !hasSteelfishPost) {
-      const weekdayLabel = dayOfWeek === 1 ? 'Segunda' : 'Sexta';
-      innerHtml += `
-        <div class="insta-day-chip chip-steelfish chip-recurring" 
-             title="Meta Contratual: Steelfish toda ${weekdayLabel} (2 por semana). Clique para preencher o roteiro."
-             onclick="openNewInstagramPostModal('${dayStr}', 'steelfish', 'Steelfish: Post Semanal (${weekdayLabel})')">
-          <strong style="font-size:0.64rem;">[Steelfish]</strong> Fixo (${weekdayLabel})
-        </div>
-      `;
-    }
 
     cell.innerHTML = innerHtml;
     calGrid.appendChild(cell);
@@ -6043,11 +5890,11 @@ function renderInstagramPostsList() {
     const statusLabel = p.status === 'published' ? 'Publicado' : (p.status === 'ready' ? 'Pronto' : (p.status === 'producing' ? 'Gravando' : 'Rascunho'));
 
     const themeLabels = {
-      steelfish: 'Patrocinador: Steelfish (2/sem)',
-      tr_fishing: 'Patrocinador: Tr Fishing',
-      iscas_mathias: 'Patrocinador: Iscas Mathias',
-      titan_caiaques: 'Patrocinador: Titan Caiaques',
-      fishing_company: 'Patrocinador: Fishing Company',
+      steelfish: 'Steelfish',
+      tr_fishing: 'TR Fishing',
+      iscas_mathias: 'Iscas Mathias',
+      titan_caiaques: 'Titan Caiaques',
+      fishing_company: 'Fishing Company',
       pesca: 'Pesca & Troféus',
       rifas: 'Rifas & Vales',
       rancho: 'Rancho Lake',
@@ -6069,6 +5916,14 @@ function renderInstagramPostsList() {
     const parts = (p.date || '').split('-');
     const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : p.date;
 
+    let cardTitle = (p.title || '').trim();
+    if (['steelfish', 'tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme)) {
+      if (!cardTitle || cardTitle.length > 25 || cardTitle.includes(':') || cardTitle.includes('[')) {
+        cardTitle = themeLabel;
+      }
+    }
+    if (!cardTitle) cardTitle = themeLabel;
+
     card.innerHTML = `
       <div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.4rem;">
@@ -6087,7 +5942,7 @@ function renderInstagramPostsList() {
         </div>
 
         <h4 style="font-size: 0.98rem; font-weight: 700; color: var(--text-light); margin-bottom: 0.65rem; line-height: 1.35;">
-          ${escapeHtml(p.title || 'Sem título')}
+          ${escapeHtml(cardTitle)}
         </h4>
 
         ${p.caption ? `
@@ -6115,17 +5970,24 @@ window.renderInstagramPostsList = renderInstagramPostsList;
 
 function openNewInstagramPostModal(defaultDate = null, defaultTheme = "steelfish", defaultTitle = "") {
   activeInstagramPostId = null;
-  document.getElementById("modalInstagramTitle").textContent = "Planejar Post no Instagram";
-  document.getElementById("instaPostId").value = "";
-  document.getElementById("instaPostDate").value = defaultDate || getLocalDateStr();
-  document.getElementById("instaPostTime").value = "18:30";
-  document.getElementById("instaPostFormat").value = "reels";
-  document.getElementById("instaPostTheme").value = defaultTheme || "steelfish";
-  document.getElementById("instaPostTitle").value = defaultTitle || "";
-  document.getElementById("instaPostCaption").value = "";
-  document.getElementById("instaPostStatus").value = "draft";
+  const titleHeader = document.getElementById("modalInstagramTitle");
+  if (titleHeader) titleHeader.textContent = "Novo Post";
+
+  const idEl = document.getElementById("instaPostId");
+  if (idEl) idEl.value = "";
+
+  const dateEl = document.getElementById("instaPostDate");
+  if (dateEl) dateEl.value = defaultDate || getLocalDateStr();
+
+  const titleEl = document.getElementById("instaPostTitle");
+  if (titleEl) {
+    titleEl.value = defaultTitle || "";
+    setTimeout(() => titleEl.focus(), 60);
+  }
+
   const btnDelete = document.getElementById("btnDeleteInstagramPost");
   if (btnDelete) btnDelete.style.display = "none";
+
   openModal("modalInstagramPost");
 }
 window.openNewInstagramPostModal = openNewInstagramPostModal;
@@ -6135,15 +5997,24 @@ function openEditInstagramPostModal(postId) {
   if (!post) return;
 
   activeInstagramPostId = post.id;
-  document.getElementById("modalInstagramTitle").textContent = "Editar Conteúdo do Instagram";
-  document.getElementById("instaPostId").value = post.id;
-  document.getElementById("instaPostDate").value = post.date || getLocalDateStr();
-  document.getElementById("instaPostTime").value = post.time || "18:30";
-  document.getElementById("instaPostFormat").value = post.format || "feed";
-  document.getElementById("instaPostTheme").value = post.theme || "steelfish";
-  document.getElementById("instaPostTitle").value = post.title || "";
-  document.getElementById("instaPostCaption").value = post.caption || "";
-  document.getElementById("instaPostStatus").value = post.status || "draft";
+  const titleHeader = document.getElementById("modalInstagramTitle");
+  if (titleHeader) titleHeader.textContent = "Editar Post";
+
+  const idEl = document.getElementById("instaPostId");
+  if (idEl) idEl.value = post.id;
+
+  const dateEl = document.getElementById("instaPostDate");
+  if (dateEl) dateEl.value = post.date || getLocalDateStr();
+
+  const titleEl = document.getElementById("instaPostTitle");
+  if (titleEl) {
+    let cleanTitle = (post.title || post.brand || "").trim();
+    if (cleanTitle.length > 25 || cleanTitle.includes(':') || cleanTitle.includes('[')) {
+      cleanTitle = post.brand || cleanTitle.split(':')[0].replace(/\[|\]/g, '').trim();
+    }
+    titleEl.value = cleanTitle;
+    setTimeout(() => titleEl.focus(), 60);
+  }
 
   const btnDelete = document.getElementById("btnDeleteInstagramPost");
   if (btnDelete) btnDelete.style.display = "inline-flex";
@@ -6158,15 +6029,31 @@ async function handleSaveInstagramPostSubmit(e) {
   const isEditing = !!idInput;
   const postId = isEditing ? idInput : ('insta-' + Date.now());
 
+  const dateVal = document.getElementById("instaPostDate").value;
+  const titleVal = (document.getElementById("instaPostTitle").value || "").trim();
+
+  // Deduce tema/marca automaticamente a partir do nome digitado
+  let theme = 'geral';
+  const lower = titleVal.toLowerCase();
+  if (lower.includes('steelfish')) theme = 'steelfish';
+  else if (lower.includes('fishing') && (lower.includes('company') || lower.includes('co'))) theme = 'fishing_company';
+  else if (lower.includes('tr') && lower.includes('fishing')) theme = 'tr_fishing';
+  else if (lower.includes('mathias')) theme = 'iscas_mathias';
+  else if (lower.includes('titan')) theme = 'titan_caiaques';
+
+  let existingPost = null;
+  if (isEditing) {
+    existingPost = (appData.instagramPosts || []).find(p => String(p.id) === String(postId));
+  }
+
   const postData = {
+    ...(existingPost || {}),
     id: postId,
-    date: document.getElementById("instaPostDate").value,
-    time: document.getElementById("instaPostTime").value || "18:30",
-    format: document.getElementById("instaPostFormat").value,
-    theme: document.getElementById("instaPostTheme").value,
-    title: document.getElementById("instaPostTitle").value.trim(),
-    caption: document.getElementById("instaPostCaption").value.trim(),
-    status: document.getElementById("instaPostStatus").value
+    date: dateVal,
+    title: titleVal,
+    brand: titleVal,
+    theme: (existingPost && existingPost.theme && theme === 'geral') ? existingPost.theme : theme,
+    status: (existingPost && existingPost.status) ? existingPost.status : 'ready'
   };
 
   if (!Array.isArray(appData.instagramPosts)) {
@@ -6196,7 +6083,7 @@ async function handleSaveInstagramPostSubmit(e) {
   });
 
   closeModal("modalInstagramPost");
-  showToast(isEditing ? "Post atualizado com sucesso!" : "Post planejado com sucesso!", "success");
+  showToast(isEditing ? "Post atualizado!" : "Post salvo com sucesso!", "success");
   renderInstagramView();
 }
 window.handleSaveInstagramPostSubmit = handleSaveInstagramPostSubmit;
@@ -6290,7 +6177,7 @@ function copyInstagramPauta(postId) {
   const parts = (post.date || '').split('-');
   const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : post.date;
 
-  const text = `[CRONOGRAMA EDITORIAL • ${brandName.toUpperCase()}]\nData: ${formattedDate} (${post.dayOfWeek || ''})\nFormato: ${(post.format || 'feed').toUpperCase()}\nPilar: ${post.pillar || 'Geral'}${post.seasonalHook ? `\nSazonalidade: ${post.seasonalHook}` : ''}\n\nTÍTULO / HOOK:\n${post.title || ''}\n\nLEGENDA / PAUTA:\n${post.caption || ''}`;
+  const text = `[CRONOGRAMA EDITORIAL • ${brandName.toUpperCase()}]\nData: ${formattedDate} (${post.dayOfWeek || ''})\nFormato: ${(post.format || 'feed').toUpperCase()}\nPilar: ${post.pillar || 'Geral'}\n\nTÍTULO:\n${post.title || brandName}\n\nLEGENDA / PAUTA:\n${post.caption || ''}`;
 
   navigator.clipboard.writeText(text).then(() => {
     showToast("Pauta copiada para a Área de Transferência!", "success");
@@ -6328,16 +6215,16 @@ function renderInstagramTable(posts) {
   };
 
   let html = `
-    <div class="table-editorial-wrap">
-      <table class="table-editorial">
+    <div style="overflow-x: auto;">
+      <table class="data-table" style="width: 100%; font-size: 0.85rem;">
         <thead>
           <tr>
             <th>Data</th>
             <th>Dia</th>
-            <th>Marca</th>
+            <th>Marca / Patrocinador</th>
             <th>Formato</th>
             <th>Pilar</th>
-            <th>Pauta / Roteiro da Postagem</th>
+            <th>Conteúdo</th>
             <th>Status</th>
             <th style="text-align: right;">Ações</th>
           </tr>
@@ -6362,7 +6249,13 @@ function renderInstagramTable(posts) {
     const statusBadgeClass = p.status === 'published' ? 'badge-insta-status-published' : (p.status === 'ready' ? 'badge-insta-status-ready' : (p.status === 'producing' ? 'badge-insta-status-producing' : 'badge-insta-status-draft'));
     const statusLabel = p.status === 'published' ? 'Publicado' : (p.status === 'ready' ? 'Pronto' : (p.status === 'producing' ? 'Gravando' : 'Rascunho'));
 
-    const seasonalTag = p.seasonalHook ? `<span class="badge" style="background: rgba(229, 193, 88, 0.15); color: var(--primary-gold); font-size: 0.7rem; margin-left: 0.35rem; border: 1px solid var(--border-gold);">${escapeHtml(p.seasonalHook)}</span>` : '';
+    let tableTitle = (p.title || '').trim();
+    if (['steelfish', 'tr_fishing', 'iscas_mathias', 'titan_caiaques', 'fishing_company'].includes(p.theme)) {
+      if (!tableTitle || tableTitle.length > 25 || tableTitle.includes(':') || tableTitle.includes('[')) {
+        tableTitle = brandName;
+      }
+    }
+    if (!tableTitle) tableTitle = brandName;
 
     html += `
       <tr>
@@ -6372,7 +6265,7 @@ function renderInstagramTable(posts) {
         <td style="white-space: nowrap;">${formatBadge}</td>
         <td style="color: var(--text-muted); font-size: 0.78rem; white-space: nowrap;">${escapeHtml(p.pillar || '-')}</td>
         <td style="max-width: 320px;">
-          <div style="font-weight: 700; color: var(--text-light); line-height: 1.3;">${escapeHtml(p.title || 'Sem título')}${seasonalTag}</div>
+          <div style="font-weight: 700; color: var(--text-light); line-height: 1.3;">${escapeHtml(tableTitle)}</div>
           ${p.caption ? `<div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; max-height: 42px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(p.caption.slice(0, 120))}...</div>` : ''}
         </td>
         <td style="white-space: nowrap;"><span class="${statusBadgeClass}">${statusLabel}</span></td>
