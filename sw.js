@@ -1,6 +1,6 @@
 /**
  * Eldorado Pesca & Lake - Progressive Web App Service Worker
- * Versão 2.9.9 — Cache do App Shell + W3C Background Sync API
+ * Versão 2.9.10 — Cache do App Shell + W3C Background Sync API
  * Sincronização autônoma em segundo plano via Wi-Fi/dados móveis com blindagem de autenticação,
  * sincronização completa de raffle_prizes, cotas e resolução de conflitos.
  */
@@ -11,7 +11,7 @@ try {
   console.warn('[Service Worker] normalize_raffle.js carregado inline/fallback');
 }
 
-const CACHE_NAME = 'eldorado-pwa-v2.9.9';
+const CACHE_NAME = 'eldorado-pwa-v2.9.10';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
@@ -690,6 +690,17 @@ async function dispatchOpToSupabase(op, db) {
           body: JSON.stringify(numbersRows)
         }, op, db);
         if (!resNumbers.ok) throw new Error(`HTTP ${resNumbers.status} ao sincronizar cotas da rifa`);
+
+        // Remove cotas obsoletas se a quantidade foi reduzida
+        if (r.totalNumbers && Number.isInteger(r.totalNumbers)) {
+          const resDelExtraNums = await swSupabaseFetch(
+            `${SUPABASE_URL}/rest/v1/raffle_numbers?organization_id=eq.${orgId}&raffle_id=eq.${encodeURIComponent(r.id)}&num=gt.${r.totalNumbers}`,
+            { method: 'DELETE' },
+            op,
+            db
+          );
+          if (!resDelExtraNums.ok) throw new Error(`HTTP ${resDelExtraNums.status} ao limpar cotas excedentes da rifa`);
+        }
       }
 
       return true;

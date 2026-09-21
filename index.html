@@ -26,7 +26,7 @@
     rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=2.9.9">
+  <link rel="stylesheet" href="styles.css?v=3.0.0">
 
   <!-- Detecção Precoce e Zero Flicker (Elimina piscada antes do login e após login) -->
   <script>
@@ -329,8 +329,8 @@
                 Marcar Todos Reservados como Pagos
               </button>
               <button class="btn btn-secondary btn-sm" style="width: 100%; justify-content: flex-start;"
-                id="btnEditRaffleDetails">
-                Editar Título / Prêmios / Preço
+                id="btnEditRaffleDetails" title="Editar título, quantidade de cotas, prêmios e valor da rifa">
+                Editar Rifa (Título, Números, Prêmios)
               </button>
               <button class="btn btn-danger btn-sm"
                 style="width: 100%; justify-content: flex-start; margin-top: 0.25rem;" id="btnDeleteRaffleSide">
@@ -1122,7 +1122,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.9 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.10 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -1463,6 +1463,9 @@
           <div class="form-group">
             <label class="form-label">Quantidade de Números</label>
             <input type="number" id="rfTotalNumbers" class="form-input" placeholder="Ex: 60" min="1" max="5000">
+            <small style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+              Ao alterar a quantidade, as cotas existentes são preservadas.
+            </small>
           </div>
         </div>
 
@@ -2735,14 +2738,14 @@
   <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
-  <script src="normalize_raffle.js?v=2.9.9"></script>
-  <script src="db_dexie.js?v=2.9.9"></script>
-  <script src="auth_manager.js?v=2.9.9"></script>
-  <script src="sync_engine.js?v=2.9.9"></script>
-  <script src="qrcode.js?v=2.9.9"></script>
-  <script src="pdf.min.js?v=2.9.9"></script>
-  <script src="instagram_cronograma_104.js?v=2.9.9"></script>
-  <script src="app.js?v=2.9.9"></script>
+  <script src="normalize_raffle.js?v=2.9.10"></script>
+  <script src="db_dexie.js?v=2.9.10"></script>
+  <script src="auth_manager.js?v=2.9.10"></script>
+  <script src="sync_engine.js?v=2.9.10"></script>
+  <script src="qrcode.js?v=2.9.10"></script>
+  <script src="pdf.min.js?v=2.9.10"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.10"></script>
+  <script src="app.js?v=2.9.10"></script>
 </body>
 
 </html>

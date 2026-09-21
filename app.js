@@ -3,7 +3,7 @@
  * Clean, High-Performance Management for Raffles, Store Credit (Vales), Prize Winner Sorter, Prize Exchanges, Fishing Agenda (Eldorado Lake) & Employee Days
  */
 
-const CURRENT_APP_VERSION = '2.9.9';
+const CURRENT_APP_VERSION = '2.9.10';
 window.CURRENT_APP_VERSION = CURRENT_APP_VERSION;
 
 function syncAppVersionDisplay() {
@@ -10161,7 +10161,7 @@ function openEditRaffleDetailsModal() {
   document.getElementById("rfPrice").value = raffle.pricePerNumber || "";
   const rfTotal = document.getElementById("rfTotalNumbers");
   rfTotal.value = raffle.totalNumbers || (raffle.numbers ? raffle.numbers.length : 60);
-  rfTotal.disabled = true; // Quantidade de cotas preservada para não corromper números existentes
+  rfTotal.disabled = false; // Permite ao usuário editar a quantidade de números da ação
 
   const saveBtn = document.getElementById("btnSaveRaffleForm");
   if (saveBtn) saveBtn.textContent = "Salvar Alterações da Ação";
@@ -10230,6 +10230,15 @@ async function saveRaffleForm() {
     return;
   }
 
+  if (isNaN(totalNums) || totalNums <= 0) {
+    showToast("Informe uma quantidade válida de números (mínimo 1).", "warning");
+    return;
+  }
+  if (totalNums > 5000) {
+    showToast("A quantidade máxima permitida é de 5.000 números.", "warning");
+    return;
+  }
+
   // Gather dynamic prizes (opcional: a ação pode ser criada sem prêmios e ter prêmios adicionados depois)
   const dynamicInputs = document.querySelectorAll(".dynamic-prize-input");
   const prizesArray = [];
@@ -10253,13 +10262,79 @@ async function saveRaffleForm() {
       return;
     }
 
+    const currentTotal = parseInt(targetRaffle.totalNumbers, 10) || (targetRaffle.numbers ? targetRaffle.numbers.length : 0);
+
+    // Ajuste da quantidade de cotas/números se houver alteração
+    if (totalNums !== currentTotal) {
+      if (totalNums < currentTotal) {
+        // Verifica se há números além do novo limite que estejam reservados, pagos ou preenchidos
+        const numbersToRemove = (targetRaffle.numbers || []).filter(n => parseInt(n.num, 10) > totalNums);
+        const occupied = numbersToRemove.filter(n => n.status !== "available" || (n.name && n.name.trim() !== ""));
+
+        if (occupied.length > 0) {
+          const sample = occupied.slice(0, 8).map(n => `#${n.num} (${n.name ? n.name + ' - ' : ''}${n.status === 'paid' ? 'Pago' : 'Reservado'})`).join(", ");
+          const moreText = occupied.length > 8 ? ` e mais ${occupied.length - 8} cota(s)` : "";
+          const confirmDecrease = window.confirm(
+            `ATENÇÃO: Você está reduzindo a rifa de ${currentTotal} para ${totalNums} cotas.\n\n` +
+            `Existem ${occupied.length} cota(s) que já foram reservadas ou pagas que serão removidas:\n` +
+            `${sample}${moreText}\n\n` +
+            `Deseja realmente confirmar a exclusão dessas cotas e alterar a quantidade de números?`
+          );
+          if (!confirmDecrease) {
+            return;
+          }
+        }
+
+        // Remove cotas além do novo total
+        targetRaffle.numbers = (targetRaffle.numbers || []).filter(n => parseInt(n.num, 10) <= totalNums);
+      } else {
+        // Aumentou a quantidade de números: preserva cotas existentes e cria as novas como livres
+        const existingNumsMap = new Map();
+        (targetRaffle.numbers || []).forEach(n => {
+          existingNumsMap.set(parseInt(n.num, 10), n);
+        });
+
+        const updatedNumbers = [];
+        for (let i = 1; i <= totalNums; i++) {
+          if (existingNumsMap.has(i)) {
+            updatedNumbers.push(existingNumsMap.get(i));
+          } else {
+            updatedNumbers.push({
+              num: i,
+              name: "",
+              status: "available",
+              reservedAt: null,
+              paidAt: null
+            });
+          }
+        }
+        targetRaffle.numbers = updatedNumbers;
+      }
+      targetRaffle.totalNumbers = totalNums;
+    } else if (!targetRaffle.numbers || targetRaffle.numbers.length === 0) {
+      // Garante integridade se o array de números estiver vazio
+      targetRaffle.numbers = [];
+      for (let i = 1; i <= totalNums; i++) {
+        targetRaffle.numbers.push({
+          num: i,
+          name: "",
+          status: "available",
+          reservedAt: null,
+          paidAt: null
+        });
+      }
+      targetRaffle.totalNumbers = totalNums;
+    } else {
+      targetRaffle.totalNumbers = totalNums;
+    }
+
     targetRaffle.title = title;
     targetRaffle.pricePerNumber = price;
     
-    // Preserva ganhadores já sorteados se existirem
+    // Preserva ganhadores já sorteados se existirem (e que não excedam o novo total de números)
     const winnerMap = {};
     (targetRaffle.prizes || []).forEach(p => {
-      if (p.winnerNumber) {
+      if (p.winnerNumber && parseInt(p.winnerNumber, 10) <= totalNums) {
         winnerMap[p.position] = { winnerNumber: p.winnerNumber, winnerName: p.winnerName };
       }
     });
@@ -10289,7 +10364,7 @@ async function saveRaffleForm() {
     renderRaffleView();
     closeModal("modalRaffleForm");
     const prizeCountText = prizesArray.length > 0 ? ` com ${prizesArray.length} prêmio(s)` : ' (sem prêmios)';
-    showToast(`Ação "${title}" atualizada com sucesso${prizeCountText}!`, "success");
+    showToast(`Ação "${title}" atualizada com sucesso (${totalNums} cotas)${prizeCountText}!`, "success");
     return;
   }
 

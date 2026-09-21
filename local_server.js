@@ -394,17 +394,31 @@ const server = http.createServer((req, res) => {
       try {
         db.exec('BEGIN TRANSACTION;');
 
-        // Atualiza título e preço da rifa
-        const updateRaffle = db.prepare(`
-          UPDATE raffles 
-          SET title = ?, price_per_number = ?
-          WHERE id = ?
-        `);
-        updateRaffle.run(
-          body.title.trim(),
-          parseFloat(body.pricePerNumber) || 25,
-          body.raffleId
-        );
+        // Atualiza título, preço e total de cotas da rifa
+        const newTotalNumbers = body.totalNumbers ? parseInt(body.totalNumbers, 10) : null;
+        if (newTotalNumbers && newTotalNumbers > 0) {
+          const curRaffle = db.prepare('SELECT total_numbers FROM raffles WHERE id = ?').get(body.raffleId);
+          const curTotal = curRaffle ? (parseInt(curRaffle.total_numbers, 10) || 0) : 0;
+
+          db.prepare('UPDATE raffles SET title = ?, price_per_number = ?, total_numbers = ? WHERE id = ?')
+            .run(body.title.trim(), parseFloat(body.pricePerNumber) || 25, newTotalNumbers, body.raffleId);
+
+          if (newTotalNumbers > curTotal) {
+            const insertNumber = db.prepare(`
+              INSERT OR IGNORE INTO raffle_numbers (raffle_id, num, name, status, reserved_at, paid_at)
+              VALUES (?, ?, '', 'available', null, null)
+            `);
+            for (let i = curTotal + 1; i <= newTotalNumbers; i++) {
+              insertNumber.run(body.raffleId, i);
+            }
+          } else if (newTotalNumbers < curTotal) {
+            db.prepare('DELETE FROM raffle_numbers WHERE raffle_id = ? AND num > ?')
+              .run(body.raffleId, newTotalNumbers);
+          }
+        } else {
+          db.prepare('UPDATE raffles SET title = ?, price_per_number = ? WHERE id = ?')
+            .run(body.title.trim(), parseFloat(body.pricePerNumber) || 25, body.raffleId);
+        }
 
         // Se foram enviados prêmios, atualiza prêmios
         if (Array.isArray(body.prizes) && body.prizes.length > 0) {

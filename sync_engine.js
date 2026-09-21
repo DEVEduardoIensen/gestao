@@ -731,6 +731,17 @@ class SyncEngine {
             .from('raffle_numbers')
             .upsert(numbersRows, { onConflict: 'organization_id,raffle_id,num' });
           if (nError) throw nError;
+
+          // Se a quantidade de cotas foi reduzida, remove cotas obsoletas no Supabase
+          if (r.totalNumbers && Number.isInteger(r.totalNumbers)) {
+            const { error: dNumError } = await window.supabaseClient
+              .from('raffle_numbers')
+              .delete()
+              .eq('organization_id', orgId)
+              .eq('raffle_id', r.id)
+              .gt('num', r.totalNumbers);
+            if (dNumError) throw dNumError;
+          }
         }
         return true;
       }
