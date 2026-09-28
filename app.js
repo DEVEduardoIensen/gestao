@@ -1661,6 +1661,7 @@ function renderRaffleNumbersGrid() {
     const isSelected = gridSelectedCotas.has(item.num);
     const selectedClass = isSelected ? " multi-selected" : "";
     const wonPrize = prizeMap.get(item.num);
+    let winnerClass = "";
     if (wonPrize) {
       const pos = wonPrize.position || 1;
       const posClass = pos <= 10 ? pos : (((pos - 1) % 10) + 1);
