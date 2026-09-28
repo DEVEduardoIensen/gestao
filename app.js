@@ -1535,8 +1535,8 @@ function renderRaffleView() {
       
       let winnerInfo = "";
       if (prize.winnerNumber) {
-        winnerInfo = `<div class="prize-winner-badge pos-${posClass}">
-          🏆 Ganhador: Cota #${prize.winnerNumber} — ${escapeHtml(prize.winnerName || '')}
+        winnerInfo = `<div style="font-size: 0.75rem; color: var(--primary-gold); font-weight: 800; margin-top: 0.25rem;">
+          Ganhador: #${prize.winnerNumber} - ${escapeHtml(prize.winnerName || '')}
         </div>`;
       }
 
@@ -1661,15 +1661,14 @@ function renderRaffleNumbersGrid() {
     const isSelected = gridSelectedCotas.has(item.num);
     const selectedClass = isSelected ? " multi-selected" : "";
     const wonPrize = prizeMap.get(item.num);
-    let winnerClass = "";
-    let statusTag = "";
-
     if (wonPrize) {
       const pos = wonPrize.position || 1;
       const posClass = pos <= 10 ? pos : (((pos - 1) % 10) + 1);
       winnerClass = ` is-winner winner-pos-${posClass}`;
-      statusTag = `<span class="num-winner-tag winner-tag-${posClass}" title="${pos}º Lugar: ${escapeHtml(wonPrize.description || '')}">🏆 ${pos}º Lugar</span>`;
-    } else if (item.status === "paid") {
+    }
+
+    let statusTag = "";
+    if (item.status === "paid") {
       statusTag = `<span class="num-status-tag" title="Pago" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {
       statusTag = `<span class="num-status-tag tag-reserved" title="Reservado" style="color: var(--primary-gold);"><span class="status-text-full">Reservado</span><span class="status-text-short">Res.</span></span>`;
@@ -2907,14 +2906,6 @@ function renderValesView() {
     } else if (isDelivered) {
       typeBadge = `<span class="badge-pill badge-delivered" style="background: rgba(100, 116, 139, 0.2); border-color: rgba(100, 116, 139, 0.4); color: #cbd5e1;">Entregue / Concluído</span>`;
     }
-    // Extrai posição (1º, 2º, 3º, 4º... Lugar) para badge colorido
-    let rankBadge = "";
-    const matchPos = (item.description || "").match(/^(\d+)º/);
-    if (matchPos) {
-      const pos = parseInt(matchPos[1], 10);
-      const posClass = pos <= 10 ? pos : (((pos - 1) % 10) + 1);
-      rankBadge = `<span class="badge-pill badge-pos-${posClass}">🏆 ${pos}º Lugar</span>`;
-    }
 
     // Phone Link
     let phoneLinkHtml = "";
@@ -3178,8 +3169,7 @@ function renderValesView() {
               Origem: <strong>${escapeHtml(item.raffleRef || 'Ação Eldorado')}</strong> • Ganho em: ${formatDate(item.dateWon)}
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;">
-            ${rankBadge ? `<div>${rankBadge}</div>` : ''}
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
             ${typeBadge}
           </div>
         </div>
