@@ -3,7 +3,7 @@
  * Clean, High-Performance Management for Raffles, Store Credit (Vales), Prize Winner Sorter, Prize Exchanges, Fishing Agenda (Eldorado Lake) & Employee Days
  */
 
-const CURRENT_APP_VERSION = '2.9.10';
+const CURRENT_APP_VERSION = '2.9.11';
 window.CURRENT_APP_VERSION = CURRENT_APP_VERSION;
 
 function syncAppVersionDisplay() {
@@ -122,6 +122,21 @@ function sanitizeAppData(data) {
   }
   if (!Array.isArray(data.valesAndPrizes)) {
     data.valesAndPrizes = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.valesAndPrizes)) ? INITIAL_SAMPLE_DATA.valesAndPrizes : [];
+  } else {
+    // Deduplicação de segurança: preserva apenas um registro único por prêmio de cada ação
+    const seenPrizes = new Set();
+    data.valesAndPrizes = data.valesAndPrizes.filter(v => {
+      if (!v) return false;
+      const ref = (v.raffleRef || '').trim().toUpperCase();
+      const desc = (v.description || '').trim();
+      const matchPos = desc.match(/^(\d+)º/);
+      if (ref && matchPos) {
+        const key = `${ref}::${matchPos[1]}º`;
+        if (seenPrizes.has(key)) return false;
+        seenPrizes.add(key);
+      }
+      return true;
+    });
   }
   if (!Array.isArray(data.eduardoWorkDays)) {
     data.eduardoWorkDays = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.eduardoWorkDays)) ? INITIAL_SAMPLE_DATA.eduardoWorkDays : [];
@@ -1515,16 +1530,18 @@ function renderRaffleView() {
     raffle.prizes.forEach((prize, idx) => {
       const prizeDiv = document.createElement("div");
       prizeDiv.className = "prize-item";
+      const pos = prize.position || (idx + 1);
+      const posClass = pos <= 10 ? pos : (((pos - 1) % 10) + 1);
       
       let winnerInfo = "";
       if (prize.winnerNumber) {
-        winnerInfo = `<div style="font-size: 0.75rem; color: var(--primary-gold); font-weight: 800; margin-top: 0.25rem;">
-          Ganhador: #${prize.winnerNumber} - ${prize.winnerName || ''}
+        winnerInfo = `<div class="prize-winner-badge pos-${posClass}">
+          🏆 Ganhador: Cota #${prize.winnerNumber} — ${escapeHtml(prize.winnerName || '')}
         </div>`;
       }
 
       prizeDiv.innerHTML = `
-        <div class="prize-pos">${prize.position || (idx + 1)}º</div>
+        <div class="prize-pos prize-pos-${posClass}">${pos}º</div>
         <div style="flex-grow: 1;">
           <div class="prize-desc">${escapeHtml(prize.description)}</div>
           ${winnerInfo}
@@ -1642,18 +1659,23 @@ function renderRaffleNumbersGrid() {
     }
 
     const isSelected = gridSelectedCotas.has(item.num);
-    const wonPrize = prizeMap.get(item.num);
-    const winnerClass = wonPrize ? ` is-winner winner-pos-${wonPrize.position || 1}` : "";
     const selectedClass = isSelected ? " multi-selected" : "";
-
+    const wonPrize = prizeMap.get(item.num);
+    let winnerClass = "";
     let statusTag = "";
-    if (item.status === "paid") {
+
+    if (wonPrize) {
+      const pos = wonPrize.position || 1;
+      const posClass = pos <= 10 ? pos : (((pos - 1) % 10) + 1);
+      winnerClass = ` is-winner winner-pos-${posClass}`;
+      statusTag = `<span class="num-winner-tag winner-tag-${posClass}" title="${pos}º Lugar: ${escapeHtml(wonPrize.description || '')}">🏆 ${pos}º Lugar</span>`;
+    } else if (item.status === "paid") {
       statusTag = `<span class="num-status-tag" title="Pago" style="color: var(--status-paid-text);">Pago</span>`;
     } else if (item.status === "reserved") {
       statusTag = `<span class="num-status-tag tag-reserved" title="Reservado" style="color: var(--primary-gold);"><span class="status-text-full">Reservado</span><span class="status-text-short">Res.</span></span>`;
     }
 
-    const tileTitle = wonPrize ? ` title="${wonPrize.position || 1}º Lugar: ${escapeHtml(item.name || 'Ganhador')}"` : "";
+    const tileTitle = wonPrize ? ` title="${wonPrize.position || 1}º Lugar: ${escapeHtml(item.name || 'Ganhador')} - ${escapeHtml(wonPrize.description || '')}"` : "";
     const nameTitle = item.name ? escapeHtml(item.name) : 'Livre';
     const nameDisplay = item.name ? escapeHtml(item.name) : '—';
 
@@ -1681,8 +1703,10 @@ function openEditNumberModal(target) {
   modalSelectedCotas.clear();
 
   let firstIndex = 0;
+  let clickedNum = null;
+
   if (Array.isArray(target)) {
-    // Array of numbers or indices
+    // Array de números ou índices (vindos de seleção múltipla)
     target.forEach(val => {
       const numVal = parseInt(val, 10);
       const matchItem = raffle.numbers.find(n => n.num === numVal);
@@ -1693,25 +1717,52 @@ function openEditNumberModal(target) {
     if (modalSelectedCotas.size > 0) {
       const firstNum = Array.from(modalSelectedCotas)[0];
       firstIndex = raffle.numbers.findIndex(n => n.num === firstNum);
+      clickedNum = firstNum;
     }
   } else {
-    // Single index or number
-    const idx = parseInt(target, 10);
-    if (!isNaN(idx) && raffle.numbers[idx]) {
-      firstIndex = idx;
-      modalSelectedCotas.add(raffle.numbers[idx].num);
+    // Número individual, objeto { num, index } ou índice
+    let targetNum = null;
+    let targetIdx = null;
+
+    if (typeof target === 'object' && target !== null) {
+      targetNum = parseInt(target.num, 10);
+      targetIdx = parseInt(target.index, 10);
     } else {
-      const matchItem = raffle.numbers.find(n => n.num === idx);
-      if (matchItem) {
-        firstIndex = raffle.numbers.findIndex(n => n.num === matchItem.num);
-        modalSelectedCotas.add(matchItem.num);
+      const val = parseInt(target, 10);
+      const foundByNum = raffle.numbers.find(n => n.num === val);
+      if (foundByNum) {
+        targetNum = foundByNum.num;
+        targetIdx = raffle.numbers.findIndex(n => n.num === targetNum);
+      } else if (!isNaN(val) && raffle.numbers[val]) {
+        targetIdx = val;
+        targetNum = raffle.numbers[val].num;
       }
+    }
+
+    if (targetNum !== null && !isNaN(targetNum)) {
+      clickedNum = targetNum;
+      modalSelectedCotas.add(targetNum);
+      firstIndex = (targetIdx !== null && targetIdx >= 0) ? targetIdx : raffle.numbers.findIndex(n => n.num === targetNum);
+    }
+
+    // AGRUPAMENTO AUTOMÁTICO DE COTAS DO MESMO CADASTRO:
+    // Se a cota selecionada já possui comprador cadastrado, inclui automaticamente
+    // todas as outras cotas deste mesmo comprador nesta ação sob "Cotas Selecionadas neste Cadastro:"
+    const primaryItem = raffle.numbers[firstIndex];
+    const buyerName = (primaryItem && primaryItem.name) ? primaryItem.name.trim().toUpperCase() : "";
+    if (buyerName) {
+      raffle.numbers.forEach(item => {
+        if ((item.name || "").trim().toUpperCase() === buyerName) {
+          modalSelectedCotas.add(item.num);
+        }
+      });
     }
   }
 
   if (modalSelectedCotas.size === 0 && raffle.numbers.length > 0) {
     modalSelectedCotas.add(raffle.numbers[0].num);
     firstIndex = 0;
+    clickedNum = raffle.numbers[0].num;
   }
 
   modalPrimaryIndex = firstIndex >= 0 ? firstIndex : 0;
@@ -1722,9 +1773,15 @@ function openEditNumberModal(target) {
   const inputExtra = document.getElementById("inputAddExtraCota");
   if (inputExtra) inputExtra.value = "";
 
+  const nameNotice = document.getElementById("nameMatchNotice");
+  if (nameNotice) {
+    nameNotice.style.display = "none";
+    nameNotice.innerHTML = "";
+  }
+
   selectEditStatus(primaryItem.status || "available");
 
-  // Populate dynamic prize dropdown
+  // Popula dropdown de prêmios com indicação clara se já possui ganhador
   const selectPrizeEl = document.getElementById("selectAssignPrize");
   if (selectPrizeEl) {
     selectPrizeEl.innerHTML = "";
@@ -1733,7 +1790,8 @@ function openEditNumberModal(target) {
         const pos = p.position || (idx + 1);
         const opt = document.createElement("option");
         opt.value = pos;
-        opt.textContent = `${pos}º Prêmio: ${p.description}`;
+        const winnerBadge = p.winnerNumber ? ` (Já sorteado: Cota #${p.winnerNumber} - ${p.winnerName || ''})` : "";
+        opt.textContent = `${pos}º Prêmio: ${p.description}${winnerBadge}`;
         selectPrizeEl.appendChild(opt);
       });
     } else {
@@ -1744,7 +1802,7 @@ function openEditNumberModal(target) {
     }
   }
 
-  // Ensure mini-grid drawer starts in remembered state
+  // Mini-grade de cotas no modal
   const miniGridContainer = document.getElementById("modalCotasMiniGridContainer");
   const toggleText = document.getElementById("miniGridToggleText");
   if (miniGridContainer) {
@@ -1754,7 +1812,8 @@ function openEditNumberModal(target) {
     toggleText.textContent = isMiniGridOpen ? "Ocultar Grade ▴" : "Ver Grade de Cotas ▾";
   }
 
-  renderModalSelectedCotas();
+  renderModalSelectedCotas(clickedNum);
+  updateAssignWinnerNotice();
   openModal("modalEditNumber");
 }
 
@@ -1773,7 +1832,7 @@ function selectEditStatus(status) {
   renderModalSelectedCotas();
 }
 
-function renderModalSelectedCotas() {
+function renderModalSelectedCotas(preferredSelectedNum) {
   const raffle = getActiveRaffle();
   if (!raffle) return;
 
@@ -1787,12 +1846,12 @@ function renderModalSelectedCotas() {
   const count = modalSelectedCotas.size;
   const sortedNums = Array.from(modalSelectedCotas).sort((a, b) => a - b);
 
-  // Update header count badge
+  // Atualiza badge de contagem no cabeçalho
   if (countBadge) {
     countBadge.textContent = `${count} ${count === 1 ? 'cota' : 'cotas'}`;
   }
 
-  // Render chips
+  // Renderiza chips com botão de remoção
   if (chipsContainer) {
     chipsContainer.innerHTML = "";
     sortedNums.forEach(num => {
@@ -1806,7 +1865,7 @@ function renderModalSelectedCotas() {
     });
   }
 
-  // Financial summary
+  // Resumo financeiro dinâmico
   const pricePer = raffle.pricePerNumber || 0;
   const totalAmount = count * pricePer;
   
@@ -1821,7 +1880,7 @@ function renderModalSelectedCotas() {
     }
   }
 
-  // Save button dynamic text
+  // Texto do botão salvar
   if (btnSaveText) {
     if (count === 1) {
       btnSaveText.textContent = "Salvar Dados da Cota";
@@ -1831,9 +1890,9 @@ function renderModalSelectedCotas() {
     }
   }
 
-  // Populate Cota Sorteada dropdown
+  // Popula dropdown de Cota Sorteada preservando a cota selecionada ou preferida
   if (selectAssignWinnerCota) {
-    const currentVal = selectAssignWinnerCota.value;
+    const prevVal = selectAssignWinnerCota.value;
     selectAssignWinnerCota.innerHTML = "";
     sortedNums.forEach(num => {
       const opt = document.createElement("option");
@@ -1841,21 +1900,138 @@ function renderModalSelectedCotas() {
       opt.textContent = `Cota #${num}`;
       selectAssignWinnerCota.appendChild(opt);
     });
-    if (currentVal && modalSelectedCotas.has(parseInt(currentVal, 10))) {
-      selectAssignWinnerCota.value = currentVal;
+
+    if (preferredSelectedNum && modalSelectedCotas.has(parseInt(preferredSelectedNum, 10))) {
+      selectAssignWinnerCota.value = preferredSelectedNum;
+    } else if (prevVal && modalSelectedCotas.has(parseInt(prevVal, 10))) {
+      selectAssignWinnerCota.value = prevVal;
+    } else if (sortedNums.length > 0) {
+      selectAssignWinnerCota.value = sortedNums[0];
     }
   }
 
-  // Detecta se há outras cotas disponíveis e oculta a adição rápida se não houver mais cotas livres
-  const availCount = (raffle.numbers || []).filter(n => n.status === "available" && !modalSelectedCotas.has(n.num)).length;
+  // Seção de Adição Rápida: SEMPRE VISÍVEL para permitir gerenciar e adicionar cotas
   const addExtraSection = document.getElementById("groupAddExtraCotaSection");
   if (addExtraSection) {
-    addExtraSection.style.display = availCount > 0 ? "block" : "none";
+    addExtraSection.style.display = "block";
   }
 
-  // Also update mini-grid if visible
+  // Visibilidade dinâmica dos atalhos de cotas livres (+1, +2, +5)
+  const availCount = (raffle.numbers || []).filter(n => n.status === "available" && !modalSelectedCotas.has(n.num)).length;
+  const btnAdd1 = document.getElementById("btnShortcutAdd1");
+  const btnAdd2 = document.getElementById("btnShortcutAdd2");
+  const btnAdd5 = document.getElementById("btnShortcutAdd5");
+  if (btnAdd1) btnAdd1.style.display = availCount >= 1 ? "inline-block" : "none";
+  if (btnAdd2) btnAdd2.style.display = availCount >= 2 ? "inline-block" : "none";
+  if (btnAdd5) btnAdd5.style.display = availCount >= 5 ? "inline-block" : "none";
+
+  // Atualiza mini-grade se estiver aberta
   if (isMiniGridOpen) {
     renderModalMiniGrid();
+  }
+
+  updateAssignWinnerNotice();
+}
+
+/* Aviso Anti-Duplicação e Estado do Ganhador */
+function updateAssignWinnerNotice() {
+  const noticeEl = document.getElementById("assignWinnerDuplicateNotice");
+  if (!noticeEl) return;
+
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) {
+    noticeEl.style.display = "none";
+    return;
+  }
+
+  const selectPrize = document.getElementById("selectAssignPrize");
+  const selectCota = document.getElementById("selectAssignWinnerCota");
+  const pos = selectPrize ? parseInt(selectPrize.value, 10) : 1;
+  const cotaNum = selectCota ? parseInt(selectCota.value, 10) : null;
+
+  const prizeObj = (raffle.prizes || []).find(p => p.position === pos);
+  const otherPrize = (raffle.prizes || []).find(p => p.winnerNumber === cotaNum && p.position !== pos);
+
+  let msg = "";
+  if (prizeObj && prizeObj.winnerNumber) {
+    if (prizeObj.winnerNumber === cotaNum) {
+      msg = `ℹ️ <strong>A Cota #${cotaNum} já está definida como ganhadora do ${pos}º Prêmio.</strong> Ao confirmar novamente, o registro em Vales e Prêmios será atualizado sem gerar duplicidade.`;
+    } else {
+      msg = `⚠️ <strong>Atenção:</strong> O ${pos}º Prêmio já estava registrado para a Cota #${prizeObj.winnerNumber} (${escapeHtml(prizeObj.winnerName || '')}). Ao confirmar para a Cota #${cotaNum}, o ganhador deste prêmio será substituído com segurança e atualizado na aba Vales e Prêmios, sem criar registros duplicados.`;
+    }
+  } else if (otherPrize) {
+    msg = `ℹ️ A Cota #${cotaNum} já foi sorteada anteriormente no <strong>${otherPrize.position}º Prêmio</strong> (${escapeHtml(otherPrize.description)}).`;
+  }
+
+  if (msg) {
+    noticeEl.innerHTML = msg;
+    noticeEl.style.display = "block";
+  } else {
+    noticeEl.style.display = "none";
+    noticeEl.innerHTML = "";
+  }
+}
+
+/* Sugestão Dinâmica de Comprador com Outras Cotas */
+function onEditNumNameInput() {
+  const nameInput = document.getElementById("editNumName");
+  const noticeBox = document.getElementById("nameMatchNotice");
+  if (!nameInput || !noticeBox) return;
+
+  const text = nameInput.value.trim().toUpperCase();
+  if (text.length < 2) {
+    noticeBox.style.display = "none";
+    noticeBox.innerHTML = "";
+    return;
+  }
+
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+
+  const matchCotas = raffle.numbers.filter(n => {
+    return (n.name || "").trim().toUpperCase() === text && !modalSelectedCotas.has(n.num);
+  });
+
+  if (matchCotas.length > 0) {
+    const numsStr = matchCotas.map(n => `#${n.num}`).join(", ");
+    noticeBox.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <span>💡 Encontrada(s) outra(s) <strong>${matchCotas.length} cota(s)</strong> (${numsStr}) de <strong>${escapeHtml(text)}</strong> nesta ação.</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="includeMatchedBuyerCotas('${escapeHtml(text)}')" style="padding: 0.2rem 0.5rem; font-size: 0.72rem; color: var(--primary-gold); border-color: var(--primary-gold);">
+          + Incluir no Cadastro
+        </button>
+      </div>
+    `;
+    noticeBox.style.display = "block";
+  } else {
+    noticeBox.style.display = "none";
+    noticeBox.innerHTML = "";
+  }
+}
+
+function includeMatchedBuyerCotas(buyerName) {
+  const raffle = getActiveRaffle();
+  if (!raffle || !Array.isArray(raffle.numbers)) return;
+
+  let added = 0;
+  raffle.numbers.forEach(n => {
+    if ((n.name || "").trim().toUpperCase() === buyerName.toUpperCase()) {
+      if (!modalSelectedCotas.has(n.num)) {
+        modalSelectedCotas.add(n.num);
+        added++;
+      }
+    }
+  });
+
+  const noticeBox = document.getElementById("nameMatchNotice");
+  if (noticeBox) {
+    noticeBox.style.display = "none";
+    noticeBox.innerHTML = "";
+  }
+
+  if (added > 0) {
+    renderModalSelectedCotas();
+    showToast(`${added} cota(s) de ${buyerName} adicionada(s) ao cadastro!`, "success");
   }
 }
 
@@ -1868,11 +2044,27 @@ function addExtraCotasFromInput() {
   const raffle = getActiveRaffle();
   if (!raffle || !Array.isArray(raffle.numbers)) return;
 
-  // Split by comma, space, semicolon, dash
+  // Suporte a listas (15, 22, 30) e faixas (10-15)
   const rawParts = text.split(/[\s,;]+/);
   let addedCount = 0;
 
   rawParts.forEach(part => {
+    const rangeMatch = part.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10);
+      const end = parseInt(rangeMatch[2], 10);
+      const min = Math.min(start, end);
+      const max = Math.max(start, end);
+      for (let n = min; n <= max; n++) {
+        const exists = raffle.numbers.find(item => item.num === n);
+        if (exists && !modalSelectedCotas.has(n)) {
+          modalSelectedCotas.add(n);
+          addedCount++;
+        }
+      }
+      return;
+    }
+
     const cleanStr = part.replace(/[^\d]/g, '');
     const num = parseInt(cleanStr, 10);
     if (!isNaN(num) && num > 0) {
@@ -1934,7 +2126,7 @@ function resetModalSelectionToPrimary() {
     modalSelectedCotas.add(primaryItem.num);
   }
   renderModalSelectedCotas();
-  showToast("Seleção redefinida para a cota principal.", "info");
+  showToast("Seleção redefinida para a cota inicial.", "info");
 }
 
 function toggleModalMiniGrid() {
@@ -2069,7 +2261,17 @@ async function assignPrizeWinner() {
   const prizeDesc = (prizeObj.description || `${position}º Prêmio`).trim();
   const descUpper = prizeDesc.toUpperCase();
 
-  // Mark in local state
+  // Verifica se o prêmio pertencia a outra cota anteriormente
+  const prevWinnerNum = prizeObj.winnerNumber;
+  if (prevWinnerNum && prevWinnerNum !== item.num) {
+    const prevItem = raffle.numbers.find(n => n.num === prevWinnerNum);
+    const stillHasOtherPrize = (raffle.prizes || []).some(p => p.position !== position && p.winnerNumber === prevWinnerNum);
+    if (!stillHasOtherPrize && prevItem) {
+      // cota anterior continua como paga mas o prêmio migrou
+    }
+  }
+
+  // Marca no estado local
   prizeObj.winnerNumber = item.num;
   prizeObj.winnerName = winnerName;
   item.status = "paid";
@@ -2159,30 +2361,88 @@ async function assignPrizeWinner() {
     entryNotes = "Aguardando retirada do prêmio físico na loja";
   }
 
-  const newValeEntry = {
-    id: "vp-" + Date.now(),
-    customerName: winnerName,
-    customerPhone: "",
-    type: entryType,
-    raffleRef: raffle.title,
-    dateWon: getLocalDateStr(),
-    initialAmount: initialAmount,
-    currentBalance: initialAmount,
-    description: `${position}º Lugar - ${prizeDesc} (Cota #${item.num})`,
-    status: entryStatus,
-    deliveredAt: null,
-    transactions: [],
-    notes: entryNotes
-  };
+  // ANTI-DUPLICAÇÃO: Procura se já existe um registro deste prêmio desta ação em Vales e Prêmios
+  const existingIndex = (appData.valesAndPrizes || []).findIndex(v => {
+    if ((v.raffleRef || '').trim().toUpperCase() !== (raffle.title || '').trim().toUpperCase()) return false;
+    if (v.prizePosition === position) return true;
+    const desc = (v.description || '').trim();
+    const matchPos = desc.match(/^(\d+)º/);
+    if (matchPos && parseInt(matchPos[1], 10) === position) return true;
+    if (desc.includes(`Cota #${item.num}`)) return true;
+    return false;
+  });
 
-  appData.valesAndPrizes.unshift(newValeEntry);
+  let targetValeEntry;
+  if (existingIndex !== -1) {
+    // ATUALIZAÇÃO NO REGISTRO EXISTENTE (impede duplicata!)
+    targetValeEntry = appData.valesAndPrizes[existingIndex];
+    targetValeEntry.customerName = winnerName;
+    targetValeEntry.type = entryType;
+    targetValeEntry.raffleRef = raffle.title;
+    targetValeEntry.initialAmount = initialAmount;
+    if (targetValeEntry.transactions && targetValeEntry.transactions.length > 0) {
+      const spent = targetValeEntry.transactions.reduce((acc, t) => acc + (parseFloat(t.amount) || 0), 0);
+      targetValeEntry.currentBalance = Math.max(0, initialAmount - spent);
+    } else {
+      targetValeEntry.currentBalance = initialAmount;
+    }
+    targetValeEntry.description = `${position}º Lugar - ${prizeDesc} (Cota #${item.num})`;
+    if (targetValeEntry.status !== 'delivered' && targetValeEntry.status !== 'scheduled') {
+      targetValeEntry.status = entryStatus;
+    }
+    targetValeEntry.notes = entryNotes;
+    targetValeEntry.prizePosition = position;
+  } else {
+    // NOVO REGISTRO
+    targetValeEntry = {
+      id: "vp-" + Date.now(),
+      customerName: winnerName,
+      customerPhone: "",
+      type: entryType,
+      raffleRef: raffle.title,
+      dateWon: getLocalDateStr(),
+      initialAmount: initialAmount,
+      currentBalance: initialAmount,
+      description: `${position}º Lugar - ${prizeDesc} (Cota #${item.num})`,
+      status: entryStatus,
+      deliveredAt: null,
+      transactions: [],
+      notes: entryNotes,
+      prizePosition: position
+    };
+    appData.valesAndPrizes.unshift(targetValeEntry);
+  }
+
+  // Limpeza de segurança: remove quaisquer registros duplicados residuais para este mesmo prêmio nesta rifa
+  const duplicateIdsToRemove = [];
+  appData.valesAndPrizes = appData.valesAndPrizes.filter(v => {
+    if (v.id === targetValeEntry.id) return true;
+    if ((v.raffleRef || '').trim().toUpperCase() === (raffle.title || '').trim().toUpperCase()) {
+      const desc = (v.description || '').trim();
+      const matchPos = desc.match(/^(\d+)º/);
+      if (matchPos && parseInt(matchPos[1], 10) === position) {
+        duplicateIdsToRemove.push(v.id);
+        return false;
+      }
+    }
+    return true;
+  });
+
+  for (const dupId of duplicateIdsToRemove) {
+    await saveState({
+      type: "DELETE_VALE",
+      tableName: "vales_prizes",
+      recordId: dupId,
+      payload: { id: dupId }
+    });
+  }
   
-  // 1. Persiste o novo vale / prêmio na aba de Vales & Prêmios
+  // 1. Persiste o vale / prêmio na aba de Vales & Prêmios
   await saveState({
     type: "UPDATE_VALE",
     tableName: "vales_prizes",
-    recordId: newValeEntry.id,
-    payload: newValeEntry
+    recordId: targetValeEntry.id,
+    payload: targetValeEntry
   });
 
   // 2. Persiste a cota premiada como Paga com o nome do ganhador
@@ -2208,6 +2468,25 @@ async function assignPrizeWinner() {
     payload: raffle
   });
 
+  // Notifica o servidor local se conectado
+  if (isConnectedToBackend) {
+    try {
+      await fetch("/api/raffles/winner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raffleId: raffle.id,
+          num: item.num,
+          position: position,
+          winnerName: winnerName,
+          prizeDescription: prizeDesc
+        })
+      });
+    } catch (e) {
+      console.warn("Backend winner notification failed:", e);
+    }
+  }
+
   renderRaffleView();
   renderValesView();
   renderFishingAgendaView();
@@ -2215,11 +2494,11 @@ async function assignPrizeWinner() {
   
   if (entryType === "dual_choice") {
     const choiceText = hasPesca ? "Diária ou Vale" : "Prêmio Físico ou Vale";
-    showToast(`Cota #${item.num} (${winnerName}) ganhou ${position}º Lugar! Pendente de escolha (${choiceText}) em Vales & Prêmios.`, "success");
+    showToast(`Cota #${item.num} (${winnerName}) confirmada no ${position}º Lugar! Pendente de escolha (${choiceText}) em Vales & Prêmios (sem duplicidade).`, "success");
   } else if (hasPesca) {
-    showToast(`Cota #${item.num} (${winnerName}) ganhou ${position}º Lugar (${prizeDesc})! Disponível para agendamento na aba Agenda de Pesca!`, "success");
+    showToast(`Cota #${item.num} (${winnerName}) confirmada no ${position}º Lugar (${prizeDesc})! Disponível para agendamento na aba Agenda de Pesca!`, "success");
   } else {
-    showToast(`Cota #${item.num} (${winnerName}) confirmada como ${position}º Lugar e enviada para a aba Vales e Prêmios!`, "success");
+    showToast(`Cota #${item.num} (${winnerName}) confirmada como ${position}º Lugar e atualizada em Vales e Prêmios!`, "success");
   }
 }
 
@@ -2628,6 +2907,14 @@ function renderValesView() {
     } else if (isDelivered) {
       typeBadge = `<span class="badge-pill badge-delivered" style="background: rgba(100, 116, 139, 0.2); border-color: rgba(100, 116, 139, 0.4); color: #cbd5e1;">Entregue / Concluído</span>`;
     }
+    // Extrai posição (1º, 2º, 3º, 4º... Lugar) para badge colorido
+    let rankBadge = "";
+    const matchPos = (item.description || "").match(/^(\d+)º/);
+    if (matchPos) {
+      const pos = parseInt(matchPos[1], 10);
+      const posClass = pos <= 10 ? pos : (((pos - 1) % 10) + 1);
+      rankBadge = `<span class="badge-pill badge-pos-${posClass}">🏆 ${pos}º Lugar</span>`;
+    }
 
     // Phone Link
     let phoneLinkHtml = "";
@@ -2891,7 +3178,8 @@ function renderValesView() {
               Origem: <strong>${escapeHtml(item.raffleRef || 'Ação Eldorado')}</strong> • Ganho em: ${formatDate(item.dateWon)}
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;">
+            ${rankBadge ? `<div>${rankBadge}</div>` : ''}
             ${typeBadge}
           </div>
         </div>
@@ -10516,7 +10804,7 @@ function setupEventListeners() {
         }
         updateGridMultiSelectBar();
       } else {
-        openEditNumberModal(index);
+        openEditNumberModal({ num, index });
       }
     });
   }
@@ -10567,6 +10855,10 @@ function setupEventListeners() {
   // Number Edit Modal & Assign Winner
   document.getElementById("btnSaveNumberModal").addEventListener("click", saveNumberModal);
   document.getElementById("btnConfirmWinner").addEventListener("click", assignPrizeWinner);
+  const selectPrizeChangeEl = document.getElementById("selectAssignPrize");
+  if (selectPrizeChangeEl) selectPrizeChangeEl.addEventListener("change", updateAssignWinnerNotice);
+  const selectWinnerCotaChangeEl = document.getElementById("selectAssignWinnerCota");
+  if (selectWinnerCotaChangeEl) selectWinnerCotaChangeEl.addEventListener("change", updateAssignWinnerNotice);
 
   // WhatsApp Modals
   document.getElementById("btnProcessImportWhatsApp").addEventListener("click", processWhatsAppImport);

@@ -245,27 +245,63 @@ const server = http.createServer((req, res) => {
           prizeNotes = "Aguardando retirada do prêmio físico na loja";
         }
 
-        const valeId = 'vp-' + Date.now();
-        const insertVale = db.prepare(`
-          INSERT INTO vales_prizes (id, customer_name, customer_phone, type, raffle_ref, date_won, initial_amount, current_balance, description, status, delivered_at, notes, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
+        // Verifica se já existe um vale/prêmio deste mesmo prêmio/posição ou cota nesta ação
+        const existingVale = db.prepare(`
+          SELECT id, status FROM vales_prizes 
+          WHERE raffle_ref = ? AND (description LIKE ? OR description LIKE ?)
+        `).get(raffleTitle, `${body.position}º Lugar%`, `%(Cota #${body.num})%`);
 
-        insertVale.run(
-          valeId,
-          body.winnerName || `Cota #${body.num}`,
-          body.customerPhone || '',
-          prizeType,
-          raffleTitle,
-          getLocalDateStr(),
-          initialAmount,
-          initialAmount,
-          `${body.position}º Lugar - ${prizeDesc} (Cota #${body.num})`,
-          prizeStatus,
-          null,
-          prizeNotes,
-          getLocalDateStr()
-        );
+        let valeId;
+        if (existingVale) {
+          valeId = existingVale.id;
+          const updateVale = db.prepare(`
+            UPDATE vales_prizes 
+            SET customer_name = ?, customer_phone = COALESCE(NULLIF(?, ''), customer_phone),
+                type = ?, initial_amount = ?, current_balance = ?, description = ?,
+                status = CASE WHEN status IN ('delivered', 'scheduled') THEN status ELSE ? END,
+                notes = ?
+            WHERE id = ?
+          `);
+          updateVale.run(
+            body.winnerName || `Cota #${body.num}`,
+            body.customerPhone || '',
+            prizeType,
+            initialAmount,
+            initialAmount,
+            `${body.position}º Lugar - ${prizeDesc} (Cota #${body.num})`,
+            prizeStatus,
+            prizeNotes,
+            valeId
+          );
+        } else {
+          valeId = 'vp-' + Date.now();
+          const insertVale = db.prepare(`
+            INSERT INTO vales_prizes (id, customer_name, customer_phone, type, raffle_ref, date_won, initial_amount, current_balance, description, status, delivered_at, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          insertVale.run(
+            valeId,
+            body.winnerName || `Cota #${body.num}`,
+            body.customerPhone || '',
+            prizeType,
+            raffleTitle,
+            getLocalDateStr(),
+            initialAmount,
+            initialAmount,
+            `${body.position}º Lugar - ${prizeDesc} (Cota #${body.num})`,
+            prizeStatus,
+            null,
+            prizeNotes,
+            getLocalDateStr()
+          );
+        }
+
+        // Limpeza de segurança: remove quaisquer registros duplicados residuais para esta mesma posição e ação
+        db.prepare(`
+          DELETE FROM vales_prizes 
+          WHERE raffle_ref = ? AND id != ? AND description LIKE ?
+        `).run(raffleTitle, valeId, `${body.position}º Lugar%`);
 
         db.exec('COMMIT;');
         createAutoBackupSnapshot();

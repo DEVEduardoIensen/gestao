@@ -797,40 +797,116 @@ body {
   transition: all 0.22s ease;
 }
 
-/* 1º Lugar: Ouro Dourado */
+/* 1º Lugar: Ouro Imperial / Dourado */
 .num-tile.winner-pos-1 {
   border-color: #ffd700 !important;
-  background: linear-gradient(145deg, rgba(255, 215, 0, 0.16) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
-  box-shadow: 0 0 14px rgba(255, 215, 0, 0.3), inset 0 1px 0 rgba(255, 215, 0, 0.3) !important;
+  background: linear-gradient(145deg, rgba(255, 215, 0, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.35), inset 0 1px 0 rgba(255, 215, 0, 0.3) !important;
 }
-
 .num-tile.winner-pos-1 .num-badge {
   color: #ffd700 !important;
-  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
 }
 
 /* 2º Lugar: Prata / Platina */
 .num-tile.winner-pos-2 {
   border-color: #cbd5e1 !important;
-  background: linear-gradient(145deg, rgba(203, 213, 225, 0.16) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
-  box-shadow: 0 0 12px rgba(203, 213, 225, 0.25), inset 0 1px 0 rgba(203, 213, 225, 0.3) !important;
+  background: linear-gradient(145deg, rgba(203, 213, 225, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(203, 213, 225, 0.3), inset 0 1px 0 rgba(203, 213, 225, 0.3) !important;
 }
-
 .num-tile.winner-pos-2 .num-badge {
   color: #e2e8f0 !important;
-  text-shadow: 0 0 8px rgba(226, 232, 240, 0.4);
+  text-shadow: 0 0 8px rgba(226, 232, 240, 0.5);
 }
 
 /* 3º Lugar: Bronze / Âmbar */
 .num-tile.winner-pos-3 {
   border-color: #f59e0b !important;
-  background: linear-gradient(145deg, rgba(245, 158, 11, 0.16) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25), inset 0 1px 0 rgba(245, 158, 11, 0.3) !important;
+  background: linear-gradient(145deg, rgba(245, 158, 11, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.3), inset 0 1px 0 rgba(245, 158, 11, 0.3) !important;
 }
-
 .num-tile.winner-pos-3 .num-badge {
   color: #fbbf24 !important;
-  text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+/* 4º Lugar: Verde Esmeralda / Jade */
+.num-tile.winner-pos-4 {
+  border-color: #10b981 !important;
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(16, 185, 129, 0.3) !important;
+}
+.num-tile.winner-pos-4 .num-badge {
+  color: #34d399 !important;
+  text-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+/* 5º Lugar: Azul Safira / Ciano */
+.num-tile.winner-pos-5 {
+  border-color: #06b6d4 !important;
+  background: linear-gradient(145deg, rgba(6, 182, 212, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.35), inset 0 1px 0 rgba(6, 182, 212, 0.3) !important;
+}
+.num-tile.winner-pos-5 .num-badge {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+/* 6º Lugar: Roxo Ametista / Violeta */
+.num-tile.winner-pos-6 {
+  border-color: #a855f7 !important;
+  background: linear-gradient(145deg, rgba(168, 85, 247, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.35), inset 0 1px 0 rgba(168, 85, 247, 0.3) !important;
+}
+.num-tile.winner-pos-6 .num-badge {
+  color: #c084fc !important;
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5);
+}
+
+/* 7º Lugar: Rosa Rubi / Carmim */
+.num-tile.winner-pos-7 {
+  border-color: #f43f5e !important;
+  background: linear-gradient(145deg, rgba(244, 63, 94, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(244, 63, 94, 0.35), inset 0 1px 0 rgba(244, 63, 94, 0.3) !important;
+}
+.num-tile.winner-pos-7 .num-badge {
+  color: #fb7185 !important;
+  text-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
+}
+
+/* 8º Lugar: Laranja Coral / Tangerina */
+.num-tile.winner-pos-8 {
+  border-color: #fb923c !important;
+  background: linear-gradient(145deg, rgba(251, 146, 60, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(251, 146, 60, 0.35), inset 0 1px 0 rgba(251, 146, 60, 0.3) !important;
+}
+.num-tile.winner-pos-8 .num-badge {
+  color: #fdba74 !important;
+  text-shadow: 0 0 8px rgba(253, 186, 116, 0.5);
+}
+
+/* 9º Lugar: Turquesa Marinha / Teal */
+.num-tile.winner-pos-9 {
+  border-color: #14b8a6 !important;
+  background: linear-gradient(145deg, rgba(20, 184, 166, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(20, 184, 166, 0.35), inset 0 1px 0 rgba(20, 184, 166, 0.3) !important;
+}
+.num-tile.winner-pos-9 .num-badge {
+  color: #2dd4bf !important;
+  text-shadow: 0 0 8px rgba(45, 212, 191, 0.5);
+}
+
+/* 10º Lugar / Outros: Índigo Elétrico */
+.num-tile.winner-pos-10,
+.num-tile.winner-pos-other {
+  border-color: #6366f1 !important;
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(99, 102, 241, 0.3) !important;
+}
+.num-tile.winner-pos-10 .num-badge,
+.num-tile.winner-pos-other .num-badge {
+  color: #818cf8 !important;
+  text-shadow: 0 0 8px rgba(129, 140, 248, 0.5);
 }
 
 /* Tag / Pill de Ganhador (Sem quebra de linha) */
@@ -838,7 +914,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.6rem !important;
+  font-size: 0.62rem !important;
   font-weight: 800 !important;
   line-height: 1.2;
   padding: 0.18rem 0.45rem;
@@ -855,23 +931,101 @@ body {
   color: #000000 !important;
   border: 1px solid #ffe066;
 }
-
 .winner-tag-2 {
   background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%);
   color: #090d16 !important;
   border: 1px solid #ffffff;
 }
-
 .winner-tag-3 {
   background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
   color: #ffffff !important;
   border: 1px solid #fcd34d;
 }
-
-.winner-tag-other {
-  background: linear-gradient(135deg, #e5c158 0%, #b89328 100%);
-  color: #000000 !important;
+.winner-tag-4 {
+  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  color: #ffffff !important;
+  border: 1px solid #6ee7b7;
 }
+.winner-tag-5 {
+  background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+  color: #ffffff !important;
+  border: 1px solid #67e8f9;
+}
+.winner-tag-6 {
+  background: linear-gradient(135deg, #a855f7 0%, #6b21a8 100%);
+  color: #ffffff !important;
+  border: 1px solid #d8b4fe;
+}
+.winner-tag-7 {
+  background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+  color: #ffffff !important;
+  border: 1px solid #fda4af;
+}
+.winner-tag-8 {
+  background: linear-gradient(135deg, #fb923c 0%, #c2410c 100%);
+  color: #ffffff !important;
+  border: 1px solid #fed7aa;
+}
+.winner-tag-9 {
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
+  color: #ffffff !important;
+  border: 1px solid #5eead4;
+}
+.winner-tag-10,
+.winner-tag-other {
+  background: linear-gradient(135deg, #6366f1 0%, #3730a3 100%);
+  color: #ffffff !important;
+  border: 1px solid #a5b4fc;
+}
+
+/* Badges das Posições dos Prêmios (1º ao 10º) */
+.prize-pos-1 { background: linear-gradient(135deg, #ffd700, #e5a50a) !important; color: #000 !important; }
+.prize-pos-2 { background: linear-gradient(135deg, #f1f5f9, #94a3b8) !important; color: #090d16 !important; }
+.prize-pos-3 { background: linear-gradient(135deg, #f59e0b, #b45309) !important; color: #fff !important; }
+.prize-pos-4 { background: linear-gradient(135deg, #10b981, #047857) !important; color: #fff !important; }
+.prize-pos-5 { background: linear-gradient(135deg, #06b6d4, #0284c7) !important; color: #fff !important; }
+.prize-pos-6 { background: linear-gradient(135deg, #a855f7, #6b21a8) !important; color: #fff !important; }
+.prize-pos-7 { background: linear-gradient(135deg, #f43f5e, #be123c) !important; color: #fff !important; }
+.prize-pos-8 { background: linear-gradient(135deg, #fb923c, #c2410c) !important; color: #fff !important; }
+.prize-pos-9 { background: linear-gradient(135deg, #14b8a6, #0f766e) !important; color: #fff !important; }
+.prize-pos-10,
+.prize-pos-other { background: linear-gradient(135deg, #6366f1, #3730a3) !important; color: #fff !important; }
+
+/* Tag de Ganhador dentro do Card de Prêmio na Aba Rifas */
+.prize-winner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  font-weight: 800;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+}
+.prize-winner-badge.pos-1 { background: rgba(255, 215, 0, 0.15); border: 1px solid #ffd700; color: #ffd700; }
+.prize-winner-badge.pos-2 { background: rgba(203, 213, 225, 0.15); border: 1px solid #cbd5e1; color: #e2e8f0; }
+.prize-winner-badge.pos-3 { background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fbbf24; }
+.prize-winner-badge.pos-4 { background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; }
+.prize-winner-badge.pos-5 { background: rgba(6, 182, 212, 0.15); border: 1px solid #06b6d4; color: #38bdf8; }
+.prize-winner-badge.pos-6 { background: rgba(168, 85, 247, 0.15); border: 1px solid #a855f7; color: #c084fc; }
+.prize-winner-badge.pos-7 { background: rgba(244, 63, 94, 0.15); border: 1px solid #f43f5e; color: #fb7185; }
+.prize-winner-badge.pos-8 { background: rgba(251, 146, 60, 0.15); border: 1px solid #fb923c; color: #fdba74; }
+.prize-winner-badge.pos-9 { background: rgba(20, 184, 166, 0.15); border: 1px solid #14b8a6; color: #2dd4bf; }
+.prize-winner-badge.pos-10,
+.prize-winner-badge.pos-other { background: rgba(99, 102, 241, 0.15); border: 1px solid #6366f1; color: #818cf8; }
+
+/* Badges de Rank na Aba Vales e Prêmios */
+.badge-pos-1 { background: rgba(255, 215, 0, 0.2) !important; border: 1px solid #ffd700 !important; color: #ffd700 !important; font-weight: 800; }
+.badge-pos-2 { background: rgba(203, 213, 225, 0.2) !important; border: 1px solid #cbd5e1 !important; color: #e2e8f0 !important; font-weight: 800; }
+.badge-pos-3 { background: rgba(245, 158, 11, 0.2) !important; border: 1px solid #f59e0b !important; color: #fbbf24 !important; font-weight: 800; }
+.badge-pos-4 { background: rgba(16, 185, 129, 0.2) !important; border: 1px solid #10b981 !important; color: #34d399 !important; font-weight: 800; }
+.badge-pos-5 { background: rgba(6, 182, 212, 0.2) !important; border: 1px solid #06b6d4 !important; color: #38bdf8 !important; font-weight: 800; }
+.badge-pos-6 { background: rgba(168, 85, 247, 0.2) !important; border: 1px solid #a855f7 !important; color: #c084fc !important; font-weight: 800; }
+.badge-pos-7 { background: rgba(244, 63, 94, 0.2) !important; border: 1px solid #f43f5e !important; color: #fb7185 !important; font-weight: 800; }
+.badge-pos-8 { background: rgba(251, 146, 60, 0.2) !important; border: 1px solid #fb923c !important; color: #fdba74 !important; font-weight: 800; }
+.badge-pos-9 { background: rgba(20, 184, 166, 0.2) !important; border: 1px solid #14b8a6 !important; color: #2dd4bf !important; font-weight: 800; }
+.badge-pos-10,
+.badge-pos-other { background: rgba(99, 102, 241, 0.2) !important; border: 1px solid #6366f1 !important; color: #818cf8 !important; font-weight: 800; }
 
 .num-name {
   font-size: 0.8rem;

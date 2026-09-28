@@ -1122,7 +1122,7 @@
               <div style="display: flex; align-items: center; gap: 0.6rem;">
                 <h3 style="color: var(--primary-gold); font-size: 1.15rem; margin: 0; font-weight: 700;">Versão do Aplicativo</h3>
               </div>
-              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.10 PRO</span>
+              <span class="badge" id="appVersionBadge" style="background: rgba(229, 193, 88, 0.18); border: 1px solid var(--primary-gold); color: var(--primary-gold); font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700;">v2.9.11 PRO</span>
             </div>
 
             <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
@@ -1242,7 +1242,7 @@
             <span id="modalSummaryAmountText" class="summary-amount">Total: R$ 25,00</span>
           </div>
 
-          <!-- Barra de Adição Rápida de Cotas (oculta quando não há mais cotas disponíveis) -->
+          <!-- Barra de Adição Rápida de Cotas -->
           <div class="cota-quick-add-section" id="groupAddExtraCotaSection">
             <div class="cota-quick-input-row">
               <input type="text" id="inputAddExtraCota" class="form-input form-input-sm"
@@ -1252,6 +1252,12 @@
                 style="white-space: nowrap;">
                 + Adicionar
               </button>
+            </div>
+            <div class="cota-quick-shortcuts" id="groupCotaShortcuts">
+              <button type="button" class="btn-chip-shortcut" onclick="addNextAvailableCotas(1)" id="btnShortcutAdd1">+1 Livre</button>
+              <button type="button" class="btn-chip-shortcut" onclick="addNextAvailableCotas(2)" id="btnShortcutAdd2">+2 Livres</button>
+              <button type="button" class="btn-chip-shortcut" onclick="addNextAvailableCotas(5)" id="btnShortcutAdd5">+5 Livres</button>
+              <button type="button" class="btn-chip-shortcut" onclick="resetModalSelectionToPrimary()" id="btnShortcutReset">Redefinir Seleção</button>
             </div>
           </div>
 
@@ -1270,7 +1276,10 @@
 
         <div class="form-group" style="margin-top: 1.15rem;">
           <label class="form-label">Nome do Participante / Comprador</label>
-          <input type="text" id="editNumName" class="form-input" placeholder="Ex: VINICIUS F, JÚNIOR JJ...">
+          <input type="text" id="editNumName" class="form-input" placeholder="Ex: VINICIUS F, JÚNIOR JJ..." oninput="onEditNumNameInput()">
+          <div id="nameMatchNotice" style="display: none; margin-top: 0.45rem; padding: 0.45rem 0.75rem; background: rgba(229, 193, 88, 0.12); border: 1px dashed var(--border-gold); border-radius: 4px; font-size: 0.76rem; color: #ffffff;">
+            <!-- Filled dynamically -->
+          </div>
         </div>
 
         <div class="form-group">
@@ -1313,6 +1322,10 @@
                 <!-- Populated dynamically by JS with selected cotas -->
               </select>
             </div>
+          </div>
+
+          <div id="assignWinnerDuplicateNotice" style="display: none; margin-bottom: 0.75rem; padding: 0.55rem 0.8rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 4px; font-size: 0.78rem; line-height: 1.4; color: #fbbf24;">
+            <!-- Dynamic notice -->
           </div>
 
           <button type="button" class="btn btn-gold btn-sm" id="btnConfirmWinner" style="width: 100%;">
@@ -2738,14 +2751,14 @@
   <!-- Scripts: Arquitetura PWA + Offline Dexie + Supabase -->
   <script src="lib/supabase.js"></script>
   <script src="supabase_config.js"></script>
-  <script src="normalize_raffle.js?v=2.9.10"></script>
-  <script src="db_dexie.js?v=2.9.10"></script>
-  <script src="auth_manager.js?v=2.9.10"></script>
-  <script src="sync_engine.js?v=2.9.10"></script>
-  <script src="qrcode.js?v=2.9.10"></script>
-  <script src="pdf.min.js?v=2.9.10"></script>
-  <script src="instagram_cronograma_104.js?v=2.9.10"></script>
-  <script src="app.js?v=2.9.10"></script>
+  <script src="normalize_raffle.js?v=2.9.11"></script>
+  <script src="db_dexie.js?v=2.9.11"></script>
+  <script src="auth_manager.js?v=2.9.11"></script>
+  <script src="sync_engine.js?v=2.9.11"></script>
+  <script src="qrcode.js?v=2.9.11"></script>
+  <script src="pdf.min.js?v=2.9.11"></script>
+  <script src="instagram_cronograma_104.js?v=2.9.11"></script>
+  <script src="app.js?v=2.9.11"></script>
 </body>
 
 </html>
