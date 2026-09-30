@@ -3,7 +3,7 @@
  * Clean, High-Performance Management for Raffles, Store Credit (Vales), Prize Winner Sorter, Prize Exchanges, Fishing Agenda (Eldorado Lake) & Employee Days
  */
 
-const CURRENT_APP_VERSION = '2.9.11';
+const CURRENT_APP_VERSION = '2.9.12';
 window.CURRENT_APP_VERSION = CURRENT_APP_VERSION;
 
 function syncAppVersionDisplay() {

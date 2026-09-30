@@ -11,7 +11,7 @@ try {
   console.warn('[Service Worker] normalize_raffle.js carregado inline/fallback');
 }
 
-const CACHE_NAME = 'eldorado-pwa-v2.9.11';
+const CACHE_NAME = 'eldorado-pwa-v2.9.12';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
@@ -39,6 +39,7 @@ const APP_SHELL_ASSETS = [
   './icon-512.png',
   './apple-touch-icon.png',
   './app_icon.ico',
+  './background.jpg',
   './gremio_bg.jpg',
   './icon-mobile.svg',
   './icon-desktop.svg',

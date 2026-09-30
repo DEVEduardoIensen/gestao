@@ -84,8 +84,8 @@ body {
   font-family: var(--font-body);
   background-color: var(--bg-dark);
   background-image: 
-    linear-gradient(180deg, rgba(6, 10, 19, 0.75) 0%, rgba(6, 10, 19, 0.88) 100%),
-    url('gremio_bg.jpg');
+    linear-gradient(180deg, rgba(6, 10, 19, 0.70) 0%, rgba(6, 10, 19, 0.85) 100%),
+    url('background.jpg');
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -830,15 +830,15 @@ body {
   text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
-/* 4º Lugar: Verde Esmeralda / Jade */
+/* 4º Lugar: Roxo Ametista / Violeta Nobre */
 .num-tile.winner-pos-4 {
-  border-color: #10b981 !important;
-  background: linear-gradient(145deg, rgba(16, 185, 129, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
-  box-shadow: 0 0 14px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(16, 185, 129, 0.3) !important;
+  border-color: #a855f7 !important;
+  background: linear-gradient(145deg, rgba(168, 85, 247, 0.22) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.4), inset 0 1px 0 rgba(168, 85, 247, 0.35) !important;
 }
 .num-tile.winner-pos-4 .num-badge {
-  color: #34d399 !important;
-  text-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+  color: #c084fc !important;
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
 }
 
 /* 5º Lugar: Azul Safira / Ciano */
@@ -852,15 +852,15 @@ body {
   text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
 }
 
-/* 6º Lugar: Roxo Ametista / Violeta */
+/* 6º Lugar: Rosa Choque / Carmim Neon */
 .num-tile.winner-pos-6 {
-  border-color: #a855f7 !important;
-  background: linear-gradient(145deg, rgba(168, 85, 247, 0.18) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
-  box-shadow: 0 0 14px rgba(168, 85, 247, 0.35), inset 0 1px 0 rgba(168, 85, 247, 0.3) !important;
+  border-color: #ec4899 !important;
+  background: linear-gradient(145deg, rgba(236, 72, 153, 0.22) 0%, rgba(8, 14, 26, 0.95) 100%) !important;
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.4), inset 0 1px 0 rgba(236, 72, 153, 0.35) !important;
 }
 .num-tile.winner-pos-6 .num-badge {
-  color: #c084fc !important;
-  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5);
+  color: #f472b6 !important;
+  text-shadow: 0 0 8px rgba(244, 114, 182, 0.6);
 }
 
 /* 7º Lugar: Rosa Rubi / Carmim */
@@ -909,21 +909,9 @@ body {
   text-shadow: 0 0 8px rgba(129, 140, 248, 0.5);
 }
 
-/* Tag / Pill de Ganhador (Sem quebra de linha) */
+/* Tag / Pill de Ganhador desativada (Sem emoji e sem texto sobre o número) */
 .num-winner-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.62rem !important;
-  font-weight: 800 !important;
-  line-height: 1.2;
-  padding: 0.18rem 0.45rem;
-  border-radius: 4px;
-  white-space: nowrap !important;
-  letter-spacing: 0.2px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-  flex-shrink: 0;
-  text-transform: uppercase;
+  display: none !important;
 }
 
 .winner-tag-1 {
@@ -942,9 +930,9 @@ body {
   border: 1px solid #fcd34d;
 }
 .winner-tag-4 {
-  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
   color: #ffffff !important;
-  border: 1px solid #6ee7b7;
+  border: 1px solid #d8b4fe;
 }
 .winner-tag-5 {
   background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
@@ -952,9 +940,9 @@ body {
   border: 1px solid #67e8f9;
 }
 .winner-tag-6 {
-  background: linear-gradient(135deg, #a855f7 0%, #6b21a8 100%);
+  background: linear-gradient(135deg, #ec4899 0%, #be185d 100%);
   color: #ffffff !important;
-  border: 1px solid #d8b4fe;
+  border: 1px solid #fbcfe8;
 }
 .winner-tag-7 {
   background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
@@ -982,9 +970,9 @@ body {
 .prize-pos-1 { background: linear-gradient(135deg, #ffd700, #e5a50a) !important; color: #000 !important; }
 .prize-pos-2 { background: linear-gradient(135deg, #f1f5f9, #94a3b8) !important; color: #090d16 !important; }
 .prize-pos-3 { background: linear-gradient(135deg, #f59e0b, #b45309) !important; color: #fff !important; }
-.prize-pos-4 { background: linear-gradient(135deg, #10b981, #047857) !important; color: #fff !important; }
+.prize-pos-4 { background: linear-gradient(135deg, #a855f7, #7e22ce) !important; color: #fff !important; }
 .prize-pos-5 { background: linear-gradient(135deg, #06b6d4, #0284c7) !important; color: #fff !important; }
-.prize-pos-6 { background: linear-gradient(135deg, #a855f7, #6b21a8) !important; color: #fff !important; }
+.prize-pos-6 { background: linear-gradient(135deg, #ec4899, #be185d) !important; color: #fff !important; }
 .prize-pos-7 { background: linear-gradient(135deg, #f43f5e, #be123c) !important; color: #fff !important; }
 .prize-pos-8 { background: linear-gradient(135deg, #fb923c, #c2410c) !important; color: #fff !important; }
 .prize-pos-9 { background: linear-gradient(135deg, #14b8a6, #0f766e) !important; color: #fff !important; }
