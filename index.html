@@ -962,20 +962,13 @@
                 <line x1="8" y1="2" x2="8" y2="6"></line>
                 <line x1="3" y1="10" x2="21" y2="10"></line>
               </svg>
-              <h3 class="boleto-active-month-text" id="boletoCurrentMonthLabel">Setembro de 2026</h3>
+              <h3 class="boleto-active-month-text" id="boletoCurrentMonthLabel">Carregando...</h3>
             </div>
 
             <button type="button" class="boleto-nav-arrow-btn" id="btnBoletoCalNextMonth" onclick="changeBoletoMonth(1)" title="Próximo Mês" aria-label="Próximo Mês">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
-            </button>
-          </div>
-
-          <div class="boleto-nav-actions">
-            <button type="button" class="boleto-btn-today" id="btnBoletoCalToday" onclick="goToBoletoToday()" title="Ir para o mês atual">
-              <span class="boleto-today-pulse"></span>
-              <span>Ir para Hoje</span>
             </button>
           </div>
         </div>
@@ -1247,6 +1240,10 @@
             <div class="cota-quick-input-row">
               <input type="text" id="inputAddExtraCota" class="form-input form-input-sm"
                 placeholder="Digitar número(s) ex: 15, 22, 40..."
+                inputmode="numeric"
+                pattern="[0-9,]*"
+                oninput="this.value = this.value.replace(/[^0-9,]/g, '')"
+                onpaste="setTimeout(() => { this.value = this.value.replace(/[^0-9,]/g, ''); }, 0)"
                 onkeydown="if(event.key==='Enter'){event.preventDefault(); addExtraCotasFromInput();}">
               <button type="button" class="btn btn-secondary btn-sm" onclick="addExtraCotasFromInput()"
                 style="white-space: nowrap;">
@@ -1274,7 +1271,7 @@
           </div>
         </div>
 
-        <div class="form-group" style="margin-top: 1.15rem;">
+        <div class="form-group" style="margin-top: 0.75rem;">
           <label class="form-label">Nome do Participante / Comprador</label>
           <input type="text" id="editNumName" class="form-input" placeholder="Ex: VINICIUS F, JÚNIOR JJ..." oninput="onEditNumNameInput()">
           <div id="nameMatchNotice" style="display: none; margin-top: 0.45rem; padding: 0.45rem 0.75rem; background: rgba(229, 193, 88, 0.12); border: 1px dashed var(--border-gold); border-radius: 4px; font-size: 0.76rem; color: #ffffff;">

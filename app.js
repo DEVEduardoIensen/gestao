@@ -82,8 +82,8 @@ let currentInstagramViewMode = "cards";
 let currentInstagramMonthFilter = "all";
 let currentInstagramStatusFilter = "all";
 let currentBoletoFilter = "all";
-let boletoSelectedYear = 2026;
-let boletoSelectedMonth = 8; // 8 = Setembro
+let boletoSelectedYear = new Date().getFullYear();
+let boletoSelectedMonth = new Date().getMonth();
 let activeBoletoId = null;
 let lastScannedBoletoDataUrl = null;
 let calSelectedYear = new Date().getFullYear();
@@ -1367,12 +1367,16 @@ function renderTab(tabId) {
     case "tab-rancho":
       renderRanchoView();
       break;
-    case "tab-boletos":
+    case "tab-boletos": {
+      const nowBoleto = new Date();
+      boletoSelectedYear = nowBoleto.getFullYear();
+      boletoSelectedMonth = nowBoleto.getMonth();
       renderBoletosView();
       if (typeof navigator !== 'undefined' && navigator.onLine && window.syncEngine && !window.syncEngine.isSyncing) {
         window.syncEngine.scheduleDebouncedRemoteRefresh();
       }
       break;
+    }
     case "tab-eduardo":
       renderEduardoView();
       break;
@@ -1955,12 +1959,12 @@ function updateAssignWinnerNotice() {
   let msg = "";
   if (prizeObj && prizeObj.winnerNumber) {
     if (prizeObj.winnerNumber === cotaNum) {
-      msg = `ℹ️ <strong>A Cota #${cotaNum} já está definida como ganhadora do ${pos}º Prêmio.</strong> Ao confirmar novamente, o registro em Vales e Prêmios será atualizado sem gerar duplicidade.`;
+      msg = `ℹ️ <strong>Cota #${cotaNum}</strong> já definida para o ${pos}º Prêmio. Ao confirmar, os dados serão atualizados.`;
     } else {
-      msg = `⚠️ <strong>Atenção:</strong> O ${pos}º Prêmio já estava registrado para a Cota #${prizeObj.winnerNumber} (${escapeHtml(prizeObj.winnerName || '')}). Ao confirmar para a Cota #${cotaNum}, o ganhador deste prêmio será substituído com segurança e atualizado na aba Vales e Prêmios, sem criar registros duplicados.`;
+      msg = `⚠️ <strong>Atenção:</strong> O ${pos}º Prêmio já estava na Cota #${prizeObj.winnerNumber}. Ao confirmar, será transferido para esta cota.`;
     }
   } else if (otherPrize) {
-    msg = `ℹ️ A Cota #${cotaNum} já foi sorteada anteriormente no <strong>${otherPrize.position}º Prêmio</strong> (${escapeHtml(otherPrize.description)}).`;
+    msg = `ℹ️ Cota #${cotaNum} já sorteada no ${otherPrize.position}º Prêmio (${escapeHtml(otherPrize.description)}).`;
   }
 
   if (msg) {
@@ -2203,8 +2207,27 @@ async function saveNumberModal() {
     }
   });
 
-  // Salva no IndexedDB e enfileira na Outbox Sync Queue com RPC atômica (com allowOverride: true para edições administrativas)
-  await saveState({
+  // RESPOSTA VISUAL OTIMISTA IMEDIATA (0ms):
+  // Atualiza a tela, fecha o modal e notifica instantaneamente sem travar a interface
+  renderRaffleNumbersGrid();
+  updateGlobalStats();
+  closeModal("modalEditNumber");
+
+  // Limpa multi-seleção da grade caso estivesse ativa
+  if (gridSelectedCotas.size > 0) {
+    gridSelectedCotas.clear();
+    updateGridMultiSelectBar();
+  }
+
+  const numsLabel = selectedNums.sort((a, b) => a - b).map(n => `#${n}`).join(", ");
+  if (selectedNums.length === 1) {
+    showToast(`Cota ${numsLabel} atualizada com sucesso!`, "success");
+  } else {
+    showToast(`${selectedNums.length} cotas (${numsLabel}) salvas com sucesso!`, "success");
+  }
+
+  // Persistência assíncrona não-bloqueante com upsert atômico direto no Supabase
+  saveState({
     type: "SELL_NUMBERS",
     tableName: "raffle_numbers",
     recordId: raffle.id,
@@ -2217,24 +2240,9 @@ async function saveNumberModal() {
       paidAt: (currentEditStatus === "paid") ? (nowIso) : null,
       allowOverride: true
     }
+  }).catch(err => {
+    console.error("[saveNumberModal] Erro ao sincronizar cotas no Supabase:", err);
   });
-
-  renderRaffleNumbersGrid();
-  updateGlobalStats();
-  closeModal("modalEditNumber");
-
-  // Clear grid multi-select if it was active
-  if (gridSelectedCotas.size > 0) {
-    gridSelectedCotas.clear();
-    updateGridMultiSelectBar();
-  }
-
-  const numsLabel = selectedNums.sort((a, b) => a - b).map(n => `#${n}`).join(", ");
-  if (selectedNums.length === 1) {
-    showToast(`Cota ${numsLabel} atualizada com sucesso!`, "success");
-  } else {
-    showToast(`${selectedNums.length} cotas (${numsLabel}) salvas com sucesso!`, "success");
-  }
 }
 
 /* Sorteio Físico na Loja: Definir Cota como Ganhadora e Sincronizar com Vales & Prêmios */
@@ -2835,14 +2843,24 @@ function renderValesView() {
       if (!matchName && !matchPhone && !matchDesc && !matchRaffle && !matchExchanged) return false;
     }
 
+    const isDeliveredOrZero = item.status === "delivered" || (item.type === "vale_compras" && (parseFloat(item.currentBalance) || 0) <= 0);
+
+    // O filtro "delivered" é o único que exibe itens entregues ou com saldo zerado
+    if (currentValesFilter === "delivered") {
+      return isDeliveredOrZero || item.status === "scheduled";
+    }
+
+    // Por padrão (inclusive no filtro principal "all" e abas ativas), OCULTA itens entregues e zerados
+    if (isDeliveredOrZero) {
+      return false;
+    }
+
     if (currentValesFilter === "pending_choice") {
       return item.type === "dual_choice" && item.status === "pending_choice";
     } else if (currentValesFilter === "active_vales") {
-      return item.type === "vale_compras" && item.status === "active" && item.currentBalance > 0;
+      return item.type === "vale_compras" && item.status === "active" && (parseFloat(item.currentBalance) || 0) > 0;
     } else if (currentValesFilter === "pending_prizes") {
       return (item.type === "premio_fisico" && item.status === "pending_pickup") || (item.type === "dual_choice" && item.status === "pending_schedule");
-    } else if (currentValesFilter === "delivered") {
-      return item.status === "delivered" || item.status === "scheduled" || (item.type === "vale_compras" && item.currentBalance <= 0);
     }
     return true;
   });
@@ -3026,11 +3044,17 @@ function renderValesView() {
 
       if (isFishingPrize) {
         actionsHtml = `
-          <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Escolheu Diária e vai agendar datas">
-            Diária (Agendar)
+          <button class="btn btn-gold btn-sm" onclick="choosePrizeOption('${item.id}', 'diaria')" title="Ganhador escolheu a Diária (data fica em aberto para agendamento futuro)">
+            Escolheu Diária
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" style="border-color: #38bdf8; color: #38bdf8;" title="Agendar diária no calendário de pesca agora">
+            Agendar Agora
           </button>
           <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" style="border-color: var(--primary-gold); color: var(--primary-gold);" title="Escolheu Vale-Compras de ${formatCurrency(valeAmount)}">
             Vale (${formatCurrency(valeAmount)})
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #8b5cf6; color: #c4b5fd;" title="Ganhador quer trocar por outro produto na loja">
+            Troca
           </button>
           <button class="btn btn-whatsapp btn-sm" onclick="generatePrizeWhatsAppMessage('${item.id}', 'choice')" title="Enviar mensagem de parabéns e perguntar se prefere Diária ou Vale">
             WhatsApp
@@ -3067,11 +3091,17 @@ function renderValesView() {
     } else if (isDualSchedule) {
       const valeAmount = item.initialAmount || 450;
       actionsHtml = `
-        <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Agendar datas no calendário">
+        <button class="btn btn-gold btn-sm" onclick="openNewFishingBookingFromPrize('${item.id}')" title="Agendar datas no calendário de pesca">
           Agendar Datas
         </button>
         <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Trocar por vale-compras de ${formatCurrency(valeAmount)}">
           Trocar p/ Vale (${formatCurrency(valeAmount)})
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'pending_choice')" style="border-color: #38bdf8; color: #38bdf8;" title="Voltar status para 'A Decidir'">
+          Voltar p/ A Decidir
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="openExchangePrizeModal('${item.id}')" style="border-color: #8b5cf6; color: #c4b5fd;" title="Trocar por outro produto na loja">
+          Trocar Produto
         </button>
         <button class="btn btn-whatsapp btn-sm" onclick="generatePrizeWhatsAppMessage('${item.id}', 'schedule')" title="Enviar mensagem para agendar a pescaria no WhatsApp">
           WhatsApp
@@ -3089,8 +3119,14 @@ function renderValesView() {
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tabBtnAgenda').click()" style="border-color: #10b981; color: #34d399;" title="Ver na Agenda de Pesca">
           Ver na Agenda
         </button>
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'diaria')" title="Desmarcar data do calendário e manter Diária em aberto">
+          Deixar Data em Aberto
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'vale')" title="Cancelar agendamento e trocar por vale-compras de ${formatCurrency(valeAmount)}">
           Trocar p/ Vale (${formatCurrency(valeAmount)})
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="choosePrizeOption('${item.id}', 'pending_choice')" title="Voltar status para A Decidir">
+          Voltar p/ A Decidir
         </button>
         <button class="btn btn-secondary btn-sm" onclick="openEditPrizeModal('${item.id}')" title="Editar Informações / Valor do Vale">
           Editar
@@ -3355,7 +3391,7 @@ async function choosePrizeOption(valeId, choice) {
   } else if (choice === "diaria") {
     item.type = "dual_choice";
     item.status = "pending_schedule";
-    item.notes = "Ganhador optou pela Diária de Pesca (Aguardando Agendamento)";
+    item.notes = "Ganhador optou pela Diária de Pesca (Data em aberto para agendamento futuro)";
 
     // Remove agendamento anterior para escolha limpa de novas datas
     await removeLinkedFishingBookings(valeId, oldName);
@@ -3369,7 +3405,7 @@ async function choosePrizeOption(valeId, choice) {
     renderValesView();
     renderFishingAgendaView();
     updateGlobalStats();
-    showToast(`Opção de Diária de Pesca confirmada para ${item.customerName}! Status atualizado para "Escolhendo o Dia".`, "success");
+    showToast(`Opção de Diária de Pesca confirmada para ${item.customerName}! Data mantida em aberto para agendamento futuro.`, "success");
   } else if (choice === "premio_entregue" || choice === "delivered") {
     item.type = "premio_fisico";
     item.status = "delivered";
@@ -10850,6 +10886,29 @@ function setupEventListeners() {
   if (selectPrizeChangeEl) selectPrizeChangeEl.addEventListener("change", updateAssignWinnerNotice);
   const selectWinnerCotaChangeEl = document.getElementById("selectAssignWinnerCota");
   if (selectWinnerCotaChangeEl) selectWinnerCotaChangeEl.addEventListener("change", updateAssignWinnerNotice);
+
+  // Restrição estrita no campo de cotas extras (apenas números inteiros e vírgulas)
+  const inputExtraCotaEl = document.getElementById("inputAddExtraCota");
+  if (inputExtraCotaEl) {
+    inputExtraCotaEl.addEventListener("beforeinput", (e) => {
+      if (e.data && !/^[0-9,]+$/.test(e.data)) {
+        e.preventDefault();
+      }
+    });
+    inputExtraCotaEl.addEventListener("input", () => {
+      inputExtraCotaEl.value = inputExtraCotaEl.value.replace(/[^0-9,]/g, "");
+    });
+    inputExtraCotaEl.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData("text") || "";
+      const cleaned = text.replace(/[^0-9,]/g, "");
+      const start = inputExtraCotaEl.selectionStart || 0;
+      const end = inputExtraCotaEl.selectionEnd || 0;
+      const current = inputExtraCotaEl.value;
+      inputExtraCotaEl.value = current.slice(0, start) + cleaned + current.slice(end);
+      inputExtraCotaEl.setSelectionRange(start + cleaned.length, start + cleaned.length);
+    });
+  }
 
   // WhatsApp Modals
   document.getElementById("btnProcessImportWhatsApp").addEventListener("click", processWhatsAppImport);

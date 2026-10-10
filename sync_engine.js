@@ -585,47 +585,39 @@ class SyncEngine {
     }
 
     switch (op.type) {
-      // 1. Venda de Cotas (Atômica Anti-Conflito com Suporte a Override Administrativo)
+      // 1. Venda / Atualização de Cotas (Upsert Atômico Direto na Tabela raffle_numbers do Supabase)
       case 'SELL_NUMBERS': {
-        const { raffleId, numbers, status, buyerName, reservedAt, paidAt, allowOverride } = op.payload;
-        const shouldOverride = (allowOverride !== undefined) ? !!allowOverride : true;
-        const { data, error } = await window.supabaseClient.rpc('sell_raffle_numbers_atomic', {
-          p_org_id: orgId,
-          p_raffle_id: raffleId,
-          p_numbers: numbers,
-          p_status: status,
-          p_buyer_name: (status === 'available') ? '' : (buyerName || ''),
-          p_reserved_at: (status === 'available') ? null : (reservedAt || null),
-          p_paid_at: (status === 'available') ? null : (paidAt || null),
-          p_allow_override: shouldOverride
-        });
+        const { raffleId, numbers, status, buyerName, reservedAt, paidAt } = op.payload;
+        if (!Array.isArray(numbers) || numbers.length === 0) return true;
 
-        if (error) throw error;
+        const nowIso = new Date().toISOString();
+        const rows = numbers.map(num => ({
+          organization_id: orgId,
+          raffle_id: raffleId,
+          num: parseInt(num, 10) || num,
+          name: (status === 'available') ? '' : (buyerName || ''),
+          status: status,
+          reserved_at: (status === 'reserved') ? (reservedAt || nowIso) : (status === 'paid' ? (reservedAt || paidAt || nowIso) : null),
+          paid_at: (status === 'paid') ? (paidAt || nowIso) : null
+        }));
 
-        if (data && data.conflict) {
-          console.warn('[SyncEngine] Conflito detectado na venda de cotas:', data);
-          await window.localDB.removeOperation(op.id);
+        const { error } = await window.supabaseClient
+          .from('raffle_numbers')
+          .upsert(rows, { onConflict: 'organization_id,raffle_id,num' });
 
-          // Atualiza o estado da cota localmente para refletir o estado real do servidor
-          if (Array.isArray(data.conflict_numbers) && window.appData && Array.isArray(window.appData.raffles)) {
-            const raffle = window.appData.raffles.find(r => r.id === raffleId);
-            if (raffle && Array.isArray(raffle.numbers)) {
-              data.conflict_numbers.forEach(c => {
-                const item = raffle.numbers.find(n => n.num === c.num);
-                if (item) {
-                  item.status = c.status;
-                  item.name = c.current_owner || '';
-                }
-              });
-              if (window.renderRaffleNumbersGrid) window.renderRaffleNumbersGrid();
-            }
-          }
-
-          return { success: false, conflict: true, data };
-        }
-
-        if (data && data.success === false) {
-          throw new Error(data.error || data.message || 'Falha ao processar venda de cotas na RPC');
+        if (error) {
+          console.warn('[SyncEngine] Falha no upsert direto de raffle_numbers, tentando fallback RPC:', error);
+          const { error: rpcErr } = await window.supabaseClient.rpc('sell_raffle_numbers_atomic', {
+            p_org_id: orgId,
+            p_raffle_id: raffleId,
+            p_numbers: numbers.map(n => parseInt(n, 10) || n),
+            p_status: status,
+            p_buyer_name: (status === 'available') ? '' : (buyerName || ''),
+            p_reserved_at: (status === 'available') ? null : (reservedAt || null),
+            p_paid_at: (status === 'available') ? null : (paidAt || null),
+            p_allow_override: true
+          });
+          if (rpcErr) throw error;
         }
 
         return true;

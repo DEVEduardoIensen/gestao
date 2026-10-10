@@ -1765,6 +1765,7 @@ body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 1.15rem 1.5rem;
   border-top: 1px solid var(--border-light);
@@ -2135,13 +2136,24 @@ body {
   }
   .modal-footer {
     padding: 0.75rem 1rem;
-    flex-direction: column;
-    gap: 0.5rem;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.65rem;
     flex-shrink: 0;
   }
   .modal-footer button {
-    width: 100%;
+    flex: 1 1 calc(50% - 0.35rem);
+    min-width: 110px;
     min-height: 42px;
+    padding: 0.55rem 0.85rem;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
   }
   .form-input, .form-textarea, .form-select {
     font-size: 16px !important; /* Prevents auto-zoom on iPhone Safari */
@@ -4611,3 +4623,47 @@ html.show-auth-gate .offline-bar {
   background: rgba(52, 211, 153, 0.2);
   color: #34d399;
 }
+
+/* ==========================================================================
+   Modal de Cotas: Altura Equilibrada, Destaque Visual e Botões Responsivos
+   ========================================================================== */
+#editNumName {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.45rem 0.8rem !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  background: rgba(229, 193, 88, 0.06) !important;
+  border: 1.5px solid rgba(229, 193, 88, 0.45) !important;
+  color: #ffffff !important;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+#editNumName:focus {
+  border-color: var(--primary-gold) !important;
+  background: rgba(229, 193, 88, 0.1) !important;
+  box-shadow: 0 0 12px var(--primary-gold-glow) !important;
+}
+
+#modalEditNumber .form-group {
+  margin-bottom: 0.75rem;
+}
+
+#modalEditNumber .cota-selection-card {
+  padding: 0.75rem 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+#modalEditNumber .status-toggle-group {
+  margin-bottom: 0.25rem;
+}
+
+@media (max-width: 420px) {
+  .modal-footer button {
+    flex: 1 1 100% !important;
+  }
+}
+

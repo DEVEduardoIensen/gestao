@@ -554,36 +554,43 @@ async function dispatchOpToSupabase(op, db) {
 
   switch (op.type) {
     case 'SELL_NUMBERS': {
-      const { raffleId, numbers, status, buyerName, reservedAt, paidAt, allowOverride } = op.payload;
-      const formattedNumbers = Array.isArray(numbers) ? numbers.map(n => parseInt(n, 10) || n) : [];
-      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/sell_raffle_numbers_atomic`, {
+      const { raffleId, numbers, status, buyerName, reservedAt, paidAt } = op.payload;
+      if (!Array.isArray(numbers) || numbers.length === 0) return true;
+
+      const nowIso = new Date().toISOString();
+      const rows = numbers.map(num => ({
+        organization_id: orgId,
+        raffle_id: raffleId,
+        num: parseInt(num, 10) || num,
+        name: (status === 'available') ? '' : (buyerName || ''),
+        status: status,
+        reserved_at: (status === 'reserved') ? (reservedAt || nowIso) : (status === 'paid' ? (reservedAt || paidAt || nowIso) : null),
+        paid_at: (status === 'paid') ? (paidAt || nowIso) : null
+      }));
+
+      const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_numbers?on_conflict=organization_id,raffle_id,num`, {
         method: 'POST',
-        body: JSON.stringify({
-          p_org_id: orgId,
-          p_raffle_id: raffleId,
-          p_numbers: formattedNumbers,
-          p_status: status,
-          p_buyer_name: (status === 'available') ? '' : (buyerName || ''),
-          p_reserved_at: (status === 'available') ? null : (reservedAt || null),
-          p_paid_at: (status === 'available') ? null : (paidAt || null),
-          p_allow_override: allowOverride !== undefined ? !!allowOverride : true
-        })
+        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(rows)
       }, op, db);
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status} na RPC sell_raffle_numbers_atomic`);
-      }
-
-      const json = await res.json().catch(() => null);
-      if (json && json.conflict) {
-        console.warn('[Service Worker] Conflito detectado na RPC sell_raffle_numbers_atomic:', json);
-        await updateOpStatusInDB(db, op.id, 'conflict', json.message || 'Conflito de cota detectado no servidor');
-        // Mantém na Outbox como conflito aguardando resolução humana
-        return false;
-      }
-
-      if (json && json.success === false) {
-        throw new Error(json.error || json.message || 'RPC retornou falha');
+        // Fallback para RPC se necessário
+        const formattedNumbers = numbers.map(n => parseInt(n, 10) || n);
+        const rpcRes = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/sell_raffle_numbers_atomic`, {
+          method: 'POST',
+          body: JSON.stringify({
+            p_org_id: orgId,
+            p_raffle_id: raffleId,
+            p_numbers: formattedNumbers,
+            p_status: status,
+            p_buyer_name: (status === 'available') ? '' : (buyerName || ''),
+            p_reserved_at: (status === 'available') ? null : (reservedAt || null),
+            p_paid_at: (status === 'available') ? null : (paidAt || null),
+            p_allow_override: true
+          })
+        }, op, db);
+        if (!rpcRes.ok) throw new Error(`HTTP ${res.status} no upsert direto de raffle_numbers`);
       }
 
       return true;
