@@ -65,9 +65,60 @@ class SyncEngine {
       if (typeof BroadcastChannel !== 'undefined') {
         this.broadcastChannel = new BroadcastChannel('eldorado-sync-channel');
         this.broadcastChannel.onmessage = (event) => {
-          if (event.data && event.data.type === 'BACKGROUND_SYNC_COMPLETE') {
+          if (!event.data) return;
+          if (event.data.type === 'BACKGROUND_SYNC_COMPLETE') {
             console.log('[SyncEngine] Notificação de Background Sync recebida do Service Worker.');
             this.scheduleDebouncedRemoteRefresh();
+          } else if (event.data.type === 'COTA_UPDATED') {
+            const { raffleId, numbers, status, buyerName, reservedAt, paidAt } = event.data;
+            if (window.appData && Array.isArray(window.appData.raffles) && Array.isArray(numbers)) {
+              const r = window.appData.raffles.find(raf => String(raf.id) === String(raffleId));
+              if (r && Array.isArray(r.numbers)) {
+                numbers.forEach(num => {
+                  const it = r.numbers.find(n => n.num === num);
+                  if (it) {
+                    it.status = status;
+                    it.name = (status === 'available') ? '' : (buyerName || '');
+                    it.reservedAt = reservedAt;
+                    it.paidAt = paidAt;
+                  }
+                });
+                if (typeof window.renderRaffleNumbersGrid === 'function') {
+                  window.renderRaffleNumbersGrid();
+                }
+                if (typeof window.updateRaffleStats === 'function') {
+                  window.updateRaffleStats();
+                }
+                if (typeof window.updateGlobalStats === 'function') {
+                  window.updateGlobalStats();
+                }
+              }
+            }
+          } else if (event.data.type === 'COTA_BATCH_UPDATED') {
+            const { raffleId, numbersList } = event.data;
+            if (window.appData && Array.isArray(window.appData.raffles) && Array.isArray(numbersList)) {
+              const r = window.appData.raffles.find(raf => String(raf.id) === String(raffleId));
+              if (r && Array.isArray(r.numbers)) {
+                numbersList.forEach(up => {
+                  const it = r.numbers.find(n => n.num === up.num);
+                  if (it) {
+                    it.name = up.name;
+                    it.status = up.status;
+                    it.paidAt = up.paidAt;
+                    it.reservedAt = up.reservedAt;
+                  }
+                });
+                if (typeof window.renderRaffleNumbersGrid === 'function') {
+                  window.renderRaffleNumbersGrid();
+                }
+                if (typeof window.updateRaffleStats === 'function') {
+                  window.updateRaffleStats();
+                }
+                if (typeof window.updateGlobalStats === 'function') {
+                  window.updateGlobalStats();
+                }
+              }
+            }
           }
         };
       }
@@ -161,13 +212,24 @@ class SyncEngine {
           const pending = await window.localDB.getPendingOperations(orgId);
           const cotaNum = parseInt(newRec.num, 10);
           const isPending = pending.some(op => {
-            if (op.type === 'SELL_NUMBERS' && String(op.payload?.raffleId) === String(newRec.raffle_id)) {
-              return Array.isArray(op.payload?.numbers) && op.payload.numbers.includes(cotaNum);
+            const matchesRaffle = String(op.payload?.raffleId) === String(newRec.raffle_id);
+            if (!matchesRaffle) return false;
+
+            const isMatch = (op.type === 'SELL_NUMBERS' && Array.isArray(op.payload?.numbers) && op.payload.numbers.includes(cotaNum)) ||
+                            (op.type === 'BATCH_SET_NUMBERS' && Array.isArray(op.payload?.numbersList) && op.payload.numbersList.some(n => n.num === cotaNum));
+            if (!isMatch) return false;
+
+            // Se o payload remoto recebido já coincide com o status solicitado na Outbox, não é conflito
+            if (op.type === 'SELL_NUMBERS' && op.payload?.status === newRec.status) {
+              return false;
             }
-            if (op.type === 'BATCH_SET_NUMBERS' && String(op.payload?.raffleId) === String(newRec.raffle_id)) {
-              return Array.isArray(op.payload?.numbersList) && op.payload.numbersList.some(n => n.num === cotaNum);
+            if (op.type === 'BATCH_SET_NUMBERS') {
+              const item = (op.payload.numbersList || []).find(n => n.num === cotaNum);
+              if (item && item.status === newRec.status) return false;
             }
-            return false;
+
+            // Descarta apenas se houver uma alteração local ainda em fila com status 'pending' divergente
+            return op.status === 'pending';
           });
           if (isPending) {
             console.log('[Realtime] Ignorando payload remoto para cota pendente na Outbox:', cotaNum);
@@ -190,6 +252,15 @@ class SyncEngine {
           if (typeof window.updateRaffleStats === 'function') {
             window.updateRaffleStats();
           }
+          if (typeof window.updateGlobalStats === 'function') {
+            window.updateGlobalStats();
+          }
+          if (window.localDB) {
+            window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+          }
+          try {
+            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData));
+          } catch (e) {}
           return;
         }
       }

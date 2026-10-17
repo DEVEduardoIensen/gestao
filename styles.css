@@ -84,8 +84,8 @@ body {
   font-family: var(--font-body);
   background-color: var(--bg-dark);
   background-image: 
-    linear-gradient(180deg, rgba(6, 10, 19, 0.70) 0%, rgba(6, 10, 19, 0.85) 100%),
-    url('background.jpg');
+    linear-gradient(180deg, rgba(6, 10, 19, 0.75) 0%, rgba(6, 10, 19, 0.88) 100%),
+    url('gremio_bg.jpg');
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;

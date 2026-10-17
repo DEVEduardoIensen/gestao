@@ -1313,21 +1313,27 @@ async function onSwitchOrganization(orgId) {
 function getActiveRaffle() {
   if (!appData.raffles || appData.raffles.length === 0) return null;
   let raffle = null;
+  let raffleIdx = -1;
   if (activeRaffleId) {
-    const found = appData.raffles.find(r => String(r.id) === String(activeRaffleId));
-    if (found) raffle = found;
+    raffleIdx = appData.raffles.findIndex(r => String(r.id) === String(activeRaffleId));
+    if (raffleIdx >= 0) raffle = appData.raffles[raffleIdx];
   }
   if (!raffle) {
     const highest = getHighestRaffle(appData.raffles);
     if (highest) {
       activeRaffleId = highest.id;
       raffle = highest;
+      raffleIdx = appData.raffles.findIndex(r => String(r.id) === String(highest.id));
     } else {
       raffle = appData.raffles[0];
+      raffleIdx = 0;
     }
   }
   if (raffle && typeof normalizeRaffle === 'function') {
     raffle = normalizeRaffle(raffle);
+    if (raffleIdx >= 0 && appData.raffles) {
+      appData.raffles[raffleIdx] = raffle;
+    }
   }
   return raffle;
 }
@@ -2196,6 +2202,26 @@ async function saveNumberModal() {
   const nowIso = new Date().toISOString();
   let updatedItems = [];
 
+  // 1. Atualização OTIMISTA IMEDIATA (0ms) no objeto real da rifa em appData.raffles
+  const realRaffle = (appData.raffles || []).find(r => String(r.id) === String(raffle.id));
+  if (realRaffle) {
+    if (!Array.isArray(realRaffle.numbers)) {
+      realRaffle.numbers = Array.isArray(raffle.numbers) ? raffle.numbers : [];
+    }
+    selectedNums.forEach(num => {
+      let item = realRaffle.numbers.find(n => n.num === num);
+      if (!item) {
+        item = { num, name: "", status: "available", reservedAt: null, paidAt: null };
+        realRaffle.numbers.push(item);
+      }
+      item.status = currentEditStatus;
+      item.name = (currentEditStatus === "available") ? "" : name;
+      item.reservedAt = (currentEditStatus === "reserved") ? (item.reservedAt || nowIso) : null;
+      item.paidAt = (currentEditStatus === "paid") ? (item.paidAt || nowIso) : null;
+    });
+  }
+
+  // Mantém também a referência local de raffle consistente
   selectedNums.forEach(num => {
     const item = raffle.numbers.find(n => n.num === num);
     if (item) {
@@ -2206,6 +2232,23 @@ async function saveNumberModal() {
       updatedItems.push(item);
     }
   });
+
+  // Notifica outras abas abertas no navegador via BroadcastChannel para sincronização instantânea (0ms)
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('eldorado-sync-channel');
+      bc.postMessage({
+        type: 'COTA_UPDATED',
+        raffleId: raffle.id,
+        numbers: selectedNums,
+        status: currentEditStatus,
+        buyerName: (currentEditStatus === "available") ? "" : name,
+        reservedAt: (currentEditStatus === "reserved") ? (nowIso) : null,
+        paidAt: (currentEditStatus === "paid") ? (nowIso) : null
+      });
+      bc.close();
+    }
+  } catch (e) {}
 
   // RESPOSTA VISUAL OTIMISTA IMEDIATA (0ms):
   // Atualiza a tela, fecha o modal e notifica instantaneamente sem travar a interface
@@ -2279,12 +2322,48 @@ async function assignPrizeWinner() {
     }
   }
 
-  // Marca no estado local
+  // Marca no estado local da rifa
   prizeObj.winnerNumber = item.num;
   prizeObj.winnerName = winnerName;
   item.status = "paid";
   item.name = winnerName;
   item.paidAt = item.paidAt || new Date().toISOString();
+
+  // Garante atualização direta e consistente no objeto real de appData.raffles
+  const realRaffleWinner = (appData.raffles || []).find(r => String(r.id) === String(raffle.id));
+  if (realRaffleWinner) {
+    if (Array.isArray(realRaffleWinner.numbers)) {
+      const realItem = realRaffleWinner.numbers.find(n => n.num === item.num);
+      if (realItem) {
+        realItem.status = "paid";
+        realItem.name = winnerName;
+        realItem.paidAt = item.paidAt;
+      }
+    }
+    if (Array.isArray(realRaffleWinner.prizes)) {
+      const realPrize = realRaffleWinner.prizes.find(p => p.position === position);
+      if (realPrize) {
+        realPrize.winnerNumber = item.num;
+        realPrize.winnerName = winnerName;
+      }
+    }
+  }
+
+  // Notifica outras abas via BroadcastChannel
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('eldorado-sync-channel');
+      bc.postMessage({
+        type: 'COTA_UPDATED',
+        raffleId: raffle.id,
+        numbers: [item.num],
+        status: 'paid',
+        buyerName: winnerName,
+        paidAt: item.paidAt
+      });
+      bc.close();
+    }
+  } catch (e) {}
 
   // Extração inteligente e universal de tipo de prêmio e valor de vale (baseado em R$ e palavras-chave)
   const hasOu = /\bOU\b/i.test(descUpper);
@@ -2560,6 +2639,33 @@ async function processWhatsAppImport() {
       }
     }
   });
+
+  // Atualização direta e consistente no objeto real de appData.raffles
+  const realRaffleWhatsApp = (appData.raffles || []).find(r => String(r.id) === String(raffle.id));
+  if (realRaffleWhatsApp && Array.isArray(realRaffleWhatsApp.numbers)) {
+    updatedList.forEach(up => {
+      const realItem = realRaffleWhatsApp.numbers.find(n => n.num === up.num);
+      if (realItem) {
+        realItem.name = up.name;
+        realItem.status = up.status;
+        realItem.paidAt = up.paidAt;
+        realItem.reservedAt = up.reservedAt;
+      }
+    });
+  }
+
+  // Notifica outras abas via BroadcastChannel
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('eldorado-sync-channel');
+      bc.postMessage({
+        type: 'COTA_BATCH_UPDATED',
+        raffleId: raffle.id,
+        numbersList: updatedList
+      });
+      bc.close();
+    }
+  } catch (e) {}
 
   await saveState({
     type: "BATCH_SET_NUMBERS",
