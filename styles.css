@@ -4667,3 +4667,428 @@ html.show-auth-gate .offline-bar {
   }
 }
 
+/* ==========================================================================
+   Card Master: Lucro Total Acumulado das Ações (Painel de Administração)
+   ========================================================================== */
+.admin-profit-card {
+  background: linear-gradient(135deg, rgba(13, 22, 38, 0.95), rgba(7, 12, 22, 0.98));
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1.5px solid rgba(229, 193, 88, 0.35);
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.45), 0 0 25px rgba(229, 193, 88, 0.08);
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-smooth);
+}
+
+.admin-profit-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--primary-gold), rgba(255, 255, 255, 0.8), var(--primary-gold), transparent);
+  pointer-events: none;
+}
+
+.profit-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(229, 193, 88, 0.15);
+}
+
+.profit-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.profit-icon-badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(229, 193, 88, 0.22), rgba(207, 171, 68, 0.08));
+  border: 1.5px solid var(--primary-gold);
+  color: var(--primary-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(229, 193, 88, 0.25);
+  flex-shrink: 0;
+}
+
+.profit-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 0.25rem;
+}
+
+.profit-live-pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+}
+
+.profit-live-pulse-badge.offline {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.profit-live-pulse-badge.syncing {
+  background: rgba(229, 193, 88, 0.15);
+  border-color: rgba(229, 193, 88, 0.4);
+  color: var(--primary-gold);
+}
+
+.live-dot-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: profitPulse 2s infinite;
+}
+
+.profit-live-pulse-badge.offline .live-dot-pulse {
+  background: #ef4444;
+  animation: none;
+}
+
+.profit-live-pulse-badge.syncing .live-dot-pulse {
+  background: #e5c158;
+  animation: profitPulse 1s infinite;
+}
+
+@keyframes profitPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.profit-card-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-light);
+  font-family: var(--font-heading);
+}
+
+.btn-profit-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(229, 193, 88, 0.35);
+  color: var(--primary-gold);
+  background: rgba(229, 193, 88, 0.08);
+  font-weight: 600;
+  font-size: 0.82rem;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.btn-profit-sync:hover {
+  background: rgba(229, 193, 88, 0.16);
+  border-color: var(--primary-gold);
+  transform: translateY(-1px);
+}
+
+.btn-profit-sync.syncing svg {
+  animation: profitSpin 0.85s linear infinite;
+}
+
+@keyframes profitSpin {
+  100% { transform: rotate(360deg); }
+}
+
+.profit-main-body {
+  display: grid;
+  grid-template-columns: 1.4fr 2.6fr;
+  gap: 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .profit-main-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profit-hero-block {
+  background: linear-gradient(135deg, rgba(229, 193, 88, 0.07), rgba(0, 0, 0, 0.3));
+  border: 1px solid rgba(229, 193, 88, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 1.4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+
+.profit-hero-label {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.75px;
+  margin-bottom: 0.5rem;
+}
+
+.profit-hero-amount-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.profit-hero-amount {
+  font-family: var(--font-heading);
+  font-size: clamp(2rem, 3.2vw, 2.65rem);
+  font-weight: 800;
+  color: var(--primary-gold);
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  text-shadow: 0 0 25px rgba(229, 193, 88, 0.28);
+}
+
+.profit-rate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+}
+
+.profit-hero-subtext {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.profit-hero-subtext strong {
+  color: var(--text-light);
+}
+
+.profit-kpis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+}
+
+.profit-kpi-item {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all var(--transition-fast);
+}
+
+.profit-kpi-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(229, 193, 88, 0.3);
+  transform: translateY(-1px);
+}
+
+.kpi-label {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.15rem 0;
+}
+
+.kpi-value {
+  font-family: var(--font-heading);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-light);
+  line-height: 1.2;
+}
+
+.kpi-value.gold {
+  color: var(--primary-gold);
+}
+
+.kpi-unit {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profit-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.profit-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.profit-footer-timestamp {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.profit-storage-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.profit-breakdown-wrapper {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px dashed rgba(229, 193, 88, 0.25);
+}
+
+.breakdown-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.breakdown-header-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--primary-gold);
+  font-family: var(--font-heading);
+}
+
+.breakdown-search-box {
+  min-width: 240px;
+}
+
+.profit-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.profit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.profit-table th {
+  background: rgba(8, 12, 20, 0.95);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.profit-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--text-light);
+  vertical-align: middle;
+}
+
+.profit-table tr:hover td {
+  background: rgba(229, 193, 88, 0.03);
+}
+
+.raffle-progress-bar-wrap {
+  width: 90px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}
+
+.raffle-progress-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #cfab44, #e5c158);
+  transition: width 0.3s ease;
+}
+
+

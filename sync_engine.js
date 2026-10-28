@@ -326,11 +326,21 @@ class SyncEngine {
       }
     }
 
+    // Se for criação, alteração ou exclusão de Rifa / Ação (Realtime Instantâneo)
+    if (table === 'raffles') {
+      console.log(`[Realtime] Notificação de Ação recebida (${eventType}). Recarregando dados e atualizando lucro...`);
+      if (typeof window.updateAdminRafflesProfitCard === 'function') {
+        window.updateAdminRafflesProfitCard(true);
+      }
+      this.scheduleDebouncedRemoteRefresh(250);
+      return;
+    }
+
     // Para demais tabelas ou alterações estruturais, agenda recarga remota suave
     this.scheduleDebouncedRemoteRefresh();
   }
 
-  scheduleDebouncedRemoteRefresh() {
+  scheduleDebouncedRemoteRefresh(delayMs = 1200) {
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     this._refreshTimer = setTimeout(async () => {
       const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
@@ -340,7 +350,10 @@ class SyncEngine {
       if (remoteData && typeof window.mergeRemoteData === 'function') {
         await window.mergeRemoteData(remoteData);
       }
-    }, 1200);
+      if (typeof window.updateAdminRafflesProfitCard === 'function') {
+        window.updateAdminRafflesProfitCard(true);
+      }
+    }, delayMs);
   }
 
   updateStatus(newStatus) {

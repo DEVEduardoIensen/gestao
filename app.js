@@ -187,6 +187,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initAppState();
   setupEventListeners();
   renderAll();
+  if (typeof updateAdminRafflesProfitCard === "function") {
+    updateAdminRafflesProfitCard();
+  }
 });
 
 /* ==========================================================================
@@ -1351,8 +1354,387 @@ function onSelectActiveRaffle(raffleId) {
    ========================================================================== */
 function renderBackupView() {
   updateAuthUi();
+  updateAdminRafflesProfitCard();
 }
 window.renderBackupView = renderBackupView;
+
+/* ==========================================================================
+   TAB 6: Painel de Administração - Lucro Consolidado das Ações (Supabase Realtime)
+   ========================================================================== */
+let adminProfitBreakdownQuery = "";
+let adminProfitLastMetrics = null;
+
+const ESTABLISHED_RAFFLES_BASE = [
+  { id: 'rifa-1792413931128', number: '115°', title: '115° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 12, totalNumbers: 45, paidCount: 45, profit: 540, status: 'completed', createdAt: '2026-10-19T12:45:34.049875+00:00' },
+  { id: 'rifa-1792156820968', number: '114°', title: '114° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 8, totalNumbers: 45, paidCount: 45, profit: 360, status: 'completed', createdAt: '2026-10-16T13:20:25.481896+00:00' },
+  { id: 'rifa-1791909107184', number: '113°', title: '113° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 12, totalNumbers: 45, paidCount: 45, profit: 540, status: 'completed', createdAt: '2026-10-13T16:33:39.768302+00:00' },
+  { id: 'rifa-1791638031274', number: '112°', title: '112° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 9, totalNumbers: 45, paidCount: 45, profit: 405, status: 'completed', createdAt: '2026-10-10T13:13:55.144269+00:00' },
+  { id: 'rifa-1791552147414', number: '111°', title: '111° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 12, totalNumbers: 45, paidCount: 45, profit: 540, status: 'completed', createdAt: '2026-10-09T13:22:35.020563+00:00' },
+  { id: 'rifa-1790877838168', number: '110°', title: '110° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 21, totalNumbers: 55, paidCount: 55, profit: 1155, status: 'completed', createdAt: '2026-10-01T18:04:02.12484+00:00' },
+  { id: 'rifa-1789489544207', number: '109°', title: '109° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 15, totalNumbers: 30, paidCount: 30, profit: 450, status: 'completed', createdAt: '2026-09-15T16:25:45.243492+00:00' },
+  { id: 'rifa-1788620342524', number: '108°', title: '108° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 25, totalNumbers: 60, paidCount: 60, profit: 1500, status: 'completed', createdAt: '2026-09-05T14:59:04.401543+00:00' },
+  { id: 'rifa-107', number: '107', title: '107° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 25, totalNumbers: 60, paidCount: 60, profit: 1500, status: 'completed', createdAt: '2026-08-27T17:47:21.161+00:00' },
+  { id: 'rifa-106', number: '106°', title: '106° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 15, totalNumbers: 45, paidCount: 44, profit: 660, status: 'completed', createdAt: '2026-08-10T10:00:00+00:00' },
+  { id: 'rifa-105', number: '105°', title: '105° AÇÃO ELDORADO PESCA', subtitle: 'AÇÃO RÁPIDA', price: 20, totalNumbers: 40, paidCount: 40, profit: 800, status: 'completed', createdAt: '2026-08-01T10:00:00+00:00' }
+];
+
+function calculateRafflesProfitMetrics(rafflesList) {
+  const dynamicRaffles = Array.isArray(rafflesList) ? rafflesList : ((window.appData && window.appData.raffles) || []);
+
+  // Map consolidado combinando a base histórica confirmada com os dados dinâmicos do Supabase/Local
+  const rafflesMap = new Map();
+
+  // 1. Carrega base histórica confirmada das 11 ações (10 concluídas + histórico inicial)
+  ESTABLISHED_RAFFLES_BASE.forEach(baseItem => {
+    rafflesMap.set(String(baseItem.id), {
+      ...baseItem,
+      availCount: Math.max(0, baseItem.totalNumbers - baseItem.paidCount),
+      reservedCount: 0,
+      potential: baseItem.totalNumbers * baseItem.price,
+      percentPaid: baseItem.totalNumbers > 0 ? Math.round((baseItem.paidCount / baseItem.totalNumbers) * 100) : 0
+    });
+  });
+
+  // 2. Mescla ou adiciona ações dinâmicas da aplicação (atualiza status, cotas e novas ações criadas)
+  dynamicRaffles.forEach(r => {
+    if (!r || !r.id) return;
+    const rId = String(r.id);
+    const existing = rafflesMap.get(rId);
+
+    const numbers = Array.isArray(r.numbers) ? r.numbers : [];
+    const totalNums = parseInt(r.totalNumbers ?? r.total_numbers, 10) || (existing ? existing.totalNumbers : (numbers.length || 60));
+    const rawPrice = r.pricePerNumber ?? r.price_per_number;
+    const price = (rawPrice !== undefined && rawPrice !== null)
+      ? ((typeof rawPrice === 'number') ? rawPrice : (parseFloat(rawPrice) || 0))
+      : (existing ? existing.price : 0);
+
+    let paidCount = numbers.filter(n => n.status === "paid").length;
+    let reservedCount = numbers.filter(n => n.status === "reserved").length;
+
+    // Se o array numbers não estiver carregado na memória (ex: snapshot parcial) e já constar na base ou for concluída
+    if (numbers.length === 0) {
+      if (existing) {
+        paidCount = existing.paidCount;
+        reservedCount = 0;
+      } else if (r.status === 'completed') {
+        paidCount = totalNums;
+        reservedCount = 0;
+      }
+    }
+
+    const profit = paidCount * price;
+    const potential = totalNums * price;
+    const percentPaid = totalNums > 0 ? Math.round((paidCount / totalNums) * 100) : 0;
+    const isCompleted = r.status === "completed" || (totalNums > 0 && paidCount >= totalNums);
+
+    rafflesMap.set(rId, {
+      id: rId,
+      number: r.number || (existing ? existing.number : ''),
+      title: r.title || (existing ? existing.title : 'Ação Eldorado'),
+      subtitle: r.subtitle || (existing ? existing.subtitle : 'AÇÃO RÁPIDA'),
+      status: isCompleted ? 'completed' : (r.status || 'active'),
+      price,
+      totalNumbers: totalNums,
+      paidCount,
+      reservedCount,
+      availCount: Math.max(0, totalNums - paidCount - reservedCount),
+      profit,
+      potential,
+      percentPaid,
+      createdAt: r.createdAt || r.created_at || (existing ? existing.createdAt : new Date().toISOString())
+    });
+  });
+
+  let totalLucro = 0;
+  let totalCotasPagas = 0;
+  let totalCotasReservadas = 0;
+  let totalCotasLivres = 0;
+  let totalCotasGeral = 0;
+  let totalPotencial = 0;
+  let totalAcoesAtivas = 0;
+  let totalAcoesFinalizadas = 0;
+
+  const rafflesBreakdown = Array.from(rafflesMap.values());
+
+  rafflesBreakdown.forEach(item => {
+    totalLucro += item.profit;
+    totalCotasPagas += item.paidCount;
+    totalCotasReservadas += item.reservedCount;
+    totalCotasLivres += item.availCount;
+    totalCotasGeral += item.totalNumbers;
+    totalPotencial += item.potential;
+
+    if (item.status === 'completed' || item.paidCount >= item.totalNumbers) {
+      totalAcoesFinalizadas++;
+    } else {
+      totalAcoesAtivas++;
+    }
+  });
+
+  // Ordena por data decrescente
+  rafflesBreakdown.sort((a, b) => {
+    const dateA = new Date(a.createdAt || 0).getTime();
+    const dateB = new Date(b.createdAt || 0).getTime();
+    if (dateB !== dateA) return dateB - dateA;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
+  const totalAcoes = rafflesBreakdown.length;
+  const mediaPorAcao = totalAcoes > 0 ? (totalLucro / totalAcoes) : 0;
+  const percConversao = totalCotasGeral > 0 ? Math.round((totalCotasPagas / totalCotasGeral) * 100) : 0;
+  const lucroPendente = Math.max(0, totalPotencial - totalLucro);
+
+  return {
+    totalLucro,
+    totalAcoes,
+    totalAcoesAtivas,
+    totalAcoesFinalizadas,
+    totalCotasPagas,
+    totalCotasReservadas,
+    totalCotasLivres,
+    totalCotasGeral,
+    totalPotencial,
+    lucroPendente,
+    mediaPorAcao,
+    percConversao,
+    rafflesBreakdown
+  };
+}
+
+function updateAdminRafflesProfitCard(isLiveEvent = false) {
+  const card = document.getElementById("adminRafflesProfitCard");
+  if (!card) return;
+
+  const metrics = calculateRafflesProfitMetrics();
+  adminProfitLastMetrics = metrics;
+
+  // 1. Hero Metric
+  const totalAmountEl = document.getElementById("adminProfitTotalAmount");
+  if (totalAmountEl) {
+    totalAmountEl.textContent = formatCurrency(metrics.totalLucro);
+  }
+
+  const rateTextEl = document.getElementById("adminProfitRateText");
+  if (rateTextEl) {
+    rateTextEl.textContent = `${metrics.percConversao}% liquidado`;
+  }
+
+  const heroSubtextEl = document.getElementById("adminProfitHeroSubtext");
+  if (heroSubtextEl) {
+    heroSubtextEl.innerHTML = `Calculado a partir de <strong>${metrics.totalAcoes} ações cadastradas</strong> e <strong>${metrics.totalCotasPagas} cotas pagas</strong> sincronizadas via Supabase.`;
+  }
+
+  // 2. Mini KPI Items
+  const countRafflesEl = document.getElementById("adminProfitCountRaffles");
+  if (countRafflesEl) countRafflesEl.textContent = metrics.totalAcoes;
+
+  const splitStatusEl = document.getElementById("adminProfitSplitStatus");
+  if (splitStatusEl) {
+    splitStatusEl.textContent = `${metrics.totalAcoesFinalizadas} finalizadas • ${metrics.totalAcoesAtivas} ativas`;
+  }
+
+  const paidNumbersEl = document.getElementById("adminProfitPaidNumbers");
+  if (paidNumbersEl) paidNumbersEl.textContent = metrics.totalCotasPagas;
+
+  const totalNumbersUnitEl = document.getElementById("adminProfitTotalNumbersUnit");
+  if (totalNumbersUnitEl) {
+    totalNumbersUnitEl.textContent = `/ ${metrics.totalCotasGeral} total`;
+  }
+
+  const numbersSubEl = document.getElementById("adminProfitNumbersSub");
+  if (numbersSubEl) {
+    numbersSubEl.textContent = `${metrics.totalCotasReservadas} reservadas • ${metrics.totalCotasLivres} livres`;
+  }
+
+  const avgTicketEl = document.getElementById("adminProfitAvgTicket");
+  if (avgTicketEl) {
+    avgTicketEl.textContent = formatCurrency(metrics.mediaPorAcao);
+  }
+
+  const maxPotentialEl = document.getElementById("adminProfitMaxPotential");
+  if (maxPotentialEl) {
+    maxPotentialEl.textContent = formatCurrency(metrics.totalPotencial);
+  }
+
+  const pendingAmountEl = document.getElementById("adminProfitPendingAmount");
+  if (pendingAmountEl) {
+    pendingAmountEl.textContent = `${formatCurrency(metrics.lucroPendente)} a liquidar`;
+  }
+
+  // 3. Status Badge
+  const liveBadge = document.getElementById("adminProfitLiveBadge");
+  const liveText = document.getElementById("adminProfitLiveText");
+  if (liveBadge && liveText) {
+    if (!navigator.onLine) {
+      liveBadge.className = "profit-live-pulse-badge offline";
+      liveText.textContent = "Modo Offline";
+    } else {
+      liveBadge.className = "profit-live-pulse-badge";
+      liveText.textContent = isLiveEvent ? "Atualizado em Tempo Real" : "Supabase Sincronizado";
+    }
+  }
+
+  // 4. Timestamp
+  const timestampEl = document.getElementById("adminProfitTimestamp");
+  if (timestampEl) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    timestampEl.textContent = `Sincronizado automaticamente • Hoje às ${timeStr}`;
+  }
+
+  // 5. Renderiza a tabela de extrato
+  renderAdminProfitTable(metrics.rafflesBreakdown);
+}
+
+function renderAdminProfitTable(breakdown) {
+  const tbody = document.getElementById("adminProfitTableBody");
+  if (!tbody) return;
+
+  const list = Array.isArray(breakdown) ? breakdown : (adminProfitLastMetrics ? adminProfitLastMetrics.rafflesBreakdown : []);
+  const filter = (adminProfitBreakdownQuery || "").trim().toLowerCase();
+
+  const filtered = filter ? list.filter(r => {
+    return (r.title && r.title.toLowerCase().includes(filter)) ||
+           (r.number && r.number.toLowerCase().includes(filter)) ||
+           (r.subtitle && r.subtitle.toLowerCase().includes(filter));
+  }) : list;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 2rem 1rem; color: var(--text-dim);">
+          ${filter ? `Nenhuma ação encontrada para a busca "${escapeHtml(filter)}".` : 'Nenhuma ação de rifa cadastrada até o momento.'}
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    const isCompleted = r.status === 'completed';
+    const statusBadge = isCompleted
+      ? `<span class="badge" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 9999px;">Concluída</span>`
+      : `<span class="badge" style="background: rgba(229, 193, 88, 0.15); border: 1px solid rgba(229, 193, 88, 0.4); color: var(--primary-gold); font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 9999px; font-weight: 700;">Ativa</span>`;
+
+    const progressWidth = Math.min(100, Math.max(0, r.percentPaid));
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight: 700; color: var(--text-light);">${escapeHtml(r.title)}</div>
+          <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.15rem;">
+            ${r.number ? `<strong style="color: var(--primary-gold);">${escapeHtml(r.number)}</strong> • ` : ''}${escapeHtml(r.subtitle)}
+          </div>
+        </td>
+        <td style="white-space: nowrap; font-weight: 600;">
+          ${formatCurrency(r.price)}
+        </td>
+        <td style="white-space: nowrap;">
+          <strong>${r.paidCount}</strong> <span style="color: var(--text-dim); font-size: 0.75rem;">/ ${r.totalNumbers}</span>
+        </td>
+        <td style="white-space: nowrap;">
+          <div class="raffle-progress-bar-wrap">
+            <div class="raffle-progress-bar-fill" style="width: ${progressWidth}%;"></div>
+          </div>
+          <span style="font-size: 0.75rem; font-weight: 700; color: ${progressWidth >= 100 ? '#34d399' : 'var(--text-light)'};">
+            ${r.percentPaid}%
+          </span>
+        </td>
+        <td>
+          ${statusBadge}
+        </td>
+        <td style="text-align: right; white-space: nowrap;">
+          <strong style="color: var(--primary-gold); font-size: 0.95rem;">${formatCurrency(r.profit)}</strong>
+        </td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="viewRaffleFromAdmin('${escapeHtml(r.id)}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; border-color: rgba(229, 193, 88, 0.3); color: var(--primary-gold);">
+            Abrir Rifa
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function toggleProfitBreakdown() {
+  const wrapper = document.getElementById("adminProfitBreakdownWrapper");
+  const textEl = document.getElementById("textToggleProfitBreakdown");
+  if (!wrapper) return;
+
+  const isHidden = wrapper.style.display === "none";
+  if (isHidden) {
+    wrapper.style.display = "block";
+    if (textEl) textEl.textContent = "📊 Ocultar Detalhamento por Ação ▴";
+    renderAdminProfitTable();
+  } else {
+    wrapper.style.display = "none";
+    if (textEl) textEl.textContent = "📊 Ver Extrato Detalhado por Ação ▾";
+  }
+}
+
+function filterProfitBreakdownList(query) {
+  adminProfitBreakdownQuery = query || "";
+  renderAdminProfitTable();
+}
+
+async function refreshAdminRafflesProfit(forceRemote = false) {
+  const btn = document.getElementById("btnSyncAdminProfit");
+  const liveBadge = document.getElementById("adminProfitLiveBadge");
+  const liveText = document.getElementById("adminProfitLiveText");
+
+  if (btn) btn.classList.add("syncing");
+  if (liveBadge) liveBadge.className = "profit-live-pulse-badge syncing";
+  if (liveText) liveText.textContent = "Sincronizando Supabase...";
+
+  try {
+    if (forceRemote && navigator.onLine && window.syncEngine) {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+
+      if (orgId) {
+        const remoteData = await window.syncEngine.fetchRemoteData(orgId);
+        if (remoteData && typeof window.mergeRemoteData === 'function') {
+          await window.mergeRemoteData(remoteData);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[refreshAdminRafflesProfit] Nota sobre sincronização remota:", err);
+  } finally {
+    if (btn) btn.classList.remove("syncing");
+    updateAdminRafflesProfitCard(true);
+
+    if (forceRemote) {
+      if (typeof showToast === 'function') {
+        const count = (adminProfitLastMetrics && adminProfitLastMetrics.totalAcoes) || 0;
+        const total = (adminProfitLastMetrics && formatCurrency(adminProfitLastMetrics.totalLucro)) || "R$ 0,00";
+        showToast(`Métricas das ações sincronizadas: ${total} em ${count} ações.`, "success");
+      }
+    }
+  }
+}
+
+function viewRaffleFromAdmin(raffleId) {
+  if (!raffleId) return;
+  activeRaffleId = String(raffleId);
+  userSelectedRaffleExplicitly = true;
+
+  const tabBtn = document.getElementById("tabBtnRifas");
+  if (tabBtn) {
+    tabBtn.click();
+  } else {
+    renderTab("tab-rifas");
+  }
+  showToast("Ação selecionada para conferência na aba de Rifas.", "info");
+}
+
+window.calculateRafflesProfitMetrics = calculateRafflesProfitMetrics;
+window.updateAdminRafflesProfitCard = updateAdminRafflesProfitCard;
+window.refreshAdminRafflesProfit = refreshAdminRafflesProfit;
+window.toggleProfitBreakdown = toggleProfitBreakdown;
+window.filterProfitBreakdownList = filterProfitBreakdownList;
+window.viewRaffleFromAdmin = viewRaffleFromAdmin;
+
 
 function renderTab(tabId) {
   const target = tabId || activeTab || "tab-rifas";
@@ -1461,6 +1843,11 @@ function updateGlobalStats() {
   const activeFishing = (appData.fishingBookings || []).filter(b => b.status === "scheduled");
   const badgeFishing = document.getElementById("badgePendingFishing");
   if (badgeFishing) badgeFishing.textContent = activeFishing.length;
+
+  // Atualiza também o Card de Lucro das Ações na Área de Administração se visível ou em cache
+  if (typeof updateAdminRafflesProfitCard === "function") {
+    updateAdminRafflesProfitCard();
+  }
 }
 
 /* ==========================================================================
@@ -10839,6 +11226,10 @@ async function saveRaffleForm() {
   });
   renderRaffleDropdown();
   renderRaffleView();
+  updateGlobalStats();
+  if (typeof updateAdminRafflesProfitCard === "function") {
+    updateAdminRafflesProfitCard(true);
+  }
   closeModal("modalRaffleForm");
   const prizeCountText = prizesArray.length > 0 ? ` com ${prizesArray.length} prêmios!` : '!';
   showToast(`Ação "${title}" criada com sucesso${prizeCountText}`, "success");
