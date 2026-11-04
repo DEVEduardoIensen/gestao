@@ -3,7 +3,7 @@
  * Clean, High-Performance Management for Raffles, Store Credit (Vales), Prize Winner Sorter, Prize Exchanges, Fishing Agenda (Eldorado Lake) & Employee Days
  */
 
-const CURRENT_APP_VERSION = '2.9.12';
+const CURRENT_APP_VERSION = '2.9.15';
 window.CURRENT_APP_VERSION = CURRENT_APP_VERSION;
 
 function syncAppVersionDisplay() {
@@ -1755,16 +1755,9 @@ function renderTab(tabId) {
     case "tab-rancho":
       renderRanchoView();
       break;
-    case "tab-boletos": {
-      const nowBoleto = new Date();
-      boletoSelectedYear = nowBoleto.getFullYear();
-      boletoSelectedMonth = nowBoleto.getMonth();
+    case "tab-boletos":
       renderBoletosView();
-      if (typeof navigator !== 'undefined' && navigator.onLine && window.syncEngine && !window.syncEngine.isSyncing) {
-        window.syncEngine.scheduleDebouncedRemoteRefresh();
-      }
       break;
-    }
     case "tab-eduardo":
       renderEduardoView();
       break;
@@ -7229,6 +7222,12 @@ window.exportInstagramCalendarCSV = exportInstagramCalendarCSV;
    ========================================================================== */
 
 function renderBoletosView() {
+  if (boletoSelectedYear == null || isNaN(boletoSelectedYear)) {
+    boletoSelectedYear = new Date().getFullYear();
+  }
+  if (boletoSelectedMonth == null || isNaN(boletoSelectedMonth)) {
+    boletoSelectedMonth = new Date().getMonth();
+  }
   updateBoletosStats();
   renderBoletoMonthPills();
   renderBoletosAgenda();
@@ -7245,12 +7244,25 @@ async function forceSyncBoletosFromCloud() {
   const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
 
   try {
-    if (window.syncEngine && window.supabaseClient) {
-      const remoteData = await window.syncEngine.fetchRemoteData(orgId);
-      if (remoteData && remoteData.settings && Array.isArray(remoteData.settings.boletos)) {
+    if (window.supabaseClient) {
+      const { data: bRow, error: bErr } = await window.supabaseClient
+        .from('settings')
+        .select('value')
+        .eq('organization_id', orgId)
+        .eq('key', 'boletos')
+        .maybeSingle();
+
+      if (bErr) throw bErr;
+
+      let boletosList = [];
+      if (bRow && bRow.value) {
+        try { boletosList = JSON.parse(bRow.value); } catch (e) { boletosList = bRow.value; }
+      }
+
+      if (Array.isArray(boletosList) && boletosList.length > 0) {
         if (!appData.settings) appData.settings = {};
-        appData.settings.boletos = remoteData.settings.boletos;
-        appData.boletos = remoteData.settings.boletos;
+        appData.settings.boletos = boletosList;
+        appData.boletos = boletosList;
 
         if (window.localDB) {
           await window.localDB.saveFullAppData(appData, orgId);
@@ -11352,7 +11364,14 @@ function setupEventListeners() {
   }
 
   // Raffle Search & Buttons
-  document.getElementById("inputSearchRaffle").addEventListener("input", renderRaffleNumbersGrid);
+  let _searchDebounceTimer = null;
+  const _inputSearch = document.getElementById("inputSearchRaffle");
+  if (_inputSearch) {
+    _inputSearch.addEventListener("input", () => {
+      if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+      _searchDebounceTimer = setTimeout(renderRaffleNumbersGrid, 60);
+    });
+  }
   document.getElementById("btnExportWhatsApp").addEventListener("click", openExportWhatsAppModal);
   document.getElementById("btnImportWhatsApp").addEventListener("click", openImportWhatsAppModal);
   document.getElementById("btnNewRaffle").addEventListener("click", openNewRaffleModal);

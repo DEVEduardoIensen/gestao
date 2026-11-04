@@ -184,7 +184,7 @@ if (!gotTheLock) {
           mainWindow.webContents.send('trigger-background-sync');
         }
       }
-    }, 180000);
+    }, 600000);
 
     mainWindow.on('show', () => {
       if (mainWindow && mainWindow.webContents && !mainWindow.isDestroyed()) {

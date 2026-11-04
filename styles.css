@@ -705,6 +705,7 @@ body {
   position: relative;
   overflow: hidden;
   container-type: inline-size;
+  contain: layout style paint;
 }
 
 .num-tile:hover {

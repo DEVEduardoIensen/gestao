@@ -13,8 +13,17 @@ class SyncEngine {
     this.syncInterval = null;
     this.realtimeChannel = null;
     this._refreshTimer = null;
+    this._queueTimer = null;
+    this._lastRemoteFetch = 0;
 
     this.init();
+  }
+
+  debouncedProcessQueue(delayMs = 1500) {
+    if (this._queueTimer) clearTimeout(this._queueTimer);
+    this._queueTimer = setTimeout(() => {
+      this.processQueue();
+    }, delayMs);
   }
 
   init() {
@@ -24,7 +33,7 @@ class SyncEngine {
         this.isOnline = true;
         this.updateStatus('syncing');
         this.initRealtimeSubscription();
-        this.processQueue();
+        this.debouncedProcessQueue(300);
       });
 
       window.addEventListener('offline', () => {
@@ -36,7 +45,7 @@ class SyncEngine {
       window.addEventListener('pageshow', () => {
         if (typeof navigator !== 'undefined' && navigator.onLine) {
           this.isOnline = true;
-          this.processQueue();
+          this.debouncedProcessQueue(1500);
         }
       });
 
@@ -44,7 +53,7 @@ class SyncEngine {
         if (typeof navigator !== 'undefined' && navigator.onLine) {
           this.isOnline = true;
           this.initRealtimeSubscription();
-          this.processQueue();
+          this.debouncedProcessQueue(1500);
         }
       });
     }
@@ -55,7 +64,7 @@ class SyncEngine {
         if (document.visibilityState === 'visible' && ((typeof navigator !== 'undefined' && navigator.onLine) || this.isOnline)) {
           this.isOnline = true;
           this.initRealtimeSubscription();
-          this.processQueue();
+          this.debouncedProcessQueue(1500);
         }
       });
     }
@@ -164,7 +173,7 @@ class SyncEngine {
       if (this.isOnline && !this.isSyncing) {
         this.processQueue();
       }
-    }, 60000);
+    }, 300000);
 
     // Inicializa Realtime imediatamente se online
     if (this.isOnline) {
@@ -175,6 +184,11 @@ class SyncEngine {
   initRealtimeSubscription() {
     if (!window.supabaseClient || !this.isOnline) return;
 
+    // Se o canal já existe e está conectado (joined) ou conectando (joining), NÃO destrói nem recria!
+    if (this.realtimeChannel && (this.realtimeChannel.state === 'joined' || this.realtimeChannel.state === 'joining')) {
+      return;
+    }
+
     if (this.realtimeChannel) {
       try {
         window.supabaseClient.removeChannel(this.realtimeChannel);
@@ -183,7 +197,7 @@ class SyncEngine {
     }
 
     try {
-      this.realtimeChannel = window.supabaseClient.channel('eldorado-sync-channel-' + Date.now())
+      this.realtimeChannel = window.supabaseClient.channel('eldorado-sync-live')
         .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
           console.log('[Realtime] Mudança remota recebida do Supabase:', payload.table, payload.eventType);
           if (this.isSyncing) return;
@@ -326,26 +340,224 @@ class SyncEngine {
       }
     }
 
-    // Se for criação, alteração ou exclusão de Rifa / Ação (Realtime Instantâneo)
+    // Se for alteração na tabela de Rifas / Ações
     if (table === 'raffles') {
-      console.log(`[Realtime] Notificação de Ação recebida (${eventType}). Recarregando dados e atualizando lucro...`);
-      if (typeof window.updateAdminRafflesProfitCard === 'function') {
-        window.updateAdminRafflesProfitCard(true);
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      if (!window.appData.raffles) window.appData.raffles = [];
+      const targetId = String(payload.old?.id || newRec?.id || '');
+
+      if (eventType === 'DELETE') {
+        window.appData.raffles = window.appData.raffles.filter(r => String(r.id) !== targetId);
+      } else if (newRec) {
+        const existingIdx = window.appData.raffles.findIndex(r => String(r.id) === targetId);
+        if (existingIdx >= 0) {
+          const oldRaffle = window.appData.raffles[existingIdx];
+          window.appData.raffles[existingIdx] = {
+            ...oldRaffle,
+            number: newRec.number || oldRaffle.number,
+            title: newRec.title || oldRaffle.title,
+            subtitle: newRec.subtitle || oldRaffle.subtitle,
+            pricePerNumber: parseFloat(newRec.price_per_number) || oldRaffle.pricePerNumber,
+            totalNumbers: newRec.total_numbers || oldRaffle.totalNumbers,
+            status: newRec.status || oldRaffle.status,
+            rules: newRec.rules !== undefined ? newRec.rules : oldRaffle.rules,
+            numbers: oldRaffle.numbers || []
+          };
+        } else {
+          // Nova rifa adicionada remotamente
+          const total = newRec.total_numbers || 60;
+          const nums = [];
+          for (let i = 1; i <= total; i++) {
+            nums.push({ num: i, name: '', status: 'available', reservedAt: null, paidAt: null });
+          }
+          window.appData.raffles.unshift({
+            id: newRec.id,
+            number: newRec.number,
+            title: newRec.title,
+            subtitle: newRec.subtitle,
+            pricePerNumber: parseFloat(newRec.price_per_number) || 25,
+            totalNumbers: total,
+            status: newRec.status || 'active',
+            rules: newRec.rules || '',
+            prizes: [],
+            numbers: nums
+          });
+        }
       }
-      this.scheduleDebouncedRemoteRefresh(250);
+
+      if (window.localDB) window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+      try { localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData)); } catch (e) {}
+      if (typeof window.renderAll === 'function') window.renderAll();
+      if (typeof window.updateAdminRafflesProfitCard === 'function') window.updateAdminRafflesProfitCard(true);
       return;
     }
 
-    // Para demais tabelas ou alterações estruturais, agenda recarga remota suave
-    this.scheduleDebouncedRemoteRefresh();
+    // Se for Vales & Prêmios (vales_prizes)
+    if (table === 'vales_prizes') {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      if (!window.appData.valesAndPrizes) window.appData.valesAndPrizes = [];
+      const targetId = String(payload.old?.id || newRec?.id || '');
+
+      if (eventType === 'DELETE') {
+        window.appData.valesAndPrizes = window.appData.valesAndPrizes.filter(v => String(v.id) !== targetId);
+      } else if (newRec) {
+        const item = {
+          id: newRec.id,
+          customerName: newRec.customer_name,
+          customerPhone: newRec.customer_phone,
+          type: newRec.type,
+          raffleRef: newRec.raffle_ref,
+          dateWon: newRec.date_won,
+          initialAmount: parseFloat(newRec.initial_amount) || 0,
+          currentBalance: parseFloat(newRec.current_balance) || 0,
+          description: newRec.description,
+          status: newRec.status,
+          deliveredAt: newRec.delivered_at,
+          notes: newRec.notes,
+          transactions: []
+        };
+        const idx = window.appData.valesAndPrizes.findIndex(v => String(v.id) === targetId);
+        if (idx >= 0) {
+          item.transactions = window.appData.valesAndPrizes[idx].transactions || [];
+          window.appData.valesAndPrizes[idx] = item;
+        } else {
+          window.appData.valesAndPrizes.unshift(item);
+        }
+      }
+      if (window.localDB) window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+      try { localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData)); } catch (e) {}
+      if (typeof window.renderValesView === 'function') window.renderValesView();
+      return;
+    }
+
+    // Se for Agendamentos de Pesca (fishing_bookings)
+    if (table === 'fishing_bookings') {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      if (!window.appData.fishingBookings) window.appData.fishingBookings = [];
+      const targetId = String(payload.old?.id || newRec?.id || '');
+
+      if (eventType === 'DELETE') {
+        window.appData.fishingBookings = window.appData.fishingBookings.filter(f => String(f.id) !== targetId);
+      } else if (newRec) {
+        const item = {
+          id: newRec.id,
+          clientName: newRec.client_name,
+          clientPhone: newRec.client_phone,
+          startDate: newRec.start_date,
+          endDate: newRec.end_date,
+          totalAmount: parseFloat(newRec.total_amount) || 0,
+          depositAmount: parseFloat(newRec.deposit_amount) || 0,
+          remainingAmount: parseFloat(newRec.remaining_amount) || 0,
+          paymentStatus: newRec.payment_status,
+          paymentMethod: newRec.payment_method,
+          notes: newRec.notes,
+          status: newRec.status
+        };
+        const idx = window.appData.fishingBookings.findIndex(f => String(f.id) === targetId);
+        if (idx >= 0) window.appData.fishingBookings[idx] = item;
+        else window.appData.fishingBookings.unshift(item);
+      }
+      if (window.localDB) window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+      try { localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData)); } catch (e) {}
+      if (typeof window.renderFishingView === 'function') window.renderFishingView();
+      return;
+    }
+
+    // Se for Locações do Rancho (rancho_bookings)
+    if (table === 'rancho_bookings') {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      if (!window.appData.ranchoBookings) window.appData.ranchoBookings = [];
+      const targetId = String(payload.old?.id || newRec?.id || '');
+
+      if (eventType === 'DELETE') {
+        window.appData.ranchoBookings = window.appData.ranchoBookings.filter(r => String(r.id) !== targetId);
+      } else if (newRec) {
+        const item = {
+          id: newRec.id,
+          clientName: newRec.client_name,
+          clientPhone: newRec.client_phone,
+          checkInDate: newRec.check_in_date,
+          checkOutDate: newRec.check_out_date,
+          totalAmount: parseFloat(newRec.total_amount) || 0,
+          depositAmount: parseFloat(newRec.deposit_amount) || 0,
+          remainingAmount: parseFloat(newRec.remaining_amount) || 0,
+          paymentStatus: newRec.payment_status,
+          paymentMethod: newRec.payment_method,
+          notes: newRec.notes,
+          status: newRec.status
+        };
+        const idx = window.appData.ranchoBookings.findIndex(r => String(r.id) === targetId);
+        if (idx >= 0) window.appData.ranchoBookings[idx] = item;
+        else window.appData.ranchoBookings.unshift(item);
+      }
+      if (window.localDB) window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+      try { localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData)); } catch (e) {}
+      if (typeof window.renderRanchoView === 'function') window.renderRanchoView();
+      return;
+    }
+
+    // Se for Ponto do Eduardo (eduardo_work_days)
+    if (table === 'eduardo_work_days') {
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      if (!window.appData.eduardoWorkDays) window.appData.eduardoWorkDays = [];
+      const targetDate = payload.old?.date || newRec?.date;
+
+      if (eventType === 'DELETE') {
+        window.appData.eduardoWorkDays = window.appData.eduardoWorkDays.filter(d => d.date !== targetDate);
+      } else if (newRec) {
+        const item = {
+          date: newRec.date,
+          type: newRec.type,
+          hoursWeight: parseFloat(newRec.hours_weight) || 1.0,
+          amountDue: parseFloat(newRec.amount_due) || 0,
+          notes: newRec.notes
+        };
+        const idx = window.appData.eduardoWorkDays.findIndex(d => d.date === targetDate);
+        if (idx >= 0) window.appData.eduardoWorkDays[idx] = item;
+        else window.appData.eduardoWorkDays.push(item);
+      }
+      if (window.localDB) window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+      try { localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData)); } catch (e) {}
+      if (typeof window.renderEduardoPontos === 'function') window.renderEduardoPontos();
+      return;
+    }
+
+    // Se for outra chave da tabela settings
+    if (table === 'settings' && newRec && newRec.key) {
+      if (!window.appData.settings) window.appData.settings = {};
+      try {
+        window.appData.settings[newRec.key] = JSON.parse(newRec.value);
+      } catch (e) {
+        window.appData.settings[newRec.key] = newRec.value;
+      }
+      const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+      const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+      if (window.localDB) window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
+      try { localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData)); } catch (e) {}
+      return;
+    }
+
+    // Para alterações raras desconhecidas, agenda recarga remota debounced suave (mínimo 5s)
+    this.scheduleDebouncedRemoteRefresh(5000);
   }
 
-  scheduleDebouncedRemoteRefresh(delayMs = 1200) {
+  scheduleDebouncedRemoteRefresh(delayMs = 3000) {
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     this._refreshTimer = setTimeout(async () => {
       const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
       const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
       if (!orgId || !this.isOnline || this.isSyncing) return;
+
+      // Throttle de 3 minutos anti-egress
+      if (this._lastRemoteFetch && (Date.now() - this._lastRemoteFetch < 180000)) {
+        return;
+      }
+
       const remoteData = await this.fetchRemoteData(orgId);
       if (remoteData && typeof window.mergeRemoteData === 'function') {
         await window.mergeRemoteData(remoteData);
@@ -376,15 +588,20 @@ class SyncEngine {
     }
   }
 
-  // --- BUSCAR DADOS COMPLETOS DO SUPABASE PARA O TENANT ---
-  async fetchRemoteData(orgId) {
+  // --- BUSCAR DADOS COMPLETOS DO SUPABASE PARA O TENANT (OTIMIZADO ANTI-EGRESS) ---
+  async fetchRemoteData(orgId, force = false) {
     if (!window.supabaseClient || !this.isOnline || !orgId) return null;
+
+    const now = Date.now();
+    if (!force && this._lastRemoteFetch && (now - this._lastRemoteFetch < 180000)) {
+      console.log('[SyncEngine] fetchRemoteData ignorado (cooldown anti-egress de 3 min ativo).');
+      return null;
+    }
 
     try {
       const [
         { data: settingsData, error: sErr },
         { data: rafflesData, error: rErr },
-        { data: raffleNumbersData, error: rnErr },
         { data: rafflePrizesData, error: rpErr },
         { data: valesData, error: vErr },
         { data: valeTxData, error: vtErr },
@@ -393,19 +610,36 @@ class SyncEngine {
         { data: eduardoData, error: eErr }
       ] = await Promise.all([
         window.supabaseClient.from('settings').select('*').eq('organization_id', orgId),
-        window.supabaseClient.from('raffles').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
-        window.supabaseClient.from('raffle_numbers').select('*').eq('organization_id', orgId).limit(10000),
+        window.supabaseClient.from('raffles').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(20),
         window.supabaseClient.from('raffle_prizes').select('*').eq('organization_id', orgId).order('position', { ascending: true }),
-        window.supabaseClient.from('vales_prizes').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
-        window.supabaseClient.from('vale_transactions').select('*').eq('organization_id', orgId).order('date', { ascending: false }),
-        window.supabaseClient.from('fishing_bookings').select('*').eq('organization_id', orgId).order('start_date', { ascending: false }),
-        window.supabaseClient.from('rancho_bookings').select('*').eq('organization_id', orgId).order('check_in_date', { ascending: false }),
-        window.supabaseClient.from('eduardo_work_days').select('*').eq('organization_id', orgId)
+        window.supabaseClient.from('vales_prizes').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50),
+        window.supabaseClient.from('vale_transactions').select('*').eq('organization_id', orgId).order('date', { ascending: false }).limit(100),
+        window.supabaseClient.from('fishing_bookings').select('*').eq('organization_id', orgId).order('start_date', { ascending: false }).limit(100),
+        window.supabaseClient.from('rancho_bookings').select('*').eq('organization_id', orgId).order('check_in_date', { ascending: false }).limit(100),
+        window.supabaseClient.from('eduardo_work_days').select('*').eq('organization_id', orgId).limit(200)
       ]);
 
-      if (sErr || rErr || rnErr || rpErr || vErr || vtErr || fErr || raErr || eErr) {
-        console.warn('[SyncEngine] Erro parcial no fetchRemoteData:', { sErr, rErr, rnErr, rpErr, vErr, vtErr, fErr, raErr, eErr });
+      if (sErr || rErr || rpErr || vErr || vtErr || fErr || raErr || eErr) {
+        console.warn('[SyncEngine] Erro parcial no fetchRemoteData:', { sErr, rErr, rpErr, vErr, vtErr, fErr, raErr, eErr });
       }
+
+      // OTIMIZAÇÃO CRÍTICA: Puxa cotas APENAS das rifas ativas (em vez de 10.000 cotas históricas)
+      const activeRaffles = (rafflesData || []).filter(r => r.status === 'active' || !r.status);
+      const activeRaffleIds = activeRaffles.map(r => r.id);
+
+      let raffleNumbersData = [];
+      let rnErr = null;
+      if (activeRaffleIds.length > 0) {
+        const { data: rnums, error: rnError } = await window.supabaseClient
+          .from('raffle_numbers')
+          .select('*')
+          .eq('organization_id', orgId)
+          .in('raffle_id', activeRaffleIds);
+        raffleNumbersData = rnums || [];
+        rnErr = rnError;
+      }
+
+      this._lastRemoteFetch = Date.now();
 
       // Monta objeto settings
       const settings = {};
@@ -415,6 +649,26 @@ class SyncEngine {
 
       // Reconstrói as rifas com seus números e prêmios aninhados
       const raffles = (rafflesData || []).map(r => {
+        // Se a rifa já for concluída e temos seus números em memória ou localDB, preservamos os números dela!
+        const existingRaffle = (window.appData && Array.isArray(window.appData.raffles))
+          ? window.appData.raffles.find(ex => String(ex.id) === String(r.id))
+          : null;
+
+        if (r.status === 'completed' && existingRaffle && Array.isArray(existingRaffle.numbers) && existingRaffle.numbers.length > 0) {
+          const prizesForThisRaffle = (rafflePrizesData || []).filter(p => String(p.raffle_id) === String(r.id));
+          return {
+            ...existingRaffle,
+            ...r,
+            prizes: prizesForThisRaffle.length > 0 ? prizesForThisRaffle.map(p => ({ 
+              position: p.position,
+              description: p.description,
+              winnerNumber: p.winner_number,
+              winnerName: p.winner_name
+            })) : (existingRaffle.prizes || []),
+            numbers: existingRaffle.numbers
+          };
+        }
+
         const numberMap = new Map();
         (raffleNumbersData || []).forEach(n => {
           if (String(n.raffle_id) === String(r.id)) {
@@ -647,7 +901,6 @@ class SyncEngine {
           this.updateStatus('offline');
         } else {
           this.updateStatus('synced');
-          this.scheduleDebouncedRemoteRefresh();
         }
       } finally {
         this.isSyncing = false;
