@@ -12,6 +12,7 @@ class AuthManager {
     this.currentOrg = null;
     this.listeners = [];
     this.isPasswordRecovery = false;
+    this._lastOrgsFetchTime = 0;
     this.init();
   }
 
@@ -44,13 +45,18 @@ class AuthManager {
         }
 
         if (this.user) {
-          await this.loadUserOrganizations();
+          if (event === 'TOKEN_REFRESHED' && this.organizations.length > 0 && this.currentOrg) {
+            // Renovação automática de JWT: mantém organização em memória sem gastar consulta REST
+          } else {
+            await this.loadUserOrganizations();
+          }
           if (window.localDB && session) {
             window.localDB.saveAuthSession(session, this.getOrganizationId());
           }
         } else if (event === 'SIGNED_OUT') {
           this.currentOrg = null;
           this.organizations = [];
+          this._lastOrgsFetchTime = 0;
           localStorage.removeItem('ELDORADO_ACTIVE_ORG_ID');
           localStorage.removeItem('ELDORADO_CACHED_ORGS');
           if (window.localDB) {
@@ -59,10 +65,6 @@ class AuthManager {
         } else {
           // Não limpa cache em caso de desconexão ou inicialização offline
           this.restoreCachedOrganizations();
-        }
-
-        if (window.localDB && session) {
-          window.localDB.saveAuthSession(session, this.getOrganizationId());
         }
 
         this.notifyListeners(event, session);
@@ -327,9 +329,12 @@ class AuthManager {
     return false;
   }
 
-  async loadUserOrganizations() {
+  async loadUserOrganizations(force = false) {
     if (!this.client || !this.user) {
       this.restoreCachedOrganizations();
+      return;
+    }
+    if (!force && this._lastOrgsFetchTime && (Date.now() - this._lastOrgsFetchTime < 300000) && this.organizations.length > 0 && this.currentOrg) {
       return;
     }
 
@@ -376,6 +381,7 @@ class AuthManager {
         this.currentOrg = match;
         
         // Persiste cache para abertura offline tanto no desktop quanto no mobile
+        this._lastOrgsFetchTime = Date.now();
         localStorage.setItem('ELDORADO_ACTIVE_ORG_ID', this.currentOrg.id);
         localStorage.setItem('ELDORADO_CACHED_ORGS', JSON.stringify(this.organizations));
       } else {
@@ -402,7 +408,7 @@ class AuthManager {
     if (error) throw error;
     this.session = data.session;
     this.user = data.user;
-    await this.loadUserOrganizations();
+    await this.loadUserOrganizations(true);
     return data;
   }
 
@@ -467,7 +473,7 @@ class AuthManager {
     if (data && !data.success) {
       throw new Error(data.error || 'Falha ao ingressar na organização.');
     }
-    await this.loadUserOrganizations();
+    await this.loadUserOrganizations(true);
     return data;
   }
 

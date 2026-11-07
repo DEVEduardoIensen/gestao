@@ -11,7 +11,7 @@ try {
   console.warn('[Service Worker] normalize_raffle.js carregado inline/fallback');
 }
 
-const CACHE_NAME = 'eldorado-pwa-v2.9.16';
+const CACHE_NAME = 'eldorado-pwa-v2.9.17';
 
 // Configurações do Supabase para background dispatch direto do Service Worker
 const SUPABASE_URL = 'https://tfttmfbfzyymuwiwpxyw.supabase.co';
@@ -511,6 +511,7 @@ async function swSupabaseFetch(url, options = {}, op = null, db = null) {
     'apikey': SUPABASE_KEY,
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
+    'Prefer': 'return=minimal',
     ...(options.headers || {})
   };
 
@@ -570,7 +571,7 @@ async function dispatchOpToSupabase(op, db) {
 
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_numbers?on_conflict=organization_id,raffle_id,num`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(rows)
       }, op, db);
 
@@ -611,7 +612,7 @@ async function dispatchOpToSupabase(op, db) {
       }));
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_numbers?on_conflict=organization_id,raffle_id,num`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(rows)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar cotas em lote`);
@@ -643,7 +644,7 @@ async function dispatchOpToSupabase(op, db) {
       // 1. Upsert na tabela raffles
       const resRaffle = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffles?on_conflict=organization_id,id`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!resRaffle.ok) throw new Error(`HTTP ${resRaffle.status} ao salvar dados da rifa`);
@@ -661,7 +662,7 @@ async function dispatchOpToSupabase(op, db) {
           }));
           const resPrizes = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_prizes?on_conflict=organization_id,raffle_id,position`, {
             method: 'POST',
-            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify(prizeRecords)
           }, op, db);
           if (!resPrizes.ok) throw new Error(`HTTP ${resPrizes.status} ao sincronizar prêmios da rifa`);
@@ -681,34 +682,44 @@ async function dispatchOpToSupabase(op, db) {
         }
       }
 
-      // 3. Persiste cotas 1 a N se fornecidas
-      if (Array.isArray(r.numbers) && r.numbers.length > 0) {
-        const numbersRows = r.numbers.map(n => ({
-          organization_id: orgId,
-          raffle_id: r.id,
-          num: parseInt(n.num, 10) || n.num,
-          name: (n.status === 'available') ? '' : (n.name || ''),
-          status: n.status || 'available',
-          reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
-          paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
-        }));
-        const resNumbers = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_numbers?on_conflict=organization_id,raffle_id,num`, {
-          method: 'POST',
-          headers: { 'Prefer': 'resolution=merge-duplicates' },
-          body: JSON.stringify(numbersRows)
-        }, op, db);
-        if (!resNumbers.ok) throw new Error(`HTTP ${resNumbers.status} ao sincronizar cotas da rifa`);
+      // 3. Persiste cotas somente na criação ou quando a quantidade de números mudar (evita reenviar 60 cotas em UPDATE_RAFFLE)
+      const skipNums = !isCreate && op.payload && op.payload._skipNumbersSync === true;
+      const addedFrom = (!isCreate && op.payload && op.payload._addedNumbersFrom) ? parseInt(op.payload._addedNumbersFrom, 10) : null;
+      const decreasedTotal = !isCreate && op.payload && op.payload._decreasedTotal === true;
 
-        // Remove cotas obsoletas se a quantidade foi reduzida
-        if (r.totalNumbers && Number.isInteger(r.totalNumbers)) {
-          const resDelExtraNums = await swSupabaseFetch(
-            `${SUPABASE_URL}/rest/v1/raffle_numbers?organization_id=eq.${orgId}&raffle_id=eq.${encodeURIComponent(r.id)}&num=gt.${r.totalNumbers}`,
-            { method: 'DELETE' },
-            op,
-            db
-          );
-          if (!resDelExtraNums.ok) throw new Error(`HTTP ${resDelExtraNums.status} ao limpar cotas excedentes da rifa`);
+      if (!skipNums && Array.isArray(r.numbers) && r.numbers.length > 0 && (isCreate || addedFrom)) {
+        const subset = isCreate
+          ? r.numbers
+          : r.numbers.filter(n => (parseInt(n.num, 10) || 0) >= addedFrom);
+
+        if (subset.length > 0) {
+          const numbersRows = subset.map(n => ({
+            organization_id: orgId,
+            raffle_id: r.id,
+            num: parseInt(n.num, 10) || n.num,
+            name: (n.status === 'available') ? '' : (n.name || ''),
+            status: n.status || 'available',
+            reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
+            paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
+          }));
+          const resNumbers = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/raffle_numbers?on_conflict=organization_id,raffle_id,num`, {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify(numbersRows)
+          }, op, db);
+          if (!resNumbers.ok) throw new Error(`HTTP ${resNumbers.status} ao sincronizar cotas da rifa`);
         }
+      }
+
+      // Remove cotas obsoletas somente se a quantidade foi efetivamente reduzida
+      if (decreasedTotal && r.totalNumbers && Number.isInteger(r.totalNumbers)) {
+        const resDelExtraNums = await swSupabaseFetch(
+          `${SUPABASE_URL}/rest/v1/raffle_numbers?organization_id=eq.${orgId}&raffle_id=eq.${encodeURIComponent(r.id)}&num=gt.${r.totalNumbers}`,
+          { method: 'DELETE' },
+          op,
+          db
+        );
+        if (!resDelExtraNums.ok) throw new Error(`HTTP ${resDelExtraNums.status} ao limpar cotas excedentes da rifa`);
       }
 
       return true;
@@ -746,7 +757,7 @@ async function dispatchOpToSupabase(op, db) {
       };
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vales_prizes?on_conflict=organization_id,id`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar vale`);
@@ -775,7 +786,7 @@ async function dispatchOpToSupabase(op, db) {
       };
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/vale_transactions?on_conflict=organization_id,id`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar transação de vale`);
@@ -816,7 +827,7 @@ async function dispatchOpToSupabase(op, db) {
       };
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/fishing_bookings?on_conflict=organization_id,id`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar agendamento de pesca`);
@@ -853,7 +864,7 @@ async function dispatchOpToSupabase(op, db) {
       };
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/rancho_bookings?on_conflict=organization_id,id`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar locação do rancho`);
@@ -887,7 +898,7 @@ async function dispatchOpToSupabase(op, db) {
       };
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/eduardo_work_days?on_conflict=organization_id,date`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao salvar ponto do Eduardo`);
@@ -904,14 +915,26 @@ async function dispatchOpToSupabase(op, db) {
 
     case 'UPDATE_SETTINGS': {
       const s = op.payload;
+      let valToSave = s.value;
+      if (s.key === 'boletos' && Array.isArray(valToSave)) {
+        valToSave = valToSave.map(b => {
+          if (!b || typeof b !== 'object') return b;
+          const clean = { ...b };
+          if (typeof clean.imageUrl === 'string' && (clean.imageUrl.startsWith('data:') || clean.imageUrl.length > 500)) {
+            delete clean.imageUrl;
+          }
+          delete clean.rawOcrText;
+          return clean;
+        });
+      }
       const row = {
         organization_id: orgId,
         key: s.key,
-        value: typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)
+        value: typeof valToSave === 'object' ? JSON.stringify(valToSave) : String(valToSave)
       };
       const res = await swSupabaseFetch(`${SUPABASE_URL}/rest/v1/settings?on_conflict=organization_id,key`, {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(row)
       }, op, db);
       if (!res.ok) throw new Error(`HTTP ${res.status} ao atualizar settings`);

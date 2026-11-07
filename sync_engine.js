@@ -76,8 +76,8 @@ class SyncEngine {
         this.broadcastChannel.onmessage = (event) => {
           if (!event.data) return;
           if (event.data.type === 'BACKGROUND_SYNC_COMPLETE') {
-            console.log('[SyncEngine] Notificação de Background Sync recebida do Service Worker.');
-            this.scheduleDebouncedRemoteRefresh();
+            console.log('[SyncEngine] Notificação de Background Sync recebida do Service Worker (zero re-download).');
+            this.updateStatus(this.conflicts.length > 0 ? 'conflict' : 'synced');
           } else if (event.data.type === 'COTA_UPDATED') {
             const { raffleId, numbers, status, buyerName, reservedAt, paidAt } = event.data;
             if (window.appData && Array.isArray(window.appData.raffles) && Array.isArray(numbers)) {
@@ -137,8 +137,8 @@ class SyncEngine {
     if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'BACKGROUND_SYNC_COMPLETE') {
-          console.log('[SyncEngine] Notificação direta do Service Worker recebida.');
-          this.scheduleDebouncedRemoteRefresh();
+          console.log('[SyncEngine] Notificação direta do Service Worker recebida (zero re-download).');
+          this.updateStatus(this.conflicts.length > 0 ? 'conflict' : 'synced');
         }
       });
     }
@@ -290,6 +290,15 @@ class SyncEngine {
           try { parsed = JSON.parse(parsed); } catch (e) {}
         }
         if (Array.isArray(parsed)) {
+          const localImages = new Map();
+          (window.appData.boletos || []).forEach(b => {
+            if (b && b.id && b.imageUrl) localImages.set(String(b.id), b.imageUrl);
+          });
+          parsed.forEach(b => {
+            if (b && b.id && !b.imageUrl && localImages.has(String(b.id))) {
+              b.imageUrl = localImages.get(String(b.id));
+            }
+          });
           if (!window.appData.settings) window.appData.settings = {};
           window.appData.settings.boletos = parsed;
           window.appData.boletos = parsed;
@@ -297,7 +306,10 @@ class SyncEngine {
             window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
           }
           try {
-            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData));
+            const str = typeof window.serializeAppDataForLocalStorage === 'function'
+              ? window.serializeAppDataForLocalStorage(window.appData)
+              : JSON.stringify(window.appData);
+            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, str);
           } catch (e) {}
           if (typeof window.renderBoletosView === 'function') {
             window.renderBoletosView();
@@ -315,24 +327,30 @@ class SyncEngine {
       const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
       const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
       try {
-        let parsed = newRec.value;
-        if (typeof parsed === 'string') {
-          try { parsed = JSON.parse(parsed); } catch (e) {}
-        }
-        if (Array.isArray(parsed)) {
+        const hydrated = (typeof window.hydrateInstagramPosts === 'function')
+          ? window.hydrateInstagramPosts(newRec.value)
+          : (() => {
+              let p = newRec.value;
+              if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) {} }
+              return Array.isArray(p) ? p : null;
+            })();
+        if (Array.isArray(hydrated)) {
           if (!window.appData.settings) window.appData.settings = {};
-          window.appData.settings.instagramPosts = parsed;
-          window.appData.instagramPosts = parsed;
+          window.appData.settings.instagramPosts = hydrated;
+          window.appData.instagramPosts = hydrated;
           if (window.localDB) {
             window.localDB.saveFullAppData(window.appData, orgId).catch(() => {});
           }
           try {
-            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(window.appData));
+            const str = typeof window.serializeAppDataForLocalStorage === 'function'
+              ? window.serializeAppDataForLocalStorage(window.appData)
+              : JSON.stringify(window.appData);
+            localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, str);
           } catch (e) {}
           if (typeof window.renderInstagramView === 'function') {
             window.renderInstagramView();
           }
-          console.log('[Realtime] Instagram posts atualizados instantaneamente da nuvem:', parsed.length);
+          console.log('[Realtime] Instagram posts atualizados instantaneamente da nuvem:', hydrated.length);
           return;
         }
       } catch (err) {
@@ -609,7 +627,7 @@ class SyncEngine {
         { data: ranchoData, error: raErr },
         { data: eduardoData, error: eErr }
       ] = await Promise.all([
-        window.supabaseClient.from('settings').select('*').eq('organization_id', orgId),
+        window.supabaseClient.from('settings').select('key, value').eq('organization_id', orgId).not('key', 'in', '("instagramPosts","boletos")'),
         window.supabaseClient.from('raffles').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(20),
         window.supabaseClient.from('raffle_prizes').select('*').eq('organization_id', orgId).order('position', { ascending: true }),
         window.supabaseClient.from('vales_prizes').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50),
@@ -1045,32 +1063,42 @@ class SyncEngine {
           }
         }
 
-        // Persiste as cotas 1 a N na criação ou atualização
-        if (Array.isArray(r.numbers) && r.numbers.length > 0) {
-          const numbersRows = r.numbers.map(n => ({
-            organization_id: orgId,
-            raffle_id: r.id,
-            num: parseInt(n.num, 10) || n.num,
-            name: (n.status === 'available') ? '' : (n.name || ''),
-            status: n.status || 'available',
-            reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
-            paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
-          }));
-          const { error: nError } = await window.supabaseClient
-            .from('raffle_numbers')
-            .upsert(numbersRows, { onConflict: 'organization_id,raffle_id,num' });
-          if (nError) throw nError;
+        // Persiste cotas somente na criação ou quando a quantidade de números aumentar (evita 60 upserts + 60 mensagens Realtime em UPDATE_RAFFLE)
+        const skipNums = !isCreate && op.payload && op.payload._skipNumbersSync === true;
+        const addedFrom = (!isCreate && op.payload && op.payload._addedNumbersFrom) ? parseInt(op.payload._addedNumbersFrom, 10) : null;
+        const decreasedTotal = !isCreate && op.payload && op.payload._decreasedTotal === true;
 
-          // Se a quantidade de cotas foi reduzida, remove cotas obsoletas no Supabase
-          if (r.totalNumbers && Number.isInteger(r.totalNumbers)) {
-            const { error: dNumError } = await window.supabaseClient
+        if (!skipNums && Array.isArray(r.numbers) && r.numbers.length > 0 && (isCreate || addedFrom)) {
+          const subset = isCreate
+            ? r.numbers
+            : r.numbers.filter(n => (parseInt(n.num, 10) || 0) >= addedFrom);
+
+          if (subset.length > 0) {
+            const numbersRows = subset.map(n => ({
+              organization_id: orgId,
+              raffle_id: r.id,
+              num: parseInt(n.num, 10) || n.num,
+              name: (n.status === 'available') ? '' : (n.name || ''),
+              status: n.status || 'available',
+              reserved_at: (n.status === 'available') ? null : (n.reservedAt || (n.status === 'reserved' ? new Date().toISOString() : null)),
+              paid_at: (n.status === 'paid') ? (n.paidAt || new Date().toISOString()) : null
+            }));
+            const { error: nError } = await window.supabaseClient
               .from('raffle_numbers')
-              .delete()
-              .eq('organization_id', orgId)
-              .eq('raffle_id', r.id)
-              .gt('num', r.totalNumbers);
-            if (dNumError) throw dNumError;
+              .upsert(numbersRows, { onConflict: 'organization_id,raffle_id,num' });
+            if (nError) throw nError;
           }
+        }
+
+        // Remove cotas obsoletas somente se a quantidade de cotas foi efetivamente reduzida
+        if (decreasedTotal && r.totalNumbers && Number.isInteger(r.totalNumbers)) {
+          const { error: dNumError } = await window.supabaseClient
+            .from('raffle_numbers')
+            .delete()
+            .eq('organization_id', orgId)
+            .eq('raffle_id', r.id)
+            .gt('num', r.totalNumbers);
+          if (dNumError) throw dNumError;
         }
         return true;
       }
@@ -1257,9 +1285,15 @@ class SyncEngine {
         return true;
       }
 
-      // 14. Atualizar Configurações Globais da Organização
+      // 14. Atualizar Configurações Globais da Organização (com compactação/sanitização anti-egress)
       case 'UPDATE_SETTINGS': {
-        const { key, value } = op.payload;
+        const { key } = op.payload;
+        let value = op.payload.value;
+        if (key === 'boletos' && Array.isArray(value) && typeof window.stripBoletoHeavyFieldsForCloud === 'function') {
+          value = window.stripBoletoHeavyFieldsForCloud(value);
+        } else if (key === 'instagramPosts' && Array.isArray(value) && typeof window.compactInstagramPostsForCloud === 'function') {
+          value = window.compactInstagramPostsForCloud(value);
+        }
         const valStr = typeof value === 'string' ? value : JSON.stringify(value);
         const { error } = await window.supabaseClient.from('settings').upsert({
           organization_id: orgId,

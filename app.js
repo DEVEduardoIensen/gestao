@@ -3,7 +3,7 @@
  * Clean, High-Performance Management for Raffles, Store Credit (Vales), Prize Winner Sorter, Prize Exchanges, Fishing Agenda (Eldorado Lake) & Employee Days
  */
 
-const CURRENT_APP_VERSION = '2.9.15';
+const CURRENT_APP_VERSION = '2.9.17';
 window.CURRENT_APP_VERSION = CURRENT_APP_VERSION;
 
 function syncAppVersionDisplay() {
@@ -97,6 +97,114 @@ let instagramCalSelectedMonth = new Date().getMonth();
 let activeInstagramPostId = null;
 let isConnectedToBackend = false;
 
+// Anti-Egress Helpers: Compactação de Cronograma Instagram (~89KB -> <0.5KB) e Sanitização de Boletos (Zero Base64 na nuvem)
+function hydrateInstagramPosts(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch (e) { return null; }
+  }
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object' && raw._compactV1 === true) {
+    const official = (typeof window !== 'undefined' && Array.isArray(window.OFFICIAL_INSTAGRAM_104_POSTS))
+      ? window.OFFICIAL_INSTAGRAM_104_POSTS
+      : [];
+    const deletedSet = new Set(Array.isArray(raw.deletedIds) ? raw.deletedIds.map(String) : []);
+    const statuses = (raw.statuses && typeof raw.statuses === 'object') ? raw.statuses : {};
+    const editedMap = new Map();
+    if (Array.isArray(raw.edited)) {
+      raw.edited.forEach(p => { if (p && p.id) editedMap.set(String(p.id), p); });
+    }
+    const hydrated = official
+      .filter(p => p && !deletedSet.has(String(p.id)))
+      .map(p => {
+        const idStr = String(p.id);
+        let copy = { ...p };
+        if (editedMap.has(idStr)) {
+          copy = { ...copy, ...editedMap.get(idStr) };
+        }
+        if (statuses[idStr]) {
+          copy.status = statuses[idStr];
+        }
+        return copy;
+      });
+    const customPosts = Array.isArray(raw.custom) ? raw.custom : [];
+    return [...customPosts, ...hydrated];
+  }
+  return null;
+}
+window.hydrateInstagramPosts = hydrateInstagramPosts;
+
+function compactInstagramPostsForCloud(posts) {
+  if (!Array.isArray(posts)) return posts;
+  const official = (typeof window !== 'undefined' && Array.isArray(window.OFFICIAL_INSTAGRAM_104_POSTS))
+    ? window.OFFICIAL_INSTAGRAM_104_POSTS
+    : null;
+  if (!official || official.length === 0) return posts;
+
+  const officialMap = new Map();
+  official.forEach(p => { if (p && p.id) officialMap.set(String(p.id), p); });
+
+  const presentIds = new Set();
+  const statuses = {};
+  const edited = [];
+  const custom = [];
+
+  posts.forEach(p => {
+    if (!p || !p.id) return;
+    const idStr = String(p.id);
+    presentIds.add(idStr);
+    const orig = officialMap.get(idStr);
+    if (!orig) {
+      custom.push(p);
+      return;
+    }
+    if (p.status && p.status !== orig.status) {
+      statuses[idStr] = p.status;
+    }
+    const changedFields = {};
+    let hasFieldDiff = false;
+    ['date', 'dayOfWeek', 'time', 'brand', 'theme', 'format', 'pillar', 'title', 'seasonalHook', 'caption'].forEach(k => {
+      if (p[k] !== undefined && p[k] !== orig[k]) {
+        changedFields[k] = p[k];
+        hasFieldDiff = true;
+      }
+    });
+    if (hasFieldDiff) {
+      edited.push({ id: p.id, ...changedFields });
+    }
+  });
+
+  const deletedIds = [];
+  officialMap.forEach((_, idStr) => {
+    if (!presentIds.has(idStr)) deletedIds.push(idStr);
+  });
+
+  return {
+    _compactV1: true,
+    statuses,
+    edited,
+    deletedIds,
+    custom
+  };
+}
+window.compactInstagramPostsForCloud = compactInstagramPostsForCloud;
+
+function stripBoletoHeavyFieldsForCloud(boletos) {
+  if (!Array.isArray(boletos)) return [];
+  return boletos.map(b => {
+    if (!b || typeof b !== 'object') return b;
+    const clean = { ...b };
+    if (typeof clean.imageUrl === 'string' && (clean.imageUrl.startsWith('data:') || clean.imageUrl.length > 500)) {
+      delete clean.imageUrl;
+    }
+    if (clean.rawOcrText) {
+      delete clean.rawOcrText;
+    }
+    return clean;
+  });
+}
+window.stripBoletoHeavyFieldsForCloud = stripBoletoHeavyFieldsForCloud;
+
 // Initialize Application on DOM Ready
 function sanitizeAppData(data) {
   if (!data || typeof data !== 'object') data = {};
@@ -147,11 +255,10 @@ function sanitizeAppData(data) {
   if (!Array.isArray(data.ranchoBookings)) {
     data.ranchoBookings = (typeof INITIAL_SAMPLE_DATA !== 'undefined' && Array.isArray(INITIAL_SAMPLE_DATA.ranchoBookings)) ? INITIAL_SAMPLE_DATA.ranchoBookings : [];
   }
-  // Instagram Posts: prioriza dados persistidos (seja em data.instagramPosts ou em data.settings.instagramPosts)
+  // Instagram Posts: prioriza dados persistidos (seja em data.instagramPosts ou em data.settings.instagramPosts, array legado ou delta compacto)
   if (!Array.isArray(data.instagramPosts)) {
-    data.instagramPosts = (data.settings && Array.isArray(data.settings.instagramPosts))
-      ? data.settings.instagramPosts
-      : null;
+    data.instagramPosts = hydrateInstagramPosts(data.instagramPosts) ||
+      (data.settings ? hydrateInstagramPosts(data.settings.instagramPosts) : null);
   }
 
   // Verifica se contém apenas o mock antigo demo (insta-sample-X) para migração única
@@ -215,6 +322,8 @@ function updateDbStatusBadge(status) {
   }
 }
 
+let _bootstrappedOrgId = null;
+
 async function initAppState() {
   // Inicializa escuta de PWA e verificação de Service Worker imediatamente (antes do Auth Guard)
   initSyncAndPwaHandlers();
@@ -249,6 +358,7 @@ async function initAppState() {
       fishingBookings: [],
       ranchoBookings: []
     };
+    _bootstrappedOrgId = null;
     updateDbStatusBadge('offline');
     if (window.authManager && window.authManager.isPasswordRecovery) {
       openModal('modalResetPassword');
@@ -272,6 +382,7 @@ async function initAppState() {
 
   const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
   const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+  _bootstrappedOrgId = orgId;
 
   // 3. ZERO-LATENCY FIRST PAINT (< 2ms): Lê imediatamente do localStorage síncrono e pinta as cotas no frame zero!
   let loadedFromLocal = false;
@@ -375,7 +486,41 @@ window.mergeRemoteData = async function(remoteData) {
   const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
 
   if (remoteData.raffles || remoteData.valesAndPrizes || remoteData.fishingBookings || remoteData.ranchoBookings || remoteData.eduardoWorkDays || remoteData.settings) {
-    const sanitized = sanitizeAppData(remoteData);
+    // Preserva boletos e instagramPosts locais caso o sync leve tenha omitido as chaves pesadas
+    const mergedInput = {
+      ...remoteData,
+      settings: {
+        ...(appData && appData.settings ? appData.settings : {}),
+        ...(remoteData.settings || {})
+      }
+    };
+    if (!Array.isArray(mergedInput.instagramPosts) && (!remoteData.settings || remoteData.settings.instagramPosts === undefined)) {
+      if (appData && Array.isArray(appData.instagramPosts) && appData.instagramPosts.length > 0) {
+        mergedInput.instagramPosts = appData.instagramPosts;
+      }
+    }
+    if (!Array.isArray(mergedInput.boletos) && (!remoteData.settings || remoteData.settings.boletos === undefined)) {
+      if (appData && Array.isArray(appData.boletos) && appData.boletos.length > 0) {
+        mergedInput.boletos = appData.boletos;
+      }
+    }
+
+    // Mapa local de miniaturas de boletos para não perder preview local quando vier da nuvem sem Base64
+    const localBoletoImages = new Map();
+    if (appData && Array.isArray(appData.boletos)) {
+      appData.boletos.forEach(b => {
+        if (b && b.id && b.imageUrl) localBoletoImages.set(String(b.id), b.imageUrl);
+      });
+    }
+
+    const sanitized = sanitizeAppData(mergedInput);
+    if (Array.isArray(sanitized.boletos) && localBoletoImages.size > 0) {
+      sanitized.boletos.forEach(b => {
+        if (b && b.id && !b.imageUrl && localBoletoImages.has(String(b.id))) {
+          b.imageUrl = localBoletoImages.get(String(b.id));
+        }
+      });
+    }
 
     // SMART MERGE: Protege e preserva alterações locais ainda não sincronizadas no Outbox
     if (window.localDB) {
@@ -468,11 +613,15 @@ window.mergeRemoteData = async function(remoteData) {
             // 7. Preservar Configurações
             else if (op.type === 'UPDATE_SETTINGS') {
               if (!sanitized.settings) sanitized.settings = {};
-              sanitized.settings[op.payload.key] = op.payload.value;
               if (op.payload.key === 'instagramPosts') {
-                sanitized.instagramPosts = op.payload.value;
+                const hydrated = hydrateInstagramPosts(op.payload.value) || sanitized.instagramPosts;
+                sanitized.instagramPosts = hydrated;
+                sanitized.settings.instagramPosts = hydrated;
               } else if (op.payload.key === 'boletos') {
                 sanitized.boletos = op.payload.value;
+                sanitized.settings.boletos = op.payload.value;
+              } else {
+                sanitized.settings[op.payload.key] = op.payload.value;
               }
             }
           });
@@ -483,8 +632,12 @@ window.mergeRemoteData = async function(remoteData) {
     }
 
     // Sincroniza arrays top-level a partir de settings caso existam
-    if (sanitized.settings && Array.isArray(sanitized.settings.instagramPosts)) {
-      sanitized.instagramPosts = sanitized.settings.instagramPosts;
+    if (sanitized.settings && sanitized.settings.instagramPosts) {
+      const hydInsta = hydrateInstagramPosts(sanitized.settings.instagramPosts);
+      if (Array.isArray(hydInsta)) {
+        sanitized.instagramPosts = hydInsta;
+        sanitized.settings.instagramPosts = hydInsta;
+      }
     }
 
     // Define rifa ativa (prioriza a ação mais alta se não escolhida manualmente ou se a atual não existir mais)
@@ -521,7 +674,7 @@ window.mergeRemoteData = async function(remoteData) {
     }
 
     try {
-      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, serializeAppDataForLocalStorage(appData));
     } catch (e) {}
   }
 };
@@ -567,13 +720,25 @@ async function saveState(syncOperation = null) {
 }
 
 
+function serializeAppDataForLocalStorage(data) {
+  if (!data || typeof data !== 'object') return '{}';
+  const cleanBoletos = stripBoletoHeavyFieldsForCloud(data.boletos || []);
+  const lightCopy = {
+    ...data,
+    boletos: cleanBoletos,
+    settings: data.settings ? { ...data.settings, boletos: cleanBoletos } : {}
+  };
+  return JSON.stringify(lightCopy);
+}
+window.serializeAppDataForLocalStorage = serializeAppDataForLocalStorage;
+
 let localStorageBackupTimer = null;
 function scheduleLocalStorageBackup(orgId) {
   if (!orgId || !appData) return;
   if (localStorageBackupTimer) clearTimeout(localStorageBackupTimer);
   localStorageBackupTimer = setTimeout(() => {
     try {
-      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, serializeAppDataForLocalStorage(appData));
     } catch (e) {}
   }, 2000);
 }
@@ -583,12 +748,16 @@ window.addEventListener('beforeunload', () => {
   const orgId = window.authManager ? window.authManager.getOrganizationId() : null;
   if (orgId && appData) {
     try {
-      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+      localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, serializeAppDataForLocalStorage(appData));
     } catch (e) {}
   }
 });
 
+let _syncAndPwaHandlersInitialized = false;
 function initSyncAndPwaHandlers() {
+  if (_syncAndPwaHandlersInitialized) return;
+  _syncAndPwaHandlersInitialized = true;
+
   // Service Worker Registration com auto-update imediato e bypass de cache HTTP
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
@@ -665,14 +834,10 @@ function initSyncAndPwaHandlers() {
     };
 
     const triggerForegroundSync = () => {
-      console.log('[PWA] Aplicativo ativo/visível: acionando sincronização imediata da fila outbox...');
-      if (window.syncEngine && typeof window.syncEngine.processQueue === 'function') {
+      if (window.syncEngine && typeof window.syncEngine.debouncedProcessQueue === 'function') {
+        window.syncEngine.debouncedProcessQueue(1000);
+      } else if (window.syncEngine && typeof window.syncEngine.processQueue === 'function') {
         window.syncEngine.processQueue();
-      }
-      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
-        try {
-          navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' });
-        } catch (e) {}
       }
     };
 
@@ -718,16 +883,30 @@ function initSyncAndPwaHandlers() {
     });
   }
 
-  // Escuta mudanças no AuthManager
+  // Escuta mudanças no AuthManager (sem recarregar banco em renovações de JWT)
   if (window.authManager) {
     window.authManager.onAuthStateChange(async (event, session) => {
       updateAuthUi();
       if (event === 'PASSWORD_RECOVERY') {
         openModal('modalResetPassword');
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Renovação de JWT em background: NÃO refaz fetchRemoteData nem reinicia o estado!
+        if (window.syncEngine && typeof window.syncEngine.debouncedProcessQueue === 'function') {
+          window.syncEngine.debouncedProcessQueue(800);
+        }
+      } else if (event === 'SIGNED_IN') {
+        const currentOrgId = window.authManager.getOrganizationId();
+        if (_bootstrappedOrgId && _bootstrappedOrgId === currentOrgId && Array.isArray(appData.raffles) && appData.raffles.length > 0) {
+          // Sessão já ativa e carregada nesta aba (ex: retorno de foco do Supabase Auth)
+          if (window.syncEngine && typeof window.syncEngine.debouncedProcessQueue === 'function') {
+            window.syncEngine.debouncedProcessQueue(800);
+          }
+          return;
+        }
         await initAppState();
         renderAll();
       } else if (event === 'SIGNED_OUT') {
+        _bootstrappedOrgId = null;
         await initAppState();
         renderAll();
       }
@@ -1751,12 +1930,14 @@ function renderTab(tabId) {
       break;
     case "tab-instagram":
       renderInstagramView();
+      if (typeof ensureInstagramSyncedFromCloud === 'function') ensureInstagramSyncedFromCloud();
       break;
     case "tab-rancho":
       renderRanchoView();
       break;
     case "tab-boletos":
       renderBoletosView();
+      if (typeof ensureBoletosSyncedFromCloud === 'function') ensureBoletosSyncedFromCloud();
       break;
     case "tab-eduardo":
       renderEduardoView();
@@ -2927,12 +3108,12 @@ async function assignPrizeWinner() {
     }
   });
 
-  // 3. Persiste a estrutura da rifa com o ganhador vinculado ao prêmio
+  // 3. Persiste a estrutura da rifa com o ganhador vinculado ao prêmio (sem reenviar todas as 60 cotas)
   await saveState({
     type: "UPDATE_RAFFLE",
     tableName: "raffles",
     recordId: raffle.id,
-    payload: raffle
+    payload: { ...raffle, _skipNumbersSync: true }
   });
 
   // Notifica o servidor local se conectado
@@ -6910,7 +7091,7 @@ async function handleSaveInstagramPostSubmit(e) {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'instagramPosts',
-      value: appData.instagramPosts
+      value: compactInstagramPostsForCloud(appData.instagramPosts)
     }
   });
 
@@ -6932,7 +7113,7 @@ async function deleteInstagramPost(postId) {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'instagramPosts',
-      value: appData.instagramPosts
+      value: compactInstagramPostsForCloud(appData.instagramPosts)
     }
   });
 
@@ -6963,7 +7144,7 @@ async function toggleInstagramPostStatus(postId) {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'instagramPosts',
-      value: appData.instagramPosts
+      value: compactInstagramPostsForCloud(appData.instagramPosts)
     }
   });
 
@@ -7145,7 +7326,7 @@ async function loadOfficialInstagramSchedule() {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'instagramPosts',
-      value: appData.instagramPosts
+      value: compactInstagramPostsForCloud(appData.instagramPosts)
     }
   });
 
@@ -7234,6 +7415,116 @@ function renderBoletosView() {
 }
 window.renderBoletosView = renderBoletosView;
 
+let _lastInstagramCloudSync = 0;
+let _isSyncingInstagramCloud = false;
+async function ensureInstagramSyncedFromCloud(force = false) {
+  if (_isSyncingInstagramCloud || !navigator.onLine || !window.supabaseClient) return;
+  if (!force && _lastInstagramCloudSync && (Date.now() - _lastInstagramCloudSync < 600000)) return;
+
+  const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+  const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+  if (!orgId) return;
+
+  if (window.localDB) {
+    try {
+      const pending = await window.localDB.getPendingOperations(orgId);
+      if (Array.isArray(pending) && pending.some(op => op.type === 'UPDATE_SETTINGS' && op.payload && op.payload.key === 'instagramPosts')) {
+        return;
+      }
+    } catch (e) {}
+  }
+
+  _isSyncingInstagramCloud = true;
+  try {
+    const { data: iRow, error: iErr } = await window.supabaseClient
+      .from('settings')
+      .select('value')
+      .eq('organization_id', orgId)
+      .eq('key', 'instagramPosts')
+      .maybeSingle();
+
+    if (!iErr && iRow && iRow.value) {
+      const hydrated = hydrateInstagramPosts(iRow.value);
+      if (Array.isArray(hydrated) && hydrated.length > 0) {
+        appData.instagramPosts = hydrated;
+        if (!appData.settings) appData.settings = {};
+        appData.settings.instagramPosts = hydrated;
+        if (window.localDB) window.localDB.saveFullAppData(appData, orgId).catch(() => {});
+        scheduleLocalStorageBackup(orgId);
+        if (activeTab === 'tab-instagram' && typeof renderInstagramView === 'function') {
+          renderInstagramView();
+        }
+      }
+    }
+    _lastInstagramCloudSync = Date.now();
+  } catch (err) {
+    console.warn('[LazySync] Nota ao carregar instagramPosts sob demanda:', err);
+  } finally {
+    _isSyncingInstagramCloud = false;
+  }
+}
+window.ensureInstagramSyncedFromCloud = ensureInstagramSyncedFromCloud;
+
+let _lastBoletosCloudSync = 0;
+let _isSyncingBoletosCloud = false;
+async function ensureBoletosSyncedFromCloud(force = false) {
+  if (_isSyncingBoletosCloud || !navigator.onLine || !window.supabaseClient) return;
+  if (!force && _lastBoletosCloudSync && (Date.now() - _lastBoletosCloudSync < 300000)) return;
+
+  const defaultOrgId = (typeof SUPABASE_CONFIG !== 'undefined' ? SUPABASE_CONFIG.DEFAULT_ORG_ID : null);
+  const orgId = (window.authManager && window.authManager.getOrganizationId()) || localStorage.getItem('ELDORADO_ACTIVE_ORG_ID') || defaultOrgId;
+  if (!orgId) return;
+
+  if (window.localDB) {
+    try {
+      const pending = await window.localDB.getPendingOperations(orgId);
+      if (Array.isArray(pending) && pending.some(op => op.type === 'UPDATE_SETTINGS' && op.payload && op.payload.key === 'boletos')) {
+        return;
+      }
+    } catch (e) {}
+  }
+
+  _isSyncingBoletosCloud = true;
+  try {
+    const { data: bRow, error: bErr } = await window.supabaseClient
+      .from('settings')
+      .select('value')
+      .eq('organization_id', orgId)
+      .eq('key', 'boletos')
+      .maybeSingle();
+
+    if (!bErr && bRow && bRow.value) {
+      let boletosList = [];
+      try { boletosList = typeof bRow.value === 'string' ? JSON.parse(bRow.value) : bRow.value; } catch (e) {}
+      if (Array.isArray(boletosList) && boletosList.length > 0) {
+        const localImages = new Map();
+        (appData.boletos || []).forEach(b => {
+          if (b && b.id && b.imageUrl) localImages.set(String(b.id), b.imageUrl);
+        });
+        boletosList.forEach(b => {
+          if (b && b.id && !b.imageUrl && localImages.has(String(b.id))) {
+            b.imageUrl = localImages.get(String(b.id));
+          }
+        });
+        appData.boletos = boletosList;
+        if (!appData.settings) appData.settings = {};
+        appData.settings.boletos = boletosList;
+        if (window.localDB) window.localDB.saveFullAppData(appData, orgId).catch(() => {});
+        scheduleLocalStorageBackup(orgId);
+        if (activeTab === 'tab-boletos' && typeof renderBoletosView === 'function') {
+          renderBoletosView();
+        }
+      }
+    }
+    _lastBoletosCloudSync = Date.now();
+  } catch (err) {
+    console.warn('[LazySync] Nota ao carregar boletos sob demanda:', err);
+  } finally {
+    _isSyncingBoletosCloud = false;
+  }
+}
+window.ensureBoletosSyncedFromCloud = ensureBoletosSyncedFromCloud;
+
 async function forceSyncBoletosFromCloud() {
   const btn = document.getElementById('btnSyncBoletosCloud');
   const btnText = document.getElementById('btnSyncBoletosText');
@@ -7253,6 +7544,7 @@ async function forceSyncBoletosFromCloud() {
         .maybeSingle();
 
       if (bErr) throw bErr;
+      _lastBoletosCloudSync = Date.now();
 
       let boletosList = [];
       if (bRow && bRow.value) {
@@ -7260,6 +7552,15 @@ async function forceSyncBoletosFromCloud() {
       }
 
       if (Array.isArray(boletosList) && boletosList.length > 0) {
+        const localImages = new Map();
+        (appData.boletos || []).forEach(b => {
+          if (b && b.id && b.imageUrl) localImages.set(String(b.id), b.imageUrl);
+        });
+        boletosList.forEach(b => {
+          if (b && b.id && !b.imageUrl && localImages.has(String(b.id))) {
+            b.imageUrl = localImages.get(String(b.id));
+          }
+        });
         if (!appData.settings) appData.settings = {};
         appData.settings.boletos = boletosList;
         appData.boletos = boletosList;
@@ -7268,7 +7569,7 @@ async function forceSyncBoletosFromCloud() {
           await window.localDB.saveFullAppData(appData, orgId);
         }
         try {
-          localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, JSON.stringify(appData));
+          localStorage.setItem("ELDORADO_PESCA_STORE_DATA_" + orgId, serializeAppDataForLocalStorage(appData));
         } catch (e) {}
 
         renderBoletosView();
@@ -7754,7 +8055,7 @@ async function toggleBoletoPaidStatus(id) {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'boletos',
-      value: appData.boletos
+      value: stripBoletoHeavyFieldsForCloud(appData.boletos)
     }
   });
 
@@ -7779,7 +8080,7 @@ async function deleteBoleto(id) {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'boletos',
-      value: appData.boletos
+      value: stripBoletoHeavyFieldsForCloud(appData.boletos)
     }
   });
 
@@ -7937,7 +8238,7 @@ async function saveBoletoModal(batchNext = false) {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'boletos',
-      value: appData.boletos
+      value: stripBoletoHeavyFieldsForCloud(appData.boletos)
     }
   });
 
@@ -8004,7 +8305,7 @@ async function loadDemoBoletos() {
     type: 'UPDATE_SETTINGS',
     payload: {
       key: 'boletos',
-      value: appData.boletos
+      value: stripBoletoHeavyFieldsForCloud(appData.boletos)
     }
   });
 
@@ -8097,7 +8398,7 @@ async function saveParsedContasAPagar(parsed, sourceLabel = "relatório") {
 
   await saveState({
     type: 'UPDATE_SETTINGS',
-    payload: { key: 'boletos', value: appData.boletos }
+    payload: { key: 'boletos', value: stripBoletoHeavyFieldsForCloud(appData.boletos) }
   });
 
   showToast(`${importedCount} contas adicionadas e ${updatedCount} atualizadas do ${sourceLabel}! Total: ${formatCurrency(totalAmount)}`, "success", 5000);
@@ -9459,7 +9760,7 @@ async function saveBoletoAttachedCodeDirect(id) {
 
   await saveState({
     type: 'UPDATE_SETTINGS',
-    payload: { key: 'boletos', value: appData.boletos }
+    payload: { key: 'boletos', value: stripBoletoHeavyFieldsForCloud(appData.boletos) }
   });
 
   showToast("Código validado e vinculado com sucesso!", "success");
@@ -9722,7 +10023,7 @@ async function handleLinhaDigitavelPhotoInput(e) {
           appData.settings.boletos = appData.boletos;
           await saveState({
             type: 'UPDATE_SETTINGS',
-            payload: { key: 'boletos', value: appData.boletos }
+            payload: { key: 'boletos', value: stripBoletoHeavyFieldsForCloud(appData.boletos) }
           });
 
           showToast(`Linha digitável vinculada com sucesso a ${b.beneficiary}!`, "success", 4500);
@@ -11173,11 +11474,18 @@ async function saveRaffleForm() {
       Object.assign(targetRaffle, normalized);
     }
 
+    const updatePayload = {
+      ...targetRaffle,
+      _skipNumbersSync: totalNums === currentTotal && currentTotal > 0,
+      _addedNumbersFrom: totalNums > currentTotal ? (currentTotal + 1) : null,
+      _decreasedTotal: totalNums < currentTotal
+    };
+
     await saveState({
       type: "UPDATE_RAFFLE",
       tableName: "raffles",
       recordId: targetRaffle.id,
-      payload: targetRaffle
+      payload: updatePayload
     });
 
     renderRaffleDropdown();
